@@ -39,4 +39,8 @@ public class Packet extends GameObject implements Serializable {
         else g2.fillPolygon(new int[]{0,s/2,s},new int[]{s,0,s},3);
         g2.dispose();
     }
+
+    public double getSpeed() {
+        return speed;
+    }
 }

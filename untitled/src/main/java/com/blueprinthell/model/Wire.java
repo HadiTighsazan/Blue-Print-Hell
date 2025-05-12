@@ -14,60 +14,70 @@ public class Wire extends GameObject implements Serializable {
     private final Port src, dst;
     private final double length;
     private final List<Packet> packets = new ArrayList<>();
-    private final int relX1, relY1, relX2, relY2;
-
 
     public Wire(Port src, Port dst) {
-        super(0, 0, 1, 1);
+        super(
+                Math.min(src.getCenterX(), dst.getCenterX()),
+                Math.min(src.getCenterY(), dst.getCenterY()),
+                Math.max(2, Math.abs(dst.getCenterX() - src.getCenterX())),
+                Math.max(2, Math.abs(dst.getCenterY() - src.getCenterY()))
+        );
         this.src = src;
         this.dst = dst;
-        Container content = src.getRootPane().getContentPane();
-        Point p1 = SwingUtilities.convertPoint(src, src.getWidth()/2, src.getHeight()/2, content);
-        Point p2 = SwingUtilities.convertPoint(dst, dst.getWidth()/2, dst.getHeight()/2, content);
-        int minX = Math.min(p1.x, p2.x);
-        int minY = Math.min(p1.y, p2.y);
-        int w = Math.max(2, Math.abs(p2.x - p1.x));
-        int h = Math.max(2, Math.abs(p2.y - p1.y));
-        setBounds(minX, minY, w, h);
-        relX1 = p1.x - minX;
-        relY1 = p1.y - minY;
-        relX2 = p2.x - minX;
-        relY2 = p2.y - minY;
-        this.length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        this.length = Math.hypot(
+                dst.getCenterX() - src.getCenterX(),
+                dst.getCenterY() - src.getCenterY()
+        );
     }
 
-    public void attachPacket(Packet p, double initP) {
-        p.attachToWire(this, initP);
-    }
 
-    public void update(double dt) {
+    public List<Packet> update(double dt) {
+        List<Packet> arrived = new ArrayList<>();
         Iterator<Packet> it = packets.iterator();
         while (it.hasNext()) {
             Packet p = it.next();
             p.advance(dt);
             if (p.getProgress() >= 1.0) {
                 it.remove();
-                // TODO: enqueue to dst's system
+                arrived.add(p);
             }
         }
+        return arrived;
+    }
+
+    public void attachPacket(Packet p, double initialProgress) {
+        p.attachToWire(this, initialProgress);
     }
 
     public double getLength() { return length; }
     public List<Packet> getPackets() { return packets; }
 
+    public Port getSrcPort() { return src; }
+    public Port getDstPort() { return dst; }
+
     public Point pointAt(double t) {
-        int gx = (int) (relX1 + t * (relX2 - relX1));
-        int gy = (int) (relY1 + t * (relY2 - relY1));
-        Container content = src.getRootPane().getContentPane();
-        return new Point(getX() + gx, getY() + gy);
+        int x = (int) (src.getCenterX() + t * (dst.getCenterX() - src.getCenterX()));
+        int y = (int) (src.getCenterY() + t * (dst.getCenterY() - src.getCenterY()));
+        return new Point(x, y);
     }
 
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
+        int x1 = src.getCenterX() - getX();
+        int y1 = src.getCenterY() - getY();
+        int x2 = dst.getCenterX() - getX();
+        int y2 = dst.getCenterY() - getY();
         g2.setStroke(new BasicStroke(2f));
         g2.setColor(Color.WHITE);
-        g2.drawLine(relX1, relY1, relX2, relY2);
+        g2.drawLine(x1, y1, x2, y2);
         g2.dispose();
+    }
+
+    public Port getSrc() {
+        return src;
+    }
+    public Port getDst(){
+        return dst;
     }
 }
