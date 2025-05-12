@@ -33,7 +33,9 @@ public class TimelineController {
     public void resume() {
         playing = true;
         currentOffset = 0;
-        controller.restoreState(snaps.getSnapshotFramesAgo(0));
+    }
+    public void pause() {
+        this.playing = false;
     }
 
     public boolean isPlaying() { return playing; }
