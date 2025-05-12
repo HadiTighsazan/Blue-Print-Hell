@@ -8,7 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 
 
-public class Wire extends GameObject implements Serializable {
+public class Wire extends JComponent implements Serializable {
     private static final long serialVersionUID = 4L;
 
     private final Port src, dst;
@@ -16,20 +16,20 @@ public class Wire extends GameObject implements Serializable {
     private final List<Packet> packets = new ArrayList<>();
 
     public Wire(Port src, Port dst) {
-        super(
-                Math.min(src.getCenterX(), dst.getCenterX()),
-                Math.min(src.getCenterY(), dst.getCenterY()),
-                Math.max(2, Math.abs(dst.getCenterX() - src.getCenterX())),
-                Math.max(2, Math.abs(dst.getCenterY() - src.getCenterY()))
-        );
         this.src = src;
         this.dst = dst;
-        this.length = Math.hypot(
-                dst.getCenterX() - src.getCenterX(),
-                dst.getCenterY() - src.getCenterY()
-        );
+        setOpaque(false);
+        Point p1 = convertPortCenter(src);
+        Point p2 = convertPortCenter(dst);
+        this.length = p1.distance(p2);
     }
 
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        Container parent = getParent();
+        setBounds(0, 0, parent.getWidth(), parent.getHeight());
+    }
 
     public List<Packet> update(double dt) {
         List<Packet> arrived = new ArrayList<>();
@@ -46,38 +46,38 @@ public class Wire extends GameObject implements Serializable {
     }
 
     public void attachPacket(Packet p, double initialProgress) {
+        packets.add(p);
         p.attachToWire(this, initialProgress);
     }
 
     public double getLength() { return length; }
     public List<Packet> getPackets() { return packets; }
-
     public Port getSrcPort() { return src; }
     public Port getDstPort() { return dst; }
 
     public Point pointAt(double t) {
-        int x = (int) (src.getCenterX() + t * (dst.getCenterX() - src.getCenterX()));
-        int y = (int) (src.getCenterY() + t * (dst.getCenterY() - src.getCenterY()));
+        Point p1 = convertPortCenter(src);
+        Point p2 = convertPortCenter(dst);
+        int x = (int) (p1.x + t * (p2.x - p1.x));
+        int y = (int) (p1.y + t * (p2.y - p1.y));
         return new Point(x, y);
+    }
+
+    private Point convertPortCenter(Port port) {
+        return SwingUtilities.convertPoint(
+                port, port.getWidth() / 2, port.getHeight() / 2,
+                this
+        );
     }
 
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
-        int x1 = src.getCenterX() - getX();
-        int y1 = src.getCenterY() - getY();
-        int x2 = dst.getCenterX() - getX();
-        int y2 = dst.getCenterY() - getY();
         g2.setStroke(new BasicStroke(2f));
-        g2.setColor(Color.WHITE);
-        g2.drawLine(x1, y1, x2, y2);
+        g2.setColor(Color.GREEN);
+        Point p1 = convertPortCenter(src);
+        Point p2 = convertPortCenter(dst);
+        g2.drawLine(p1.x, p1.y, p2.x, p2.y);
         g2.dispose();
-    }
-
-    public Port getSrc() {
-        return src;
-    }
-    public Port getDst(){
-        return dst;
     }
 }

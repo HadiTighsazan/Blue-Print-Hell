@@ -4,6 +4,7 @@ package com.blueprinthell.model;
 import javax.swing.*;
 import java.awt.*;
 import java.io.Serializable;
+import java.util.Collection;
 
 public class Port extends GameObject implements Serializable {
     private static final long serialVersionUID = 3L;
@@ -29,4 +30,7 @@ public class Port extends GameObject implements Serializable {
         else g2.fillPolygon(new int[]{0,s/2,s},new int[]{s,0,s},3);
         g2.dispose();
     }
+
+
+
 }

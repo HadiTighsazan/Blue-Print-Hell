@@ -50,6 +50,9 @@ public class SystemBox extends GameObject implements Serializable {
     public Packet pollPacket() {
         return buffer.poll();
     }
+    public int getBufferSize() {
+        return buffer.size();
+    }
 
     public List<Port> getInPorts()  { return inPorts; }
     public List<Port> getOutPorts() { return outPorts; }
