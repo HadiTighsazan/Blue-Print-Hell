@@ -1,3 +1,4 @@
+// SnapshotManager.java
 package com.blueprinthell.engine;
 
 import java.util.ArrayDeque;
@@ -10,7 +11,7 @@ public class SnapshotManager {
 
     public SnapshotManager(int capacity) {
         this.capacity = capacity;
-        this.ring     = new ArrayDeque<>(capacity);
+        this.ring = new ArrayDeque<>(capacity);
     }
 
     public void push(NetworkSnapshot snap) {
@@ -18,9 +19,9 @@ public class SnapshotManager {
         ring.addLast(snap);
     }
 
-    public NetworkSnapshot getFramesAgo(int framesBack) {
+    public NetworkSnapshot getSnapshotFramesAgo(int framesBack) {
         if (framesBack < 0 || framesBack >= ring.size())
-            throw new IllegalArgumentException();
+            throw new IllegalArgumentException("Out of range");
         Iterator<NetworkSnapshot> it = ring.descendingIterator();
         for (int i = 0; i < framesBack; i++) it.next();
         return it.next();

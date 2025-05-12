@@ -1,14 +1,19 @@
 package com.blueprinthell.engine;
 
-public class TimelineController {
-    private final NetworkController   controller;
-    private final SnapshotManager     snaps;
-    private boolean                   playing       = true;
-    private int                       currentOffset = 0;
+import com.blueprinthell.model.Packet;
+import com.blueprinthell.model.SystemBox;
+import java.util.List;
+import java.util.Map;
 
-    public TimelineController(NetworkController ctrl, int capacityFrames) {
+public class TimelineController {
+    private final NetworkController controller;
+    private final SnapshotManager snaps;
+    private boolean playing = true;
+    private int currentOffset = 0;
+
+    public TimelineController(NetworkController ctrl, int maxFrames) {
         this.controller = ctrl;
-        this.snaps      = new SnapshotManager(capacityFrames);
+        this.snaps = new SnapshotManager(maxFrames);
     }
 
     public void recordFrame() {
@@ -21,14 +26,14 @@ public class TimelineController {
     public void scrubTo(int framesBack) {
         playing = false;
         currentOffset = framesBack;
-        NetworkSnapshot snap = snaps.getFramesAgo(framesBack);
+        NetworkSnapshot snap = snaps.getSnapshotFramesAgo(framesBack);
         controller.restoreState(snap);
     }
 
     public void resume() {
         playing = true;
         currentOffset = 0;
-        controller.restoreState(snaps.getFramesAgo(0));
+        controller.restoreState(snaps.getSnapshotFramesAgo(0));
     }
 
     public boolean isPlaying() { return playing; }

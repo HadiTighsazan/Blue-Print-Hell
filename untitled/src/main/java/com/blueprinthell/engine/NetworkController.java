@@ -204,12 +204,63 @@ public class NetworkController {
     }
 
     public NetworkSnapshot captureSnapshot() {
-        return null;
+        List<PacketSnapshot> packetSnaps = new ArrayList<>();
+        for (int i = 0; i < wires.size(); i++) {
+            Wire w = wires.get(i);
+            for (Packet p : w.getPackets()) {
+                packetSnaps.add(new PacketSnapshot(
+                        p.getType(),
+                        p.getBaseSpeed(),
+                        p.getSpeed(),
+                        p.getNoise(),
+                        p.getProgress(),
+                        i
+                ));
+            }
+        }
+        Map<Integer, List<PacketSnapshot>> bufferSnaps = new HashMap<>();
+        for (int i = 0; i < systems.size(); i++) {
+            SystemBox sys = systems.get(i);
+            List<PacketSnapshot> bufList = new ArrayList<>();
+            for (Packet p : sys.getBuffer()) {
+                bufList.add(new PacketSnapshot(
+                        p.getType(),
+                        p.getBaseSpeed(),
+                        p.getSpeed(),
+                        p.getNoise(),
+                        p.getProgress(),
+                        wires.indexOf(p.getCurrentWire())
+                ));
+            }
+            bufferSnaps.put(i, bufList);
+        }
+        return new NetworkSnapshot(packetSnaps, bufferSnaps, coins, packetLoss);
     }
 
     public void restoreState(NetworkSnapshot snap) {
-        return;
+        for (Wire w : wires) w.getPackets().clear();
+        for (SystemBox sys : systems) sys.clearBuffer();
+
+        this.coins = snap.coins();
+        this.packetLoss = snap.packetLoss();
+
+        for (PacketSnapshot ps : snap.packets()) {
+            Packet p = new Packet(ps.type(), ps.baseSpeed());
+            p.setSpeed(ps.speed());
+            p.increaseNoise(ps.noise());
+            wires.get(ps.wireIndex()).attachPacket(p, ps.progress());
+        }
+        for (Map.Entry<Integer, List<PacketSnapshot>> e : snap.buffers().entrySet()) {
+            SystemBox sys = systems.get(e.getKey());
+            for (PacketSnapshot ps : e.getValue()) {
+                Packet p = new Packet(ps.type(), ps.baseSpeed());
+                p.setSpeed(ps.speed());
+                p.increaseNoise(ps.noise());
+                sys.enqueue(p);
+            }
+        }
     }
+
 
 
 

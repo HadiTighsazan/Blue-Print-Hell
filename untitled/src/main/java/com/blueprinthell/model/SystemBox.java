@@ -67,4 +67,13 @@ public class SystemBox extends GameObject implements Serializable {
         g2.drawRect(0, 0, getWidth()-1, getHeight()-1);
         g2.dispose();
     }
+
+
+    public Iterable<? extends Packet> getBuffer() {
+        return buffer;
+    }
+
+    public void clearBuffer() {
+        buffer.clear();
+    }
 }
