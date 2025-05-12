@@ -202,4 +202,15 @@ public class NetworkController {
         for (T obj : list) Objects.requireNonNull(obj);
         return list;
     }
+
+    public NetworkSnapshot captureSnapshot() {
+        return null;
+    }
+
+    public void restoreState(NetworkSnapshot snap) {
+        return;
+    }
+
+
+
 }
