@@ -21,6 +21,20 @@ public class Port extends GameObject implements Serializable {
                 ||(shape==PortShape.TRIANGLE&&t==PacketType.TRIANGLE);
     }
     public boolean isInput(){return input;}
+
+    public PortShape getShape() {
+        return shape;
+    }
+
+
+    public boolean isCompatibleWith(Port other) {
+        return !this.input
+                &&  other.input
+                &&  this.shape == other.shape;
+    }
+
+
+
     @Override
     protected void paintComponent(Graphics g){
         Graphics2D g2=(Graphics2D)g.create();

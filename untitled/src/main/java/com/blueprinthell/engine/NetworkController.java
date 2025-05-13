@@ -18,19 +18,39 @@ public class NetworkController {
     private int coins      = 0;
     private final int cellSize;
 
-    public NetworkController(List<Wire> wires, List<SystemBox> systems) {
-        this.wires   = objectsNotNull(wires);
+    private final double maxWireLength;
+
+
+    public NetworkController(List<Wire> wires, List<SystemBox> systems,double maxWireLength) {
+        this.wires = new ArrayList<>(wires);
+
         this.systems = objectsNotNull(systems);
         this.portToWire = new HashMap<>();
+        this.maxWireLength = maxWireLength;
         for (Wire w : wires) {
             portToWire.put(w.getSrcPort(), w);
         }
+
         int maxUnits = 0;
         for (PacketType pt : PacketType.values()) {
             maxUnits = Math.max(maxUnits, pt.sizeUnits);
         }
         this.cellSize = maxUnits * 6;
     }
+
+    public double getRemainingWireLength() {
+        double used = 0;
+        for (Wire w : wires) used += w.getLength();
+        return maxWireLength - used;
+    }
+
+    public void addWire(Wire w) {
+        wires.add(w);
+        portToWire.put(w.getSrcPort(), w);
+        portToWire.put(w.getDstPort(), w);
+    }
+
+
 
     public void tick(double dt) {
         Map<SystemBox, List<Packet>> arrivals = updateAllWires(dt);
@@ -262,6 +282,7 @@ public class NetworkController {
     }
 
 
-
-
+    public List<SystemBox> getSystems() {
+        return systems;
+    }
 }
