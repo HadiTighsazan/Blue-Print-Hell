@@ -25,27 +25,33 @@ public class WirePreviewLayer extends JComponent {
     }
 
     @Override
+    public boolean contains(int x, int y) {
+        // فقط وقتی داریم درگ می‌کنیم، خودِ این لایه را مصرف کن:
+        return im.getDragSource() != null;
+    }
+
+
+    @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        Port src = im.getDragSource();
-        Point mouse = im.getMousePos();
-        if (src != null && mouse != null) {
+        if (im.getDragSource() != null && im.getMousePos() != null) {
+            Point start = SwingUtilities.convertPoint(
+                    im.getDragSource(),
+                    im.getDragSource().getWidth()/2,
+                    im.getDragSource().getHeight()/2,
+                    this
+            );
+            Point end = im.getMousePos(); // این قبلاً به previewLayer ترجمه شده
+
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setStroke(new BasicStroke(2f));
             g2.setColor(im.isValidTarget() && im.isEnoughLength()
                     ? Color.GREEN : Color.RED);
-
-            Point p1 = SwingUtilities.convertPoint(
-                    src,
-                    src.getWidth()/2, src.getHeight()/2,
-                    this
-            );
-            Point p2 = mouse;
-
-            g2.drawLine(p1.x, p1.y, p2.x, p2.y);
+            g2.drawLine(start.x, start.y, end.x, end.y);
             g2.dispose();
         }
     }
+
 
 
 }

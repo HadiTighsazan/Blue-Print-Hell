@@ -30,6 +30,13 @@ public class Packet extends GameObject implements Serializable {
         progress += delta;
         updatePosition();
     }
+    // درون class Packet { … }
+
+    /** صفر کردن نویز این پکت */
+    public void resetNoise() {
+        this.noise = 0.0;
+    }
+
 
     public void attachToWire(Wire w, double initProgress) {
         this.currentWire = w;

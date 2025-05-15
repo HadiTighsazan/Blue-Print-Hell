@@ -12,6 +12,12 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
     private final JPanel cardsContainer = new JPanel(cardsLayout);
     private final Map<State, JComponent> screens = new HashMap<>();
 
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            GameApp app = new GameApp();
+            app.setVisible(true);
+        });
+    }
     public GameApp() {
         super("Blue‑Print‑Hell");
         setDefaultCloseOperation(EXIT_ON_CLOSE);

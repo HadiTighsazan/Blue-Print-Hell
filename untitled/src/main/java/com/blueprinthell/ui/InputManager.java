@@ -33,8 +33,12 @@ public class InputManager {
         this.controller = controller;
     }
 
+    /** کانتینرِ اصلی (مثلاً GameScreen یا contentPane) که رویدادهای موسش رو هم می‌گیریم */
     public void registerHitContainer(Container c) {
         this.hitContainer = c;
+        // ⇓⇓ این دو خط را اضافه کن ⇓⇓
+        c.addMouseListener(containerMouseAdapter);
+        c.addMouseMotionListener(containerMotionAdapter);
     }
 
     public void registerEventContainer(JComponent c) {
@@ -45,7 +49,10 @@ public class InputManager {
 
     public void registerPort(Port p) {
         p.addMouseListener(portMouseAdapter);
+        // ⇓⇓ این خط را اضافه کنید ⇓⇓
+        p.addMouseMotionListener(containerMotionAdapter);
     }
+
 
     public void setWireCreatedCallback(Consumer<Wire> cb) {
         this.onWireCreated = cb;
@@ -65,7 +72,11 @@ public class InputManager {
         }
         @Override
         public void mouseReleased(MouseEvent e) {
-            if (dragSource != null) endDrag();
+            if (dragSource != null) {
+                // ← اضافه می‌کنیم تا آخرین نقطه رو ثبت کنه
+                updateDragState(e.getPoint());
+                endDrag();
+            }
         }
     };
 
@@ -91,7 +102,17 @@ public class InputManager {
         }
         @Override
         public void mouseReleased(MouseEvent e) {
-            if (dragSource != null) endDrag();
+            if (dragSource != null) {
+                // ← همینجا هم
+                // e.getPoint() در اینجا مختصات Relative به خود پورته،
+                // باید اول تبدیل کنی به مختصات eventContainer:
+                Point pt = SwingUtilities.convertPoint(
+                        (Component)e.getSource(), e.getPoint(),
+                        eventContainer
+                );
+                updateDragState(pt);
+                endDrag();
+            }
         }
     };
 
@@ -100,10 +121,14 @@ public class InputManager {
         this.dragSource = src;
         this.dragTarget = null;
 
+        // مختصات نقطهٔ شروع نشانگر ماوس، البته در فضای previewLayer:
         this.mousePos = SwingUtilities.convertPoint(
-                src, src.getWidth()/2, src.getHeight()/2,
-                eventContainer
+                src,
+                src.getWidth()/2,
+                src.getHeight()/2,
+                eventContainer   // که همان previewLayer است
         );
+
 
         this.validTarget  = false;
         this.enoughLength = false;
