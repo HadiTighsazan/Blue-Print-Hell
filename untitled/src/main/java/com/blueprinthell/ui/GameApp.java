@@ -51,7 +51,6 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
         cardsLayout.show(cardsContainer, state.name());
     }
 
-    // MainMenuListener
     @Override
     public void onAction(MainMenuListener.Action action) {
         switch (action) {
@@ -61,7 +60,6 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
         }
     }
 
-    // LevelSelectListener
     @Override
     public void onLevelSelected(int levelIndex) {
         GameScreen gs = (GameScreen) screens.get(State.PLAYING);
@@ -73,7 +71,6 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
         showState(State.MAIN_MENU);
     }
 
-    // SettingsListener
     @Override
     public void onSoundVolumeChanged(int newVolume) {
         // TODO: اعمال تنظیم حجم صدا

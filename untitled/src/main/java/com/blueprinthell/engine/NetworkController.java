@@ -1,4 +1,3 @@
-// NetworkController.java
 package com.blueprinthell.engine;
 
 import com.blueprinthell.model.Packet;
@@ -13,9 +12,7 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * منطق اصلی شبکه: حرکت پکت‌ها، برخورد، صف‌بندی، پاورآپ‌ها و اسنپ‌شات.
- */
+
 public class NetworkController {
     private final List<Wire> wires;
     private final List<SystemBox> systems;
@@ -68,6 +65,7 @@ public class NetworkController {
     }
 
 
+
     public void tick(double dt) {
         if (impactDisableTimer > 0)    impactDisableTimer -= dt;
         if (collisionDisableTimer > 0) collisionDisableTimer -= dt;
@@ -89,6 +87,7 @@ public class NetworkController {
         return map;
     }
 
+
     private void handleCollisions() {
         if (collisionDisableTimer > 0) return;
         List<Packet> all = wires.stream()
@@ -100,22 +99,35 @@ public class NetworkController {
         Set<Packet> toRemove = new HashSet<>();
         for (int i = 0; i < all.size(); i++) {
             Packet p = all.get(i);
-            if (impactDisableTimer <= 0) {
-                Point pc = new Point(p.getCenterX(), p.getCenterY());
-                double rP = p.getWidth() / 2.0;
-                for (Packet q : grid.retrieve(pc.x, pc.y)) {
-                    if (q == p) continue;
-                    int j = all.indexOf(q);
-                    if (j <= i) continue;
-                    double dx = pc.x - q.getCenterX(), dy = pc.y - q.getCenterY();
+            Point pc = new Point(p.getCenterX(), p.getCenterY());
+            double rP = p.getWidth() / 2.0;
+
+            for (Packet q : grid.retrieve(pc.x, pc.y)) {
+                if (q == p) continue;
+                int j = all.indexOf(q);
+                if (j <= i) continue;
+
+                Point qc = new Point(q.getCenterX(), q.getCenterY());
+                double dx = pc.x - qc.x, dy = pc.y - qc.y;
+                double dist = Math.hypot(dx, dy);
+
+                double threshold = p.getWidth() / 10.0;
+                if (dist < threshold) {
+                    toRemove.add(p);
+                }
+                threshold = q.getWidth() / 10.0;
+                if (dist < threshold) {
+                    toRemove.add(q);
+                }
+
+                if (impactDisableTimer <= 0) {
                     double minD = rP + q.getWidth() / 2.0;
-                    if (dx*dx + dy*dy <= minD*minD) {
-                        double dist   = Math.hypot(dx, dy);
+                    if (dist <= minD) {
                         double factor = 1.0 - (dist / minD);
                         p.increaseNoise(factor);
                         q.increaseNoise(factor);
                         if (p.getNoise() > rP) toRemove.add(p);
-                        if (q.getNoise() > q.getWidth()/2.0) toRemove.add(q);
+                        if (q.getNoise() > q.getWidth() / 2.0) toRemove.add(q);
                     }
                 }
             }
@@ -148,43 +160,90 @@ public class NetworkController {
         }
     }
 
+    public void incrementPacketLoss() {
+        packetLoss++;
+    }
+
+
+
+
     private void dispatchFromSystems() {
         for (SystemBox sys : systems) {
             if (sys.getOutPorts().isEmpty()) {
-                while (sys.pollPacket() != null);
                 continue;
             }
+
             Packet p;
             while ((p = sys.pollPacket()) != null) {
-                List<Port> freeAll = new ArrayList<>(), freeComp = new ArrayList<>();
+                List<Port> freeAll = new ArrayList<>();
+                List<Port> freeCompatible = new ArrayList<>();
+                boolean hasConnectedPort = false;
+
                 for (Port out : sys.getOutPorts()) {
                     Wire w = portToWire.get(out);
+                    if (w == null) continue;
+
+                    hasConnectedPort = true;
+
                     if (w.getPackets().isEmpty()) {
                         freeAll.add(out);
-                        if (out.isCompatible(p)) freeComp.add(out);
+                        if (out.isCompatible(p)) {
+                            freeCompatible.add(out);
+                        }
                     }
                 }
+
+                if (!hasConnectedPort) {
+                    packetLoss++;
+                    continue;
+                }
+
                 if (freeAll.isEmpty()) {
-                    if (!sys.enqueue(p)) packetLoss++;
+                    boolean ok = sys.enqueue(p);
+                    if (!ok) packetLoss++;
                     break;
                 }
+
                 Port chosen;
-                if (!freeComp.isEmpty()) {
-                    chosen = freeComp.get(rng.nextInt(freeComp.size()));
+                if (!freeCompatible.isEmpty()) {
+                    Collections.shuffle(freeCompatible, rng);
+                    chosen = freeCompatible.get(0);
                 } else {
-                    chosen = freeAll.get(rng.nextInt(freeAll.size()));
+                    Collections.shuffle(freeAll, rng);
+                    chosen = freeAll.get(0);
                 }
-                adjustSpeed(p, chosen.isCompatible(p));
-                portToWire.get(chosen).attachPacket(p, 0.0);
+
+                boolean compatible = chosen.isCompatible(p);
+                adjustSpeedForPort(p, compatible);
+                Wire next = portToWire.get(chosen);
+                next.attachPacket(p, 0.0);
             }
         }
     }
 
-    private void adjustSpeed(Packet p, boolean compatible) {
+    private void adjustSpeedForPort(Packet p, boolean compatible) {
         double base = p.getBaseSpeed();
-        if (p.getType() == PacketType.SQUARE) p.setSpeed(compatible ? base/2 : base);
-        else p.setSpeed(compatible ? base : base*2);
+        if (p.getType() == PacketType.SQUARE) {
+            p.setAcceleration(0);
+            p.setSpeed(compatible ? base/2 : base);
+        } else {
+            if (compatible) {
+                p.setAcceleration(0);
+                p.setSpeed(base);
+            } else {
+                p.setSpeed(base);
+                p.setAcceleration(base);
+            }
+        }
     }
+
+    public void removeWire(Wire w) {
+        wires.remove(w);
+        portToWire.remove(w.getSrcPort());
+        portToWire.remove(w.getDstPort());
+    }
+
+
 
     /** تولید اسنپ‌شات فعلی شبکه */
     public NetworkSnapshot captureSnapshot() {

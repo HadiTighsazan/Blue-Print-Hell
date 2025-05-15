@@ -14,6 +14,10 @@ public class Packet extends GameObject implements Serializable {
     private double speed;
     private double noise;
 
+    private double acceleration;
+
+
+
     transient private Wire currentWire;
 
     public Packet(PacketType type, double speed) {
@@ -24,11 +28,23 @@ public class Packet extends GameObject implements Serializable {
         setToolTipText(type.name());
     }
 
+    public double getAcceleration(){
+        return acceleration;
+    }
+    public void setAcceleration(double accelerate){
+        this.acceleration = accelerate;
+    }
+
     public void advance(double dt) {
-        if (currentWire == null) return;
-        double delta = (speed * dt) / currentWire.getLength();
-        progress += delta;
-        updatePosition();
+        // ۱) اعمال شتاب
+        speed += acceleration * dt;
+        // ۲) جابجایی بر اساس سرعت فعلی
+        double distance = speed * dt;
+        double deltaProgress = distance / currentWire.getLength();
+        progress += deltaProgress;
+        // ۳) به‌روز کردن موقعیت روی سیم
+        Point p = currentWire.pointAt(progress);
+        setLocation(p.x - getWidth()/2, p.y - getHeight()/2);
     }
     // درون class Packet { … }
 

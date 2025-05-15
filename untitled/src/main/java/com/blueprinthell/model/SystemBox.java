@@ -3,6 +3,8 @@ package com.blueprinthell.model;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -25,6 +27,32 @@ public class SystemBox extends GameObject implements Serializable {
         createPorts(inCount, outCount);
         setBackground(new Color(0x444444));
         setOpaque(true);
+        // در SystemBox.java، داخل سازنده:
+        MouseAdapter drag = new MouseAdapter() {
+            private Point offset;
+            @Override
+            public void mousePressed(MouseEvent e) {
+                // ذخیرهٔ فاصلهٔ موس تا گوشهٔ کادر SystemBox
+                offset = e.getPoint();
+            }
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                // محاسبهٔ موقعیت جدید
+                int newX = getX() + e.getX() - offset.x;
+                int newY = getY() + e.getY() - offset.y;
+                // محدود کردن در محدودهٔ والد (اختیاری)
+                newX = Math.max(0, Math.min(newX, getParent().getWidth() - getWidth()));
+                newY = Math.max(0, Math.min(newY, getParent().getHeight() - getHeight()));
+                setLocation(newX, newY);
+                // چون سیم‌ها یک JComponent جداگانه هستند که full-screen bounds دارد،
+                // فقط کافی‌ست والد را repaint کنیم تا سیم‌ها مجدداً با موقعیت‌های جدید
+                // پورت‌ها رسم شوند:
+                getParent().repaint();
+            }
+        };
+        this.addMouseListener(drag);
+        this.addMouseMotionListener(drag);
+
     }
 
     private void createPorts(int inCnt, int outCnt) {
