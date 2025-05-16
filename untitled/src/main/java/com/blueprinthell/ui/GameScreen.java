@@ -2,7 +2,6 @@ package com.blueprinthell.ui;
 
 import com.blueprinthell.engine.NetworkController;
 import com.blueprinthell.engine.TimelineController;
-import com.blueprinthell.engine.NetworkSnapshot;
 import com.blueprinthell.model.Packet;
 import com.blueprinthell.model.PacketType;
 import com.blueprinthell.model.Port;
@@ -17,6 +16,9 @@ import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * پنل اصلی بازی: مدیریت منطق و نمایش گرافیکی شبکه
+ */
 public class GameScreen extends JLayeredPane {
     private List<SystemBox> systems;
     private List<Wire> wires;
@@ -35,11 +37,14 @@ public class GameScreen extends JLayeredPane {
 
     private boolean deleteMode = false;
 
+    // جدید: تعداد کل بسته‌ها و listener برای بازگشت به منوی اصلی
+    private int totalPackets;
+    private SettingsListener listener;
+
     public GameScreen() {
         setLayout(null);
         setFocusable(true);
         initKeyBindings();
-
         addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (!deleteMode || !SwingUtilities.isLeftMouseButton(e)) return;
@@ -59,7 +64,6 @@ public class GameScreen extends JLayeredPane {
         InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = getActionMap();
         int fps = 60;
-        // Rewind one second
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "rewind1s");
         am.put("rewind1s", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
@@ -70,7 +74,6 @@ public class GameScreen extends JLayeredPane {
                 syncViewToModel2();
             }
         });
-        // Forward one second
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "forward1s");
         am.put("forward1s", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
@@ -82,7 +85,6 @@ public class GameScreen extends JLayeredPane {
                 }
             }
         });
-        // Toggle delete mode
         im.put(KeyStroke.getKeyStroke("SPACE"), "toggleDelete");
         am.put("toggleDelete", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
@@ -96,12 +98,24 @@ public class GameScreen extends JLayeredPane {
 
     /** Load level and initialize everything */
     public void loadLevel(int levelIndex) {
+        // ریست پنل و تایمر
         removeAll();
         if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
 
+        // listener یک‌بار مقداردهی می‌شود
+        if (listener == null) {
+            listener = (SettingsListener) SwingUtilities.getWindowAncestor(this);
+        }
+        // تعیین تعداد بسته‌ها بر اساس لول
+        switch (levelIndex) {
+            case 1: totalPackets = 2;  break;
+            case 2: totalPackets = 8;  break;
+            default: totalPackets = levelIndex * 2; break;
+        }
+
+        // ساختار سیستم‌ها
         if (levelIndex == 1) {
-            int cx = 500, cy = 300;
-            int w = 100, h = 60, gap = 120;
+            int cx = 500, cy = 300, w = 100, h = 60, gap = 120;
             systems = Arrays.asList(
                     new SystemBox(cx - gap, cy - gap, w, h, 0, 1),
                     new SystemBox(cx + gap, cy - gap, w, h, 0, 1),
@@ -120,9 +134,9 @@ public class GameScreen extends JLayeredPane {
         }
         wires = new ArrayList<>();
 
-        timelineCapacity = 0;
         networkController = new NetworkController(wires, systems, 1500);
-        timelineCtrl      = new TimelineController(networkController, timelineCapacity);
+        timelineCapacity   = 0;
+        timelineCtrl       = new TimelineController(networkController, timelineCapacity);
 
         systems.forEach(s -> {
             add(s);
@@ -161,7 +175,8 @@ public class GameScreen extends JLayeredPane {
             }
         });
 
-        revalidate(); repaint();
+        revalidate();
+        repaint();
     }
 
     private void initHUD() {
@@ -170,15 +185,17 @@ public class GameScreen extends JLayeredPane {
         hudPanel.setBackground(new Color(0, 0, 0, 160));
         hudPanel.setBounds(0, 0, getWidth(), 40);
 
-        lblWire = new JLabel(); lblCoins = new JLabel(); lblLoss = new JLabel();
-        btnStart = new JButton("Start"); btnShop = new JButton("Shop");
+        lblWire = new JLabel();
+        lblCoins = new JLabel();
+        lblLoss = new JLabel();
+        btnStart = new JButton("Start");
+        btnShop = new JButton("Shop");
         sliderTime = new JSlider(0, 0, 0);
         sliderTime.setEnabled(false);
         btnPausePlay = new JButton("Pause");
 
         btnStart.addActionListener(this::onStart);
         btnShop.addActionListener(e -> openShop());
-
         btnPausePlay.addActionListener(e -> {
             if (timelineCtrl.isPlaying()) {
                 timelineCtrl.pause();
@@ -212,36 +229,39 @@ public class GameScreen extends JLayeredPane {
             }
         });
 
-        hudPanel.add(lblWire); hudPanel.add(lblCoins); hudPanel.add(lblLoss);
-        hudPanel.add(btnStart); hudPanel.add(btnShop); hudPanel.add(sliderTime);
+        hudPanel.add(lblWire);
+        hudPanel.add(lblCoins);
+        hudPanel.add(lblLoss);
+        hudPanel.add(btnStart);
+        hudPanel.add(btnShop);
+        hudPanel.add(sliderTime);
         hudPanel.add(btnPausePlay);
         add(hudPanel, JLayeredPane.PALETTE_LAYER);
         updateHUD();
     }
 
     private void syncViewToModel2() {
-        // Remove packets no longer in model
         Set<Packet> modelPackets = new HashSet<>(networkController.getPackets());
-        // Identify and remove stale components
         for (Component comp : getComponents()) {
             if (comp instanceof Packet p && !modelPackets.contains(p)) {
                 remove(p);
             }
         }
-        // Add missing packets and update position
         for (Packet p : modelPackets) {
             if (p.getParent() == null) {
                 add(p, JLayeredPane.DEFAULT_LAYER);
             }
             p.updatePosition();
         }
-        revalidate(); repaint();
+        revalidate();
+        repaint();
     }
 
     private void updateHUD() {
         lblWire.setText("Wire Left: " + String.format("%.0f", networkController.getRemainingWireLength()));
         lblCoins.setText("Coins: "      + networkController.getCoins());
-        lblLoss.setText("Loss: "       + networkController.getPacketLoss());
+        lblLoss.setText("Loss: "       + networkController.getPacketLoss() + " / " + totalPackets);
+        checkGameOver();
     }
 
     private void onStart(ActionEvent e) {
@@ -251,7 +271,8 @@ public class GameScreen extends JLayeredPane {
                     Port out = s.getOutPorts().get(0);
                     Wire w = wires.stream()
                             .filter(x -> x.getSrcPort() == out)
-                            .findFirst().orElse(null);
+                            .findFirst()
+                            .orElse(null);
                     if (w != null) {
                         Packet p = new Packet(PacketType.SQUARE, 100);
                         w.attachPacket(p, 0.0);
@@ -274,7 +295,8 @@ public class GameScreen extends JLayeredPane {
                     if (sliderTime.getValue() != 0) sliderTime.setValue(0);
                 }
             }
-            updateHUD(); repaint();
+            updateHUD();
+            repaint();
         });
         gameTimer.start();
         btnStart.setEnabled(false);
@@ -294,5 +316,24 @@ public class GameScreen extends JLayeredPane {
         timelineCtrl.resume();
         syncViewToModel2();
         if (gameTimer != null) gameTimer.start();
+    }
+
+    // بررسی رسیدن تعداد بسته‌های از دست رفته به نصف کل بسته‌ها
+    private void checkGameOver() {
+        if (networkController.getPacketLoss() * 2 >= totalPackets) {
+            triggerGameOver();
+        }
+    }
+
+    // نمایش لایه‌ی Game Over
+    private void triggerGameOver() {
+        if (gameTimer != null && gameTimer.isRunning()) {
+            gameTimer.stop();
+        }
+        GameOverScreen gos = new GameOverScreen(listener);
+        gos.setBounds(0, 0, getWidth(), getHeight());
+        add(gos, JLayeredPane.MODAL_LAYER);
+        revalidate();
+        repaint();
     }
 }
