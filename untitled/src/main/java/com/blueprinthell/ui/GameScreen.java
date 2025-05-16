@@ -369,4 +369,6 @@ public class GameScreen extends JLayeredPane {
         gameoverClip.setFramePosition(0);
         gameoverClip.start();
     }
+
+
 }

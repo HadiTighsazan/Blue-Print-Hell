@@ -8,7 +8,7 @@ import java.awt.*;
 public class SettingsScreen extends JPanel {
     private final SettingsListener listener;
 
-    public SettingsScreen(SettingsListener listener) {
+    public SettingsScreen(SettingsListener listener ,int initialVolume) {
         this.listener = listener;
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(40, 40, 40, 40));
@@ -19,7 +19,7 @@ public class SettingsScreen extends JPanel {
 
         JLabel volLabel = new JLabel("Sound Volume");
         volLabel.setAlignmentX(CENTER_ALIGNMENT);
-        JSlider slider = new JSlider(0, 100, 50);
+        JSlider slider = new JSlider(0, 100, initialVolume);
         slider.setAlignmentX(CENTER_ALIGNMENT);
         slider.addChangeListener((ChangeListener) e -> {
             if (!slider.getValueIsAdjusting()) {

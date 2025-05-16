@@ -1,15 +1,11 @@
 package com.blueprinthell.ui;
 
+import javax.sound.sampled.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.IOException;
 import java.net.URL;
 
@@ -69,7 +65,7 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
         screens.put(State.LEVEL_SELECT, levelSelect);
         cardsContainer.add(levelSelect, State.LEVEL_SELECT.name());
 
-        SettingsScreen settings = new SettingsScreen(this);
+        SettingsScreen settings = new SettingsScreen(this, 50);
         screens.put(State.SETTINGS, settings);
         cardsContainer.add(settings, State.SETTINGS.name());
 
@@ -105,8 +101,14 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
 
     @Override
     public void onSoundVolumeChanged(int newVolume) {
-        // TODO: اعمال تنظیم حجم صدا
+        // ۱– تنظیم حجم bgClip
+        FloatControl gain = (FloatControl) bgClip.getControl(FloatControl.Type.MASTER_GAIN);
+        float db = (newVolume==0 ? gain.getMinimum()
+                : 20f * (float)Math.log10(newVolume/100.0));
+        gain.setValue(db);
+        // ۲– انتقال به GameScreen
     }
+
 
     @Override
     public void onKeyBindingsRequested() {
