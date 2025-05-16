@@ -8,13 +8,19 @@ import com.blueprinthell.model.Port;
 import com.blueprinthell.model.SystemBox;
 import com.blueprinthell.model.Wire;
 
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.Clip;
+import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.*;
 import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.IOException;
+import java.net.URL;
 import java.util.*;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * پنل اصلی بازی: مدیریت منطق و نمایش گرافیکی شبکه
@@ -34,17 +40,18 @@ public class GameScreen extends JLayeredPane {
 
     private TimelineController timelineCtrl;
     private int timelineCapacity;
-
     private boolean deleteMode = false;
 
-    // جدید: تعداد کل بسته‌ها و listener برای بازگشت به منوی اصلی
     private int totalPackets;
     private SettingsListener listener;
+
+    private Clip bgClip, impactClip, connectClip, gameoverClip;
 
     public GameScreen() {
         setLayout(null);
         setFocusable(true);
         initKeyBindings();
+        initSounds();
         addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (!deleteMode || !SwingUtilities.isLeftMouseButton(e)) return;
@@ -96,24 +103,41 @@ public class GameScreen extends JLayeredPane {
         });
     }
 
+    private void initSounds() {
+        try {
+            bgClip = loadClip("bg_loop.wav");
+            impactClip = loadClip("impact_thud.wav");
+            connectClip = loadClip("connect_click.wav");
+            gameoverClip = loadClip("gameover_jingle.wav");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Clip loadClip(String fileName) throws IOException, UnsupportedAudioFileException, LineUnavailableException {
+        URL url = getClass().getClassLoader().getResource("resource/" + fileName);
+        if (url == null) {
+            throw new IOException("Audio resource not found: " + fileName);
+        }
+        AudioInputStream ais = AudioSystem.getAudioInputStream(url);
+        Clip clip = AudioSystem.getClip();
+        clip.open(ais);
+        return clip;
+    }
     /** Load level and initialize everything */
     public void loadLevel(int levelIndex) {
-        // ریست پنل و تایمر
         removeAll();
         if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
 
-        // listener یک‌بار مقداردهی می‌شود
         if (listener == null) {
             listener = (SettingsListener) SwingUtilities.getWindowAncestor(this);
         }
-        // تعیین تعداد بسته‌ها بر اساس لول
         switch (levelIndex) {
             case 1: totalPackets = 2;  break;
             case 2: totalPackets = 8;  break;
             default: totalPackets = levelIndex * 2; break;
         }
 
-        // ساختار سیستم‌ها
         if (levelIndex == 1) {
             int cx = 500, cy = 300, w = 100, h = 60, gap = 120;
             systems = Arrays.asList(
@@ -149,6 +173,7 @@ public class GameScreen extends JLayeredPane {
             add(w, JLayeredPane.DEFAULT_LAYER);
             w.setBounds(0, 0, getWidth(), getHeight());
             updateHUD();
+            playConnect();
         });
 
         previewLayer = new WirePreviewLayer(inputManager);
@@ -177,6 +202,7 @@ public class GameScreen extends JLayeredPane {
 
         revalidate();
         repaint();
+        // شروع موسیقی پس‌زمینه
     }
 
     private void initHUD() {
@@ -229,13 +255,8 @@ public class GameScreen extends JLayeredPane {
             }
         });
 
-        hudPanel.add(lblWire);
-        hudPanel.add(lblCoins);
-        hudPanel.add(lblLoss);
-        hudPanel.add(btnStart);
-        hudPanel.add(btnShop);
-        hudPanel.add(sliderTime);
-        hudPanel.add(btnPausePlay);
+        hudPanel.add(lblWire); hudPanel.add(lblCoins); hudPanel.add(lblLoss);
+        hudPanel.add(btnStart); hudPanel.add(btnShop); hudPanel.add(sliderTime); hudPanel.add(btnPausePlay);
         add(hudPanel, JLayeredPane.PALETTE_LAYER);
         updateHUD();
     }
@@ -248,13 +269,10 @@ public class GameScreen extends JLayeredPane {
             }
         }
         for (Packet p : modelPackets) {
-            if (p.getParent() == null) {
-                add(p, JLayeredPane.DEFAULT_LAYER);
-            }
+            if (p.getParent() == null) add(p, JLayeredPane.DEFAULT_LAYER);
             p.updatePosition();
         }
-        revalidate();
-        repaint();
+        revalidate(); repaint();
     }
 
     private void updateHUD() {
@@ -271,14 +289,14 @@ public class GameScreen extends JLayeredPane {
                     Port out = s.getOutPorts().get(0);
                     Wire w = wires.stream()
                             .filter(x -> x.getSrcPort() == out)
-                            .findFirst()
-                            .orElse(null);
+                            .findFirst().orElse(null);
                     if (w != null) {
                         Packet p = new Packet(PacketType.SQUARE, 100);
                         w.attachPacket(p, 0.0);
                         add(p, JLayeredPane.DEFAULT_LAYER);
                     } else {
                         networkController.incrementPacketLoss();
+                        playImpact();
                     }
                 });
         updateHUD();
@@ -295,26 +313,18 @@ public class GameScreen extends JLayeredPane {
                     if (sliderTime.getValue() != 0) sliderTime.setValue(0);
                 }
             }
-            updateHUD();
-            repaint();
+            updateHUD(); repaint();
         });
         gameTimer.start();
         btnStart.setEnabled(false);
     }
 
     private void openShop() {
-        if (gameTimer != null && gameTimer.isRunning()) {
-            gameTimer.stop();
-        }
-        timelineCtrl.pause();
-        syncViewToModel2();
-        ShopDialog dlg = new ShopDialog(
-                SwingUtilities.getWindowAncestor(this),
-                networkController, this::updateHUD
-        );
+        if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
+        timelineCtrl.pause(); syncViewToModel2();
+        ShopDialog dlg = new ShopDialog(SwingUtilities.getWindowAncestor(this), networkController, this::updateHUD);
         dlg.setVisible(true);
-        timelineCtrl.resume();
-        syncViewToModel2();
+        timelineCtrl.resume(); syncViewToModel2();
         if (gameTimer != null) gameTimer.start();
     }
 
@@ -325,15 +335,38 @@ public class GameScreen extends JLayeredPane {
         }
     }
 
-    // نمایش لایه‌ی Game Over
+    // نمایش لایه‌ی Game Over و پخش صدا
     private void triggerGameOver() {
-        if (gameTimer != null && gameTimer.isRunning()) {
-            gameTimer.stop();
-        }
+        if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
+        playGameOverSound(); bgClip.stop();
         GameOverScreen gos = new GameOverScreen(listener);
         gos.setBounds(0, 0, getWidth(), getHeight());
-        add(gos, JLayeredPane.MODAL_LAYER);
-        revalidate();
-        repaint();
+        add(gos, JLayeredPane.MODAL_LAYER); revalidate(); repaint();
+    }
+
+    // پخش موسیقی پس‌زمینه
+    private void playBg() {
+        if (bgClip != null) bgClip.loop(Clip.LOOP_CONTINUOUSLY);
+    }
+    // پخش صدای برخورد
+    private void playImpact() {
+        if (impactClip == null) return;
+        if (impactClip.isRunning()) impactClip.stop();
+        impactClip.setFramePosition(0);
+        impactClip.start();
+    }
+    // پخش صدای اتصال سیم
+    private void playConnect() {
+        if (connectClip == null) return;
+        if (connectClip.isRunning()) connectClip.stop();
+        connectClip.setFramePosition(0);
+        connectClip.start();
+    }
+    // پخش صدای گیم‌اور
+    private void playGameOverSound() {
+        if (gameoverClip == null) return;
+        if (gameoverClip.isRunning()) gameoverClip.stop();
+        gameoverClip.setFramePosition(0);
+        gameoverClip.start();
     }
 }
