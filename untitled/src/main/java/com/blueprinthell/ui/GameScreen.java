@@ -120,9 +120,9 @@ public class GameScreen extends JLayeredPane {
         }
         wires = new ArrayList<>();
 
-        timelineCapacity = 5 * 60;
+        timelineCapacity = 0;
         networkController = new NetworkController(wires, systems, 1500);
-        timelineCtrl = new TimelineController(networkController, timelineCapacity);
+        timelineCtrl      = new TimelineController(networkController, timelineCapacity);
 
         systems.forEach(s -> {
             add(s);

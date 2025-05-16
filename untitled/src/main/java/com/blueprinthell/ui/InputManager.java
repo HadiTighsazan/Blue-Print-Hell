@@ -26,6 +26,9 @@ public class InputManager {
 
     private final List<Port> ports = new ArrayList<>();
 
+    private boolean allowSystemMove = true;
+    private Runnable systemMovedCallback;
+
 
     public InputManager(NetworkController ctrl) { this.controller = ctrl; }
 
@@ -36,6 +39,13 @@ public class InputManager {
     }
 
 
+    public void setAllowSystemMove(boolean allow) {
+        this.allowSystemMove = allow;
+    }
+
+    public void setSystemMovedCallback(Runnable callback) {
+        this.systemMovedCallback = callback;
+    }
 
 
     public void registerEventContainer(JComponent c) {

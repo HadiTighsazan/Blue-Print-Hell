@@ -26,28 +26,23 @@ public class NetworkController {
     private double collisionDisableTimer = 0;
 
     private final double maxWireLength;
-    private int    cellSize;  // grid cell size for collisions
+    private int    cellSize;
 
     public NetworkController(List<Wire> wires, List<SystemBox> systems, double maxWireLength) {
         this.wires         = new ArrayList<>(wires);
         this.systems       = Objects.requireNonNull(systems);
         this.maxWireLength = maxWireLength;
 
-        // map ports to wires
         for (Wire w : wires) {
             portToWire.put(w.getSrcPort(), w);
             portToWire.put(w.getDstPort(), w);
         }
 
-        // compute cellSize from PacketType.sizeUnits
         int maxUnits = 0;
-        System.out.println("[NetworkController] PacketType values:");
         for (PacketType pt : PacketType.values()) {
-            System.out.printf("  - %s.sizeUnits = %d%n", pt, pt.sizeUnits);
             maxUnits = Math.max(maxUnits, pt.sizeUnits);
         }
         cellSize = maxUnits * 6;
-        System.out.printf("[NetworkController] Computed cellSize = %d%n", cellSize);
     }
 
     public double getRemainingWireLength() {
@@ -71,14 +66,12 @@ public class NetworkController {
         portToWire.put(w.getDstPort(), w);
     }
 
-    /** Return all packets currently flowing on wires */
     public List<Packet> getPackets() {
         return wires.stream()
                 .flatMap(w -> w.getPackets().stream())
                 .collect(Collectors.toList());
     }
 
-    /** Increment packet-loss counter */
     public void incrementPacketLoss() {
         this.packetLoss++;
     }
@@ -115,8 +108,6 @@ public class NetworkController {
         if (collisionDisableTimer > 0) return;
 
         List<Packet> all = getPackets();
-        System.out.printf("[NetworkController] handleCollisions: cellSize=%d, totalPackets=%d%n",
-                cellSize, all.size());
 
         if (cellSize <= 0 || all.isEmpty()) return;
 
@@ -143,8 +134,8 @@ public class NetworkController {
                     double minD = rP + q.getWidth()/2.0;
                     if (dist <= minD) {
                         double factor = 1.0 - (dist/minD);
-                        p.increaseNoise(factor);
-                        q.increaseNoise(factor);
+                        p.increaseNoise(factor*2);
+                        q.increaseNoise(factor*2);
                         if (p.getNoise() > rP)    toRemove.add(p);
                         if (q.getNoise() > q.getWidth()/2.0) toRemove.add(q);
                     }
@@ -214,13 +205,11 @@ public class NetworkController {
                 p.setSpeed(compatible ? p.getBaseSpeed() : p.getBaseSpeed());
 
                 Wire next = portToWire.get(chosen);
-                // <-- اینجا از attachPacket استفاده می‌کنیم:
                 next.attachPacket(p, 0.0);
             }
         }
     }
 
-    /** Capture a snapshot of current network state */
     public NetworkSnapshot captureSnapshot() {
         List<PacketSnapshot> packetSnaps = new ArrayList<>();
         for (int i = 0; i < wires.size(); i++) {
@@ -247,26 +236,20 @@ public class NetworkController {
         return new NetworkSnapshot(packetSnaps, bufferSnaps, coins, packetLoss);
     }
 
-    /** Restore network state from given snapshot */
     public void restoreState(NetworkSnapshot snap) {
-        // ۱) پاک‌کردن مدل فعلی
         wires.forEach(w -> w.getPackets().clear());
         systems.forEach(SystemBox::clearBuffer);
         coins      = snap.coins();
         packetLoss = snap.packetLoss();
 
-        // ۲) بازسازی Packetها روی سیم‌ها
         for (PacketSnapshot ps : snap.packets()) {
             Packet p = new Packet(ps.type(), ps.baseSpeed());
             p.setSpeed(ps.speed());
             p.increaseNoise(ps.noise());
-            // ← مهم: از خود Wire.attachPacket استفاده کنیم،
-            //     تا هم مدل و هم UI با progress صحیح ثبت شوند.
             Wire w = wires.get(ps.wireIndex());
             w.attachPacket(p, ps.progress());
         }
 
-        // ۳) بازسازی Buffer سیستم‌ها (بدون نمایش گرافیکی)
         snap.buffers().forEach((idx, list) -> {
             SystemBox sys = systems.get(idx);
             for (PacketSnapshot ps : list) {
