@@ -56,14 +56,20 @@ public class Packet extends GameObject implements Serializable {
 
     public void attachToWire(Wire w, double initProgress) {
         this.currentWire = w;
-        this.progress = initProgress;
-
+        this.progress    = initProgress;
+        updatePosition();   // ← اضافه شد
     }
 
-    private void updatePosition() {
+
+    public void updatePosition() {
         if (currentWire == null) return;
         Point pt = currentWire.pointAt(progress);
         setLocation(pt.x - getWidth() / 2, pt.y - getHeight() / 2);
+    }
+
+    public void setProgress(double progress) {
+        this.progress = progress;
+        updatePosition();
     }
 
     public PacketType getType() { return type; }
