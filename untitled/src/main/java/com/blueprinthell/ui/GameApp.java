@@ -3,11 +3,11 @@ package com.blueprinthell.ui;
 import javax.sound.sampled.*;
 import javax.swing.*;
 import java.awt.*;
-import java.util.HashMap;
-import java.util.Map;
-
+import java.awt.event.*;
 import java.io.IOException;
 import java.net.URL;
+import java.util.HashMap;
+import java.util.Map;
 
 public class GameApp extends JFrame implements MainMenuListener, LevelSelectListener, SettingsListener {
     public enum State { MAIN_MENU, LEVEL_SELECT, PLAYING, PAUSED, SHOP, SETTINGS }
@@ -102,16 +102,41 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
     @Override
     public void onSoundVolumeChanged(int newVolume) {
         // ۱– تنظیم حجم bgClip
-        FloatControl gain = (FloatControl) bgClip.getControl(FloatControl.Type.MASTER_GAIN);
-        float db = (newVolume==0 ? gain.getMinimum()
-                : 20f * (float)Math.log10(newVolume/100.0));
-        gain.setValue(db);
-        // ۲– انتقال به GameScreen
+        try {
+            FloatControl gain = (FloatControl) bgClip.getControl(FloatControl.Type.MASTER_GAIN);
+            float db = (newVolume == 0
+                    ? gain.getMinimum()
+                    : 20f * (float) Math.log10(newVolume / 100.0));
+            gain.setValue(db);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
-
 
     @Override
     public void onKeyBindingsRequested() {
-        // TODO: نمایش دیالوگ تغییر کلیدها
+        // گرفتن کلید جدید برای rewind و forward
+        int newRewind  = promptForKey("Press new key for REWIND");
+        int newForward = promptForKey("Press new key for FORWARD");
+        GameScreen gs = (GameScreen) screens.get(State.PLAYING);
+        gs.updateKeyBindings(newRewind, newForward);
+    }
+
+    /** نمایش دیالوگ برای گرفتن یک کلید از کاربر */
+    private int promptForKey(String message) {
+        JDialog dlg = new JDialog(this, "Key Binding", true);
+        JLabel lbl = new JLabel(message, SwingConstants.CENTER);
+        dlg.add(lbl);
+        dlg.setSize(300, 100);
+        dlg.setLocationRelativeTo(this);
+        final int[] keyCode = new int[1];
+        dlg.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                keyCode[0] = e.getKeyCode();
+                dlg.dispose();
+            }
+        });
+        dlg.setVisible(true);
+        return keyCode[0];
     }
 }

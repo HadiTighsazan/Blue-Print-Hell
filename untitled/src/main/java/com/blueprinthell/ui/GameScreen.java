@@ -47,6 +47,11 @@ public class GameScreen extends JLayeredPane {
 
     private Clip bgClip, impactClip, connectClip, gameoverClip;
 
+    private int rewindKey = KeyEvent.VK_LEFT;
+    private int forwardKey = KeyEvent.VK_RIGHT;
+
+
+
     public GameScreen() {
         setLayout(null);
         setFocusable(true);
@@ -67,11 +72,30 @@ public class GameScreen extends JLayeredPane {
         });
     }
 
+    /** به‌روزرسانی کلیدها */
+    public void updateKeyBindings(int newRewindKey, int newForwardKey) {
+        this.rewindKey = newRewindKey;
+        this.forwardKey = newForwardKey;
+        applyKeyBindings();
+    }
+
+    /** تنظیم bindهای کلی */
     private void initKeyBindings() {
+        applyKeyBindings();
+        bindToggleDelete();
+    }
+
+    /** اعمال مجدد bindهای rewind و forward با کلیدهای تنظیم‌شده */
+    private void applyKeyBindings() {
         InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = getActionMap();
         int fps = 60;
-        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "rewind1s");
+        // پاک کردن binds قبلی
+        im.clear();
+        am.clear();
+
+        // rewind bind
+        im.put(KeyStroke.getKeyStroke(rewindKey, 0), "rewind1s");
         am.put("rewind1s", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
                 if (timelineCtrl.isPlaying()) timelineCtrl.pause();
@@ -81,7 +105,8 @@ public class GameScreen extends JLayeredPane {
                 syncViewToModel2();
             }
         });
-        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "forward1s");
+        // forward bind
+        im.put(KeyStroke.getKeyStroke(forwardKey, 0), "forward1s");
         am.put("forward1s", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
                 if (!timelineCtrl.isPlaying()) {
@@ -92,6 +117,12 @@ public class GameScreen extends JLayeredPane {
                 }
             }
         });
+    }
+
+    /** bind کردن toggle delete mode به SPACE */
+    private void bindToggleDelete() {
+        InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
+        ActionMap am = getActionMap();
         im.put(KeyStroke.getKeyStroke("SPACE"), "toggleDelete");
         am.put("toggleDelete", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
