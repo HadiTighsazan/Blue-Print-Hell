@@ -28,10 +28,13 @@ public class WirePreviewLayer extends JComponent {
         if (src != null && mouse != null) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setStroke(new BasicStroke(2f));
-            g2.setColor(im.isValidTarget() && im.isEnoughLength()
-                    ? Color.GREEN : Color.RED);
+
+            boolean enough = im.isEnoughLength();
+            boolean valid = enough && im.isValidTarget();
+            g2.setColor(valid ? Color.GREEN : Color.RED);
+
             Point p1 = SwingUtilities.convertPoint(
-                    src, src.getWidth()/2, src.getHeight()/2, this
+                    src, src.getWidth() / 2, src.getHeight() / 2, this
             );
             g2.drawLine(p1.x, p1.y, mouse.x, mouse.y);
             g2.dispose();

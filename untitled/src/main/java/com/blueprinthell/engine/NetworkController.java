@@ -77,6 +77,7 @@ public class NetworkController {
     }
 
     public void removeWire(Wire w) {
+
         wires.remove(w);
         portToWire.remove(w.getSrcPort());
         portToWire.remove(w.getDstPort());

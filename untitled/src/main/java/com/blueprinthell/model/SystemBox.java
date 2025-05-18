@@ -1,4 +1,3 @@
-// SystemBox.java
 package com.blueprinthell.model;
 
 import javax.swing.*;
@@ -8,12 +7,11 @@ import java.awt.event.MouseEvent;
 import java.io.Serializable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
 
-/**
- * A network node with input- and output-Ports laid out along its left and right edges.
- */
+
 public class SystemBox extends GameObject implements Serializable {
     private static final long serialVersionUID = 5L;
 
@@ -21,81 +19,75 @@ public class SystemBox extends GameObject implements Serializable {
     private final List<Port> outPorts = new ArrayList<>();
     private final Queue<Packet> buffer = new ArrayDeque<>(5);
 
+    private final PortShape inShape;
+    private final PortShape outShape;
+
     public SystemBox(int x, int y, int w, int h, int inCount, int outCount) {
+        this(x, y, w, h,
+                Collections.nCopies(inCount, PortShape.SQUARE),
+                Collections.nCopies(outCount, PortShape.SQUARE));
+    }
+
+    public SystemBox(int x, int y, int w, int h,
+                     int inCount, PortShape inShape,
+                     int outCount, PortShape outShape) {
+        this(x, y, w, h,
+                Collections.nCopies(inCount, inShape),
+                Collections.nCopies(outCount, outShape));
+    }
+
+    public SystemBox(int x, int y, int w, int h,
+                     List<PortShape> inShapes,
+                     List<PortShape> outShapes) {
         super(x, y, w, h);
-        setLayout(null);              // absolute positioning of ports
-        createPorts(inCount, outCount);
+        this.inShape = null;
+        this.outShape = null;
+        setLayout(null);
+        createPorts(inShapes, outShapes);
         setBackground(new Color(0x444444));
         setOpaque(true);
-        // در SystemBox.java، داخل سازنده:
         MouseAdapter drag = new MouseAdapter() {
             private Point offset;
-            @Override
-            public void mousePressed(MouseEvent e) {
-                // ذخیرهٔ فاصلهٔ موس تا گوشهٔ کادر SystemBox
-                offset = e.getPoint();
-            }
-            @Override
-            public void mouseDragged(MouseEvent e) {
-                // محاسبهٔ موقعیت جدید
+            @Override public void mousePressed(MouseEvent e) { offset = e.getPoint(); }
+            @Override public void mouseDragged(MouseEvent e) {
                 int newX = getX() + e.getX() - offset.x;
                 int newY = getY() + e.getY() - offset.y;
-                // محدود کردن در محدودهٔ والد (اختیاری)
                 newX = Math.max(0, Math.min(newX, getParent().getWidth() - getWidth()));
                 newY = Math.max(0, Math.min(newY, getParent().getHeight() - getHeight()));
                 setLocation(newX, newY);
-                // چون سیم‌ها یک JComponent جداگانه هستند که full-screen bounds دارد،
-                // فقط کافی‌ست والد را repaint کنیم تا سیم‌ها مجدداً با موقعیت‌های جدید
-                // پورت‌ها رسم شوند:
                 getParent().repaint();
             }
         };
-        this.addMouseListener(drag);
-        this.addMouseMotionListener(drag);
-
+        addMouseListener(drag);
+        addMouseMotionListener(drag);
     }
 
     private void createPorts(int inCnt, int outCnt) {
+        createPorts(
+                Collections.nCopies(inCnt, inShape),
+                Collections.nCopies(outCnt, outShape)
+        );
+    }
+
+    private void createPorts(List<PortShape> inShapes, List<PortShape> outShapes) {
         int portSize = 14;
-        // ورودی‌ها در x=0 تا x=portSize داخل کادر
-        for (int i = 0; i < inCnt; i++) {
-            int yOffset = (i + 1) * getHeight() / (inCnt + 1) - portSize / 2;
-            Port p = new Port(
-                    /*x=*/ 0,
-                    /*y=*/ yOffset,
-                    /*size=*/ portSize,
-                    /*shape=*/ PortShape.SQUARE,
-                    /*input=*/ true
-            );
+        for (int i = 0; i < inShapes.size(); i++) {
+            int yOffset = (i + 1) * getHeight() / (inShapes.size() + 1) - portSize/2;
+            Port p = new Port(0, yOffset, portSize, inShapes.get(i), true);
             inPorts.add(p);
             add(p);
         }
-        // خروجی‌ها در x = width-portSize تا width داخل کادر
-        for (int i = 0; i < outCnt; i++) {
-            int yOffset = (i + 1) * getHeight() / (outCnt + 1) - portSize / 2;
-            Port p = new Port(
-                    /*x=*/ getWidth() - portSize,
-                    /*y=*/ yOffset,
-                    /*size=*/ portSize,
-                    /*shape=*/ PortShape.SQUARE,
-                    /*input=*/ false
-            );
+        for (int i = 0; i < outShapes.size(); i++) {
+            int yOffset = (i + 1) * getHeight() / (outShapes.size() + 1) - portSize/2;
+            Port p = new Port(getWidth()-portSize, yOffset, portSize, outShapes.get(i), false);
             outPorts.add(p);
             add(p);
         }
     }
 
-    /** دریافت لیست پورت‌های ورودی */
-    public List<Port> getInPorts() {
-        return inPorts;
-    }
+    public List<Port> getInPorts() { return inPorts; }
+    public List<Port> getOutPorts() { return outPorts; }
 
-    /** دریافت لیست پورت‌های خروجی */
-    public List<Port> getOutPorts() {
-        return outPorts;
-    }
-
-    /** تلاش برای افزودن Packet به بافر (حداکثر 5) */
     public boolean enqueue(Packet p) {
         if (buffer.size() < 5) {
             buffer.add(p);
@@ -103,21 +95,9 @@ public class SystemBox extends GameObject implements Serializable {
         }
         return false;
     }
-
-    /** بیرون کشیدن یک Packet از بافر */
-    public Packet pollPacket() {
-        return buffer.poll();
-    }
-
-    /** برای پاک کردن بافر (مثلاً در restoreState) */
-    public void clearBuffer() {
-        buffer.clear();
-    }
-
-    /** فقط برای دسترسی به بافر در SnapshotManager */
-    public Queue<Packet> getBuffer() {
-        return buffer;
-    }
+    public Packet pollPacket() { return buffer.poll(); }
+    public void clearBuffer()    { buffer.clear(); }
+    public Queue<Packet> getBuffer() { return buffer; }
 
     @Override
     protected void paintComponent(Graphics g) {

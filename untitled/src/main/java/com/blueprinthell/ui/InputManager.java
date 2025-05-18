@@ -9,19 +9,16 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Random;
 import java.util.function.Consumer;
-
 
 public class InputManager {
     private final NetworkController controller;
     private JComponent eventContainer;
-    private Container  hitContainer;
-    private Port       dragSource, dragTarget;
-    private Point      mousePos;
-    private boolean    validTarget, enoughLength;
+    private Container hitContainer;
+    private Port dragSource, dragTarget;
+    private Point mousePos;
+    private boolean validTarget, enoughLength;
     private Consumer<Wire> onWireCreated;
 
     private final List<Port> ports = new ArrayList<>();
@@ -29,15 +26,15 @@ public class InputManager {
     private boolean allowSystemMove = true;
     private Runnable systemMovedCallback;
 
-
-    public InputManager(NetworkController ctrl) { this.controller = ctrl; }
+    public InputManager(NetworkController ctrl) {
+        this.controller = ctrl;
+    }
 
     public void registerHitContainer(Container c) {
         this.hitContainer = c;
         c.addMouseListener(containerMouseAdapter);
         c.addMouseMotionListener(containerMotionAdapter);
     }
-
 
     public void setAllowSystemMove(boolean allow) {
         this.allowSystemMove = allow;
@@ -47,22 +44,25 @@ public class InputManager {
         this.systemMovedCallback = callback;
     }
 
-
     public void registerEventContainer(JComponent c) {
         this.eventContainer = c;
         c.addMouseListener(containerMouseAdapter);
         c.addMouseMotionListener(containerMotionAdapter);
     }
+
     public void registerPort(Port p) {
         ports.add(p);
         p.addMouseListener(portMouseAdapter);
         p.addMouseMotionListener(containerMotionAdapter);
     }
 
-    public void setWireCreatedCallback(Consumer<Wire> cb) { this.onWireCreated = cb; }
+    public void setWireCreatedCallback(Consumer<Wire> cb) {
+        this.onWireCreated = cb;
+    }
 
     private final MouseAdapter containerMouseAdapter = new MouseAdapter() {
-        @Override public void mousePressed(MouseEvent e) {
+        @Override
+        public void mousePressed(MouseEvent e) {
             if (!SwingUtilities.isLeftMouseButton(e) || dragSource != null) return;
             Point pt = e.getPoint();
             Point hitPt = SwingUtilities.convertPoint(eventContainer, pt, hitContainer);
@@ -71,16 +71,21 @@ public class InputManager {
                 startDrag(port);
             }
         }
-        @Override public void mouseReleased(MouseEvent e) {
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
             if (dragSource != null) endDrag();
         }
     };
 
     private final MouseMotionAdapter containerMotionAdapter = new MouseMotionAdapter() {
-        @Override public void mouseDragged(MouseEvent e) {
+        @Override
+        public void mouseDragged(MouseEvent e) {
             updateDragState(e.getPoint());
         }
-        @Override public void mouseMoved(MouseEvent e) {
+
+        @Override
+        public void mouseMoved(MouseEvent e) {
             updateDragState(e.getPoint());
         }
     };
@@ -89,7 +94,7 @@ public class InputManager {
         @Override
         public void mousePressed(MouseEvent e) {
             if (!SwingUtilities.isLeftMouseButton(e) || dragSource != null) return;
-            Port p = (Port)e.getSource();
+            Port p = (Port) e.getSource();
             if (!p.isInput()) {
                 Point clickInPreview = SwingUtilities.convertPoint(
                         p, e.getX(), e.getY(), eventContainer
@@ -97,17 +102,13 @@ public class InputManager {
                 startDrag(p, clickInPreview);
             }
         }
-
     };
-
 
     private void startDrag(Port src, Point initMousePos) {
         this.dragSource = src;
         this.dragTarget = null;
-
         this.mousePos = initMousePos;
-
-        this.validTarget  = false;
+        this.validTarget = false;
         this.enoughLength = false;
         eventContainer.setEnabled(true);
         eventContainer.repaint();
@@ -115,17 +116,14 @@ public class InputManager {
 
     private void startDrag(Port src) {
         this.dragSource = src;
-        this.mousePos   = SwingUtilities.convertPoint(
-                src, src.getWidth()/2, src.getHeight()/2, eventContainer
+        this.mousePos = SwingUtilities.convertPoint(
+                src, src.getWidth() / 2, src.getHeight() / 2, eventContainer
         );
-        validTarget = enoughLength = false;
+        this.validTarget = false;
+        this.enoughLength = false;
         eventContainer.setEnabled(true);
         eventContainer.repaint();
     }
-
-
-
-
 
     private void updateDragState(Point pt) {
         if (dragSource == null) return;
@@ -139,9 +137,8 @@ public class InputManager {
             target = p;
         } else if (under == eventContainer) {
             for (Port p : ports) {
-                Point loc = SwingUtilities.convertPoint(p.getParent(),
-                        p.getLocation(),
-                        hitContainer);
+                Point loc = SwingUtilities.convertPoint(
+                        p.getParent(), p.getLocation(), hitContainer);
                 Rectangle r = new Rectangle(loc.x, loc.y, p.getWidth(), p.getHeight());
                 if (r.contains(hitPt)) {
                     target = p;
@@ -158,31 +155,32 @@ public class InputManager {
             validTarget = false;
         }
 
-        double dx = dragSource.getCenterX() - pt.x;
-        double dy = dragSource.getCenterY() - pt.y;
+        Point start = SwingUtilities.convertPoint(
+                dragSource, dragSource.getWidth() / 2, dragSource.getHeight() / 2, eventContainer
+        );
+        double dx = start.x - pt.x;
+        double dy = start.y - pt.y;
         enoughLength = controller.getRemainingWireLength() >= Math.hypot(dx, dy);
 
         eventContainer.repaint();
     }
 
-
     private void endDrag() {
-        if (validTarget && enoughLength && dragTarget!=null) {
+        if (validTarget && enoughLength && dragTarget != null) {
             Wire w = new Wire(dragSource, dragTarget);
             controller.addWire(w);
-            if (onWireCreated!=null) onWireCreated.accept(w);
+            if (onWireCreated != null) onWireCreated.accept(w);
         }
         dragSource = dragTarget = null;
         mousePos = null;
-        validTarget = enoughLength = false;
+        validTarget = false;
+        enoughLength = false;
         eventContainer.setEnabled(false);
         eventContainer.repaint();
-
     }
 
-    public Port getDragSource()    { return dragSource; }
-    public Point getMousePos()     { return mousePos; }
+    public Port getDragSource() { return dragSource; }
+    public Point getMousePos() { return mousePos; }
     public boolean isValidTarget() { return validTarget; }
-    public boolean isEnoughLength(){ return enoughLength; }
+    public boolean isEnoughLength() { return enoughLength; }
 }
-

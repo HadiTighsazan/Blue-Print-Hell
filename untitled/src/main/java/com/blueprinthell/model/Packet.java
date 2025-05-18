@@ -36,19 +36,14 @@ public class Packet extends GameObject implements Serializable {
     }
 
     public void advance(double dt) {
-        // ۱) اعمال شتاب
         speed += acceleration * dt;
-        // ۲) جابجایی بر اساس سرعت فعلی
         double distance = speed * dt;
         double deltaProgress = distance / currentWire.getLength();
         progress += deltaProgress;
-        // ۳) به‌روز کردن موقعیت روی سیم
         Point p = currentWire.pointAt(progress);
         setLocation(p.x - getWidth()/2, p.y - getHeight()/2);
     }
-    // درون class Packet { … }
 
-    /** صفر کردن نویز این پکت */
     public void resetNoise() {
         this.noise = 0.0;
     }
@@ -57,7 +52,7 @@ public class Packet extends GameObject implements Serializable {
     public void attachToWire(Wire w, double initProgress) {
         this.currentWire = w;
         this.progress    = initProgress;
-        updatePosition();   // ← اضافه شد
+        updatePosition();
     }
 
 

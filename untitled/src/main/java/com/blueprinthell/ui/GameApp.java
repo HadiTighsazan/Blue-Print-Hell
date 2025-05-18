@@ -16,7 +16,6 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
     private final JPanel cardsContainer = new JPanel(cardsLayout);
     private final Map<State, JComponent> screens = new HashMap<>();
 
-    // پس‌زمینه: لوپ صدای bg
     private Clip bgClip;
 
     public static void main(String[] args) {
@@ -32,7 +31,7 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
         setSize(1024, 768);
         setLocationRelativeTo(null);
 
-        initBackgroundSound();  // شروع صدای پس‌زمینه
+        initBackgroundSound();
         initScreens();
         add(cardsContainer);
         showState(State.MAIN_MENU);
@@ -101,7 +100,6 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
 
     @Override
     public void onSoundVolumeChanged(int newVolume) {
-        // ۱– تنظیم حجم bgClip
         try {
             FloatControl gain = (FloatControl) bgClip.getControl(FloatControl.Type.MASTER_GAIN);
             float db = (newVolume == 0
@@ -115,14 +113,12 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
 
     @Override
     public void onKeyBindingsRequested() {
-        // گرفتن کلید جدید برای rewind و forward
         int newRewind  = promptForKey("Press new key for REWIND");
         int newForward = promptForKey("Press new key for FORWARD");
         GameScreen gs = (GameScreen) screens.get(State.PLAYING);
         gs.updateKeyBindings(newRewind, newForward);
     }
 
-    /** نمایش دیالوگ برای گرفتن یک کلید از کاربر */
     private int promptForKey(String message) {
         JDialog dlg = new JDialog(this, "Key Binding", true);
         JLabel lbl = new JLabel(message, SwingConstants.CENTER);
