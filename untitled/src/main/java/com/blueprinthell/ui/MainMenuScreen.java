@@ -18,7 +18,7 @@ public class MainMenuScreen extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(100, 100, 100, 100));
         setOpaque(false);
 
-        JLabel title = new JLabel("Network Puzzle Game");
+        JLabel title = new JLabel("BLUE PRINT HELL");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 32f));
         title.setAlignmentX(CENTER_ALIGNMENT);
         title.setForeground(Color.WHITE);
