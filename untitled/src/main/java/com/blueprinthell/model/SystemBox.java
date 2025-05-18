@@ -11,7 +11,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
 
-
 public class SystemBox extends GameObject implements Serializable {
     private static final long serialVersionUID = 5L;
 
@@ -19,14 +18,10 @@ public class SystemBox extends GameObject implements Serializable {
     private final List<Port> outPorts = new ArrayList<>();
     private final Queue<Packet> buffer = new ArrayDeque<>(5);
 
-    private final PortShape inShape;
-    private final PortShape outShape;
+    private final List<PortShape> inShapes;
+    private final List<PortShape> outShapes;
 
-    public SystemBox(int x, int y, int w, int h, int inCount, int outCount) {
-        this(x, y, w, h,
-                Collections.nCopies(inCount, PortShape.SQUARE),
-                Collections.nCopies(outCount, PortShape.SQUARE));
-    }
+
 
     public SystemBox(int x, int y, int w, int h,
                      int inCount, PortShape inShape,
@@ -40,12 +35,13 @@ public class SystemBox extends GameObject implements Serializable {
                      List<PortShape> inShapes,
                      List<PortShape> outShapes) {
         super(x, y, w, h);
-        this.inShape = null;
-        this.outShape = null;
+        this.inShapes = new ArrayList<>(inShapes);
+        this.outShapes = new ArrayList<>(outShapes);
         setLayout(null);
-        createPorts(inShapes, outShapes);
+        createPorts();
         setBackground(new Color(0x444444));
         setOpaque(true);
+
         MouseAdapter drag = new MouseAdapter() {
             private Point offset;
             @Override public void mousePressed(MouseEvent e) { offset = e.getPoint(); }
@@ -62,24 +58,17 @@ public class SystemBox extends GameObject implements Serializable {
         addMouseMotionListener(drag);
     }
 
-    private void createPorts(int inCnt, int outCnt) {
-        createPorts(
-                Collections.nCopies(inCnt, inShape),
-                Collections.nCopies(outCnt, outShape)
-        );
-    }
-
-    private void createPorts(List<PortShape> inShapes, List<PortShape> outShapes) {
+    private void createPorts() {
         int portSize = 14;
         for (int i = 0; i < inShapes.size(); i++) {
-            int yOffset = (i + 1) * getHeight() / (inShapes.size() + 1) - portSize/2;
+            int yOffset = (i + 1) * getHeight() / (inShapes.size() + 1) - portSize / 2;
             Port p = new Port(0, yOffset, portSize, inShapes.get(i), true);
             inPorts.add(p);
             add(p);
         }
         for (int i = 0; i < outShapes.size(); i++) {
-            int yOffset = (i + 1) * getHeight() / (outShapes.size() + 1) - portSize/2;
-            Port p = new Port(getWidth()-portSize, yOffset, portSize, outShapes.get(i), false);
+            int yOffset = (i + 1) * getHeight() / (outShapes.size() + 1) - portSize / 2;
+            Port p = new Port(getWidth() - portSize, yOffset, portSize, outShapes.get(i), false);
             outPorts.add(p);
             add(p);
         }
@@ -106,7 +95,7 @@ public class SystemBox extends GameObject implements Serializable {
         g2.setColor(new Color(0x888888));
         g2.fillRect(0, 0, getWidth(), getHeight());
         g2.setColor(Color.WHITE);
-        g2.drawRect(0, 0, getWidth()-1, getHeight()-1);
+        g2.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
         g2.dispose();
     }
 }

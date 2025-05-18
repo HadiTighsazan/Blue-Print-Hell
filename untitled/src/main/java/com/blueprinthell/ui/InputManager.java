@@ -150,6 +150,8 @@ public class InputManager {
         if (target != null) {
             dragTarget = target;
             validTarget = dragSource.isCompatibleWith(target);
+            boolean occupied = isPortConnected(dragSource) || isPortConnected(target);
+            validTarget = validTarget && !occupied;
         } else {
             dragTarget = null;
             validTarget = false;
@@ -166,7 +168,8 @@ public class InputManager {
     }
 
     private void endDrag() {
-        if (validTarget && enoughLength && dragTarget != null) {
+        if (validTarget && enoughLength && dragTarget != null
+                && !isPortConnected(dragSource) && !isPortConnected(dragTarget)) {
             Wire w = new Wire(dragSource, dragTarget);
             controller.addWire(w);
             if (onWireCreated != null) onWireCreated.accept(w);
@@ -179,8 +182,15 @@ public class InputManager {
         eventContainer.repaint();
     }
 
+
     public Port getDragSource() { return dragSource; }
     public Point getMousePos() { return mousePos; }
     public boolean isValidTarget() { return validTarget; }
     public boolean isEnoughLength() { return enoughLength; }
+
+    private boolean isPortConnected(Port p) {
+        return controller.getWires().stream()
+                .anyMatch(w -> w.getSrcPort() == p || w.getDstPort() == p);
+    }
+
 }

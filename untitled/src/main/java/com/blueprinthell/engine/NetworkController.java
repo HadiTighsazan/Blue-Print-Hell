@@ -261,4 +261,9 @@ public class NetworkController {
             }
         });
     }
+
+
+    public List<Wire> getWires() {
+        return wires;
+    }
 }

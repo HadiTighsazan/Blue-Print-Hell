@@ -45,6 +45,14 @@ public class GameScreen extends JLayeredPane {
     private int rewindKey = KeyEvent.VK_LEFT;
     private int forwardKey = KeyEvent.VK_RIGHT;
 
+    private Timer releaseTimer;
+
+    private double maxWireLength;
+
+    private static final double WIRE_LENGTH_PER_PORT = 200;
+
+
+    private boolean generationComplete = false;
 
 
     public GameScreen() {
@@ -150,50 +158,157 @@ public class GameScreen extends JLayeredPane {
         if (listener == null) listener = (SettingsListener) SwingUtilities.getWindowAncestor(this);
         int cx = getWidth()/2, cy = getHeight()/2;
         switch (levelIndex) {
-            case 1:
-                int w1=100,h1=60,g1=150;
+            case 1: {
+                int w1 = 100, h1 = 60, g1 = 150;
                 systems = Arrays.asList(
-                        new SystemBox(cx-g1, cy-g1, w1, h1, 0, PortShape.SQUARE, 2, PortShape.TRIANGLE),
-                        new SystemBox(cx+g1, cy-g1, w1, h1, 2, PortShape.TRIANGLE, 0, PortShape.SQUARE),
-                        new SystemBox(cx-g1, cy+g1, w1, h1, 1, PortShape.SQUARE, 1, PortShape.SQUARE),
-                        new SystemBox(cx+g1, cy+g1, w1, h1, 1, PortShape.TRIANGLE,1, PortShape.TRIANGLE)
+                        new SystemBox(
+                                cx - g1, cy - g1, w1, h1,
+                                List.of(),
+                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
+                        ),
+                        new SystemBox(
+                                cx + g1, cy - g1, w1, h1,
+                                List.of(PortShape.TRIANGLE, PortShape.SQUARE),
+                                List.of()
+                        ),
+                        new SystemBox(
+                                cx - g1, cy + g1, w1, h1,
+                                List.of(PortShape.SQUARE),
+                                List.of(PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                cx + g1, cy + g1, w1, h1,
+                                List.of(PortShape.TRIANGLE),
+                                List.of(PortShape.TRIANGLE)
+                        )
                 );
                 break;
-            case 2:
-                int w2=80,h2=50,g2=200;
+            }
+
+            case 2: {
+                int w2 = 80, h2 = 50, g2 = 200;
                 systems = Arrays.asList(
-                        new SystemBox(cx+g2, cy,        w2,h2, 0,PortShape.SQUARE, 2,PortShape.SQUARE),
-                        new SystemBox(cx-g2, cy,        w2,h2, 2,PortShape.TRIANGLE,0,PortShape.TRIANGLE),
-                        new SystemBox(cx,        cy+g2, w2,h2, 0,PortShape.SQUARE, 1,PortShape.TRIANGLE),
-                        new SystemBox(cx,        cy-g2, w2,h2, 1,PortShape.TRIANGLE,1,PortShape.SQUARE),
-                        new SystemBox(cx+g2, cy+g2, w2,h2,1,PortShape.SQUARE, 1,PortShape.SQUARE),
-                        new SystemBox(cx+g2, cy-g2, w2,h2,1,PortShape.TRIANGLE,1,PortShape.TRIANGLE),
-                        new SystemBox(cx-g2, cy+g2, w2,h2,1,PortShape.SQUARE, 1,PortShape.TRIANGLE),
-                        new SystemBox(cx-g2, cy-g2, w2,h2,1,PortShape.TRIANGLE,1,PortShape.SQUARE)
+                        new SystemBox(
+                                cx + g2, cy, w2, h2,
+                                List.of(),
+                                List.of(PortShape.SQUARE, PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                cx - g2, cy, w2, h2,
+                                List.of(PortShape.TRIANGLE, PortShape.TRIANGLE),
+                                List.of()
+                        ),
+                        new SystemBox(
+                                cx, cy + g2, w2, h2,
+                                List.of(PortShape.SQUARE),
+                                List.of(PortShape.TRIANGLE, PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                cx, cy - g2, w2, h2,
+                                List.of(PortShape.TRIANGLE),
+                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
+                        ),
+                        new SystemBox(
+                                cx + g2, cy + g2, w2, h2,
+                                List.of(PortShape.SQUARE, PortShape.TRIANGLE),
+                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
+                        ),
+                        new SystemBox(
+                                cx + g2, cy - g2, w2, h2,
+                                List.of(PortShape.SQUARE, PortShape.SQUARE),
+                                List.of(PortShape.TRIANGLE)
+                        ),
+                        new SystemBox(
+                                cx - g2, cy + g2, w2, h2,
+                                List.of(PortShape.TRIANGLE),
+                                List.of(PortShape.TRIANGLE, PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                cx - g2, cy - g2, w2, h2,
+                                List.of(PortShape.SQUARE),
+                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
+                        )
                 );
                 break;
-            default:
+            }
+
+            default: {
                 systems = Arrays.asList(
-                        new SystemBox( 80,  80,100,60,0,PortShape.SQUARE,1,PortShape.SQUARE),
-                        new SystemBox(280,  80,100,60,1,PortShape.TRIANGLE,1,PortShape.SQUARE),
-                        new SystemBox(480,  80,100,60,1,PortShape.SQUARE,1,PortShape.TRIANGLE),
-                        new SystemBox( 80, 280,100,60,1,PortShape.SQUARE,1,PortShape.SQUARE),
-                        new SystemBox(280, 280,100,60,1,PortShape.TRIANGLE,1,PortShape.TRIANGLE),
-                        new SystemBox(480, 280,100,60,1,PortShape.SQUARE,0,PortShape.SQUARE)
+                        new SystemBox(
+                                80,  80, 100, 60,
+                                List.of(),
+                                List.of(PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                280, 80, 100, 60,
+                                List.of(PortShape.TRIANGLE),
+                                List.of(PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                480, 80, 100, 60,
+                                List.of(PortShape.SQUARE),
+                                List.of(PortShape.TRIANGLE)
+                        ),
+                        new SystemBox(
+                                80, 280, 100, 60,
+                                List.of(PortShape.SQUARE),
+                                List.of(PortShape.SQUARE)
+                        ),
+                        new SystemBox(
+                                280, 280,100, 60,
+                                List.of(PortShape.TRIANGLE),
+                                List.of(PortShape.TRIANGLE)
+                        ),
+                        new SystemBox(
+                                480, 280,100, 60,
+                                List.of(PortShape.SQUARE),
+                                List.of()
+                        )
                 );
                 break;
+            }
         }
+
+        int totalPorts = systems.stream()
+                .mapToInt(s -> s.getInPorts().size() + s.getOutPorts().size())
+                .sum();
+
+
         int originPorts = systems.stream()
                 .filter(s -> s.getInPorts().isEmpty())
                 .mapToInt(s -> s.getOutPorts().size())
                 .sum();
         totalPackets = originPorts * 3;
 
+
+
+
+        double initialWire = totalPorts * WIRE_LENGTH_PER_PORT;
         wires = new ArrayList<>();
-        networkController = new NetworkController(wires, systems,1500);
+
+        networkController  = new NetworkController(wires, systems, initialWire);
+        maxWireLength      = initialWire;
+
+
+
         timelineCapacity=0;
         timelineCtrl=new TimelineController(networkController,timelineCapacity);
-        systems.forEach(s->{add(s);setLayer(s,JLayeredPane.DEFAULT_LAYER);} );
+
+        systems.forEach(s -> {
+            add(s);
+            setLayer(s, JLayeredPane.DEFAULT_LAYER);
+            s.addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentMoved(ComponentEvent e) {
+                    syncViewToModel2();
+                    updateHUD();
+                    hudPanel.repaint();
+                }
+            });
+        });
+
+
+
         inputManager=new InputManager(networkController);
         inputManager.setWireCreatedCallback(w->{wires.add(w);add(w,JLayeredPane.DEFAULT_LAYER);w.setBounds(0,0,getWidth(),getHeight());updateHUD();playConnect();});
         previewLayer=new WirePreviewLayer(inputManager);
@@ -226,6 +341,8 @@ public class GameScreen extends JLayeredPane {
         btnPausePlay.addActionListener(e -> {
             if (timelineCtrl.isPlaying()) {
                 timelineCtrl.pause();
+                if (releaseTimer != null)
+                    releaseTimer.stop();
                 btnPausePlay.setText("Play");
                 sliderTime.setEnabled(true);
                 int sz = timelineCtrl.getSnapshotCount();
@@ -237,6 +354,9 @@ public class GameScreen extends JLayeredPane {
                 }
             } else {
                 timelineCtrl.resume();
+                if (releaseTimer != null)
+                    releaseTimer.start();
+
                 btnPausePlay.setText("Pause");
                 sliderTime.setEnabled(false);
                 sliderTime.setValue(0);
@@ -277,11 +397,25 @@ public class GameScreen extends JLayeredPane {
     }
 
     private void updateHUD() {
-        lblWire.setText("Wire Left: " + String.format("%.0f", networkController.getRemainingWireLength()));
+        double used = wires.stream().mapToDouble(w -> {
+            Point p1 = SwingUtilities.convertPoint(
+                    w.getSrcPort(),
+                    w.getSrcPort().getWidth()/2, w.getSrcPort().getHeight()/2,
+                    this
+            );
+            Point p2 = SwingUtilities.convertPoint(
+                    w.getDstPort(),
+                    w.getDstPort().getWidth()/2, w.getDstPort().getHeight()/2,
+                    this
+            );
+            return p1.distance(p2);
+        }).sum();
+
+        double remaining = maxWireLength - used;
+
+        lblWire.setText("Wire Left: " + String.format("%.0f", remaining));
         lblCoins.setText("Coins: "      + networkController.getCoins());
         lblLoss.setText("Loss: "       + networkController.getPacketLoss() + " / " + totalPackets);
-
-
     }
 
 
@@ -289,14 +423,23 @@ public class GameScreen extends JLayeredPane {
 
 
 
+
     private void onStart(ActionEvent e) {
+
+        generationComplete = false;
+
         List<Port> originPorts = systems.stream()
                 .filter(s -> s.getInPorts().isEmpty())
                 .flatMap(s -> s.getOutPorts().stream())
                 .collect(Collectors.toList());
+
+        totalPackets = originPorts.size() * 3;
+        updateHUD();
+
+
         int cycles = 3;
 
-        Timer releaseTimer = new Timer(2000, null);
+        releaseTimer = new Timer(2000, null);
         releaseTimer.addActionListener(new ActionListener() {
             int cycleCount = 0;
             Random rand = new Random();
@@ -305,6 +448,7 @@ public class GameScreen extends JLayeredPane {
             public void actionPerformed(ActionEvent evt) {
                 if (cycleCount >= cycles) {
                     releaseTimer.stop();
+                    generationComplete = true;
                     return;
                 }
                 for (Port out : originPorts) {
@@ -351,7 +495,9 @@ public class GameScreen extends JLayeredPane {
                 if (networkController.getPacketLoss() * 2 >= totalPackets) {
                     triggerGameOver();
                 }
-                else if (allPacketsProcessed()) {
+
+
+                else if ( generationComplete &&allPacketsProcessed()) {
                     triggerMissionPassed();
                 }
 
