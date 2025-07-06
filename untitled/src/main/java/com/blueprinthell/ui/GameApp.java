@@ -18,6 +18,9 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
 
     private Clip bgClip;
 
+    private final SoundManager sounds = SoundManager.get();
+
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             GameApp app = new GameApp();
@@ -31,20 +34,14 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
         setSize(1024, 768);
         setLocationRelativeTo(null);
 
-        initBackgroundSound();
         initScreens();
+        sounds.loopBg();
+
         add(cardsContainer);
         showState(State.MAIN_MENU);
     }
 
-    private void initBackgroundSound() {
-        try {
-            bgClip = loadClip("bg_loop.wav");
-            bgClip.loop(Clip.LOOP_CONTINUOUSLY);
-        } catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
-            e.printStackTrace();
-        }
-    }
+
 
     private Clip loadClip(String fileName) throws IOException, UnsupportedAudioFileException, LineUnavailableException {
         URL url = getClass().getClassLoader().getResource(fileName);
@@ -100,16 +97,9 @@ public class GameApp extends JFrame implements MainMenuListener, LevelSelectList
 
     @Override
     public void onSoundVolumeChanged(int newVolume) {
-        try {
-            FloatControl gain = (FloatControl) bgClip.getControl(FloatControl.Type.MASTER_GAIN);
-            float db = (newVolume == 0
-                    ? gain.getMinimum()
-                    : 20f * (float) Math.log10(newVolume / 100.0));
-            gain.setValue(db);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        SoundManager.get().setMasterVolume(newVolume);   // ✨ حالا همه‌چیز را تنظیم می‌کند
     }
+
 
     @Override
     public void onKeyBindingsRequested() {

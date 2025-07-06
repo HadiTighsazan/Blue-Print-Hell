@@ -162,18 +162,43 @@ public class InputManager {
         );
         double dx = start.x - pt.x;
         double dy = start.y - pt.y;
-        enoughLength = controller.getRemainingWireLength() >= Math.hypot(dx, dy);
-
+        double needed = Math.hypot(dx, dy);
+        double remainingAfter = controller.getRemainingWireLength() - needed;
+        enoughLength = remainingAfter >= 0;
         eventContainer.repaint();
     }
 
     private void endDrag() {
-        if (validTarget && enoughLength && dragTarget != null
-                && !isPortConnected(dragSource) && !isPortConnected(dragTarget)) {
+        // اگر درگ منبع یا مقصد معتبر نیست لغو کن
+        if (dragSource == null || dragTarget == null) {
+            resetDragState();
+            return;
+        }
+
+        // طول موردنیاز سیم
+        Point p1 = SwingUtilities.convertPoint(
+                dragSource, dragSource.getWidth()/2, dragSource.getHeight()/2, hitContainer);
+        Point p2 = SwingUtilities.convertPoint(
+                dragTarget, dragTarget.getWidth()/2, dragTarget.getHeight()/2, hitContainer);
+        double neededLen = p1.distance(p2);
+        double remainingAfter = controller.getRemainingWireLength() - neededLen;
+        boolean lengthOK = remainingAfter >= 0;
+
+        if (validTarget && lengthOK
+                && !isPortConnected(dragSource)
+                && !isPortConnected(dragTarget)) {
+
             Wire w = new Wire(dragSource, dragTarget);
             controller.addWire(w);
             if (onWireCreated != null) onWireCreated.accept(w);
+        } else if (!lengthOK) {
+            Toolkit.getDefaultToolkit().beep(); // اعلان خطا
         }
+
+        resetDragState();
+    }
+
+    private void resetDragState() {
         dragSource = dragTarget = null;
         mousePos = null;
         validTarget = false;
@@ -181,6 +206,8 @@ public class InputManager {
         eventContainer.setEnabled(false);
         eventContainer.repaint();
     }
+
+
 
 
     public Port getDragSource() { return dragSource; }

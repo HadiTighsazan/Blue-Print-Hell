@@ -4,556 +4,295 @@ import com.blueprinthell.engine.NetworkController;
 import com.blueprinthell.engine.TimelineController;
 import com.blueprinthell.model.*;
 
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.*;
-import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
-import java.io.IOException;
-import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-
+/**
+ * GameScreen – مسئول گردآوری لایهٔ گرافیکی شبکه، HUD و منطق بازی.
+ * پس از استخراج SoundManager و InputBinder وزن کلاس سبک‌تر شده است.
+ */
 public class GameScreen extends JLayeredPane {
+
+    /* ======================= اجزای داخلی ======================= */
+    private NetworkView   networkView;
+    private HudPanel      hudPanel;
+    private GameController gameController;
+
+    /* ======================= مدل و کنترلر ====================== */
     private List<SystemBox> systems;
-    private List<Wire> wires;
-    private NetworkController networkController;
-    private InputManager inputManager;
-    private WirePreviewLayer previewLayer;
-
-    private JPanel hudPanel;
-    private JLabel lblWire, lblCoins, lblLoss;
-    private JButton btnStart, btnShop, btnPausePlay;
-    private JSlider sliderTime;
-    private Timer gameTimer;
-
+    private List<Wire>      wires;
+    private NetworkController  networkController;
     private TimelineController timelineCtrl;
-    private int timelineCapacity;
-    private boolean deleteMode = false;
 
-    private int totalPackets;
-    private SettingsListener listener;
+    /* ======================= ورودی و وضعیت ===================== */
+    private InputManager inputManager;
+    private InputBinder  inputBinder;
+    private boolean      deleteMode = false;
 
-    private Clip bgClip, impactClip, connectClip, gameoverClip;
+    /* ======================= HUD ============================== */
+    private JSlider timeSlider;
 
-    private int rewindKey = KeyEvent.VK_LEFT;
-    private int forwardKey = KeyEvent.VK_RIGHT;
-
-    private Timer releaseTimer;
-
+    /* ======================= دادهٔ بازی ======================= */
+    private int    totalPackets;
     private double maxWireLength;
-
     private static final double WIRE_LENGTH_PER_PORT = 200;
 
+    /* ======================= صدا ============================== */
+    private final SoundManager sounds = SoundManager.get();
 
-    private boolean generationComplete = false;
-
-
+    /* =========================================================== */
+    /*                          سازنده                             */
+    /* =========================================================== */
     public GameScreen() {
         setLayout(null);
         setFocusable(true);
-        initKeyBindings();
-        initSounds();
-        addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) {
-                if (!deleteMode || !SwingUtilities.isLeftMouseButton(e))
-                    return;
-                Point click = e.getPoint();
-                Wire w = findWireAt(click, 5);
-                if (w != null) {
-                    networkController.removeWire(w);
-                    wires.remove(w);
-                    remove(w);
-                    syncViewToModel2();
-                    updateHUD();
-                }
-            }
-        });
 
+        inputBinder = new InputBinder(this,
+                KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT,
+                () -> scrub(+60), () -> scrub(-60),
+                this::toggleDeleteMode);
+
+        bindDeleteMouse();
+        addComponentListener(resizeListener);
     }
 
-    public void updateKeyBindings(int newRewindKey, int newForwardKey) {
-        this.rewindKey = newRewindKey;
-        this.forwardKey = newForwardKey;
-        applyKeyBindings();
-    }
-
-    private void initKeyBindings() {
-        applyKeyBindings();
-        bindToggleDelete();
-    }
-
-    private void applyKeyBindings() {
-        InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
-        ActionMap am = getActionMap();
-        int fps = 60;
-        im.clear();
-        am.clear();
-        im.put(KeyStroke.getKeyStroke(rewindKey, 0), "rewind1s");
-        am.put("rewind1s", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) {
-                if (timelineCtrl.isPlaying()) timelineCtrl.pause();
-                int offset = timelineCtrl.getCurrentOffset() + fps;
-                offset = Math.min(offset, timelineCtrl.getSnapshotCount() - 1);
-                timelineCtrl.scrubTo(offset);
-                syncViewToModel2();
-            }
-        });
-        im.put(KeyStroke.getKeyStroke(forwardKey, 0), "forward1s");
-        am.put("forward1s", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) {
-                if (!timelineCtrl.isPlaying()) {
-                    int offset = timelineCtrl.getCurrentOffset() - fps;
-                    offset = Math.max(offset, 0);
-                    timelineCtrl.scrubTo(offset);
-                    syncViewToModel2();
-                }
-            }
-        });
-    }
-
-    private void bindToggleDelete() {
-        InputMap im = getInputMap(WHEN_IN_FOCUSED_WINDOW);
-        ActionMap am = getActionMap();
-        im.put(KeyStroke.getKeyStroke("SPACE"), "toggleDelete");
-        am.put("toggleDelete", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) {
-                deleteMode = !deleteMode;
-                setCursor(deleteMode
-                        ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
-                        : Cursor.getDefaultCursor());
-            }
-        });
-    }
-
-    private void initSounds() {
-        try {
-            bgClip = loadClip("bg_loop.wav");
-            impactClip = loadClip("impact_thud.wav");
-            connectClip = loadClip("connect_click.wav");
-            gameoverClip = loadClip("gameover_jingle.wav");
-        } catch (Exception e) {
-            e.printStackTrace();
+    /* ---------------- Listener تغییر اندازه ---------------- */
+    private final ComponentAdapter resizeListener = new ComponentAdapter() {
+        @Override public void componentResized(ComponentEvent e) {
+            if (wires == null) return;
+            if (networkView != null) networkView.setBounds(0,0,getWidth(),getHeight());
+            if (hudPanel   != null) hudPanel.setBounds(0,0,getWidth(),40);
+            if (networkView != null) networkView.getPreviewLayer().setBounds(0,0,getWidth(),getHeight());
+            wires.forEach(w -> w.setBounds(0,0,getWidth(),getHeight()));
         }
-    }
+    };
 
-    private Clip loadClip(String fileName) throws IOException, UnsupportedAudioFileException, LineUnavailableException {
-        URL url = getClass().getClassLoader().getResource("resource/" + fileName);
-        if (url == null) throw new IOException("Audio resource not found: " + fileName);
-        AudioInputStream ais = AudioSystem.getAudioInputStream(url);
-        Clip clip = AudioSystem.getClip();
-        clip.open(ais);
-        return clip;
-    }
-
+    /* ======================= Load Level ======================== */
     public void loadLevel(int levelIndex) {
+        SettingsListener listener = (SettingsListener) SwingUtilities.getWindowAncestor(this);
+
         removeAll();
-        if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
-        if (listener == null) listener = (SettingsListener) SwingUtilities.getWindowAncestor(this);
+        if (gameController != null) gameController.pause();
+
+        /* ---------- ساخت سیستم‌ها و کنترلر شبکه ---------- */
         int cx = getWidth()/2, cy = getHeight()/2;
-        switch (levelIndex) {
-            case 1: {
-                int w1 = 100, h1 = 60, g1 = 150;
-                systems = Arrays.asList(
-                        new SystemBox(
-                                cx - g1, cy - g1, w1, h1,
-                                List.of(),
-                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
-                        ),
-                        new SystemBox(
-                                cx + g1, cy - g1, w1, h1,
-                                List.of(PortShape.TRIANGLE, PortShape.SQUARE),
-                                List.of()
-                        ),
-                        new SystemBox(
-                                cx - g1, cy + g1, w1, h1,
-                                List.of(PortShape.SQUARE),
-                                List.of(PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                cx + g1, cy + g1, w1, h1,
-                                List.of(PortShape.TRIANGLE),
-                                List.of(PortShape.TRIANGLE)
-                        )
-                );
-                break;
-            }
-
-            case 2: {
-                int w2 = 80, h2 = 50, g2 = 200;
-                systems = Arrays.asList(
-                        new SystemBox(
-                                cx + g2, cy, w2, h2,
-                                List.of(),
-                                List.of(PortShape.SQUARE, PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                cx - g2, cy, w2, h2,
-                                List.of(PortShape.TRIANGLE, PortShape.TRIANGLE),
-                                List.of()
-                        ),
-                        new SystemBox(
-                                cx, cy + g2, w2, h2,
-                                List.of(PortShape.SQUARE),
-                                List.of(PortShape.TRIANGLE, PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                cx, cy - g2, w2, h2,
-                                List.of(PortShape.TRIANGLE),
-                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
-                        ),
-                        new SystemBox(
-                                cx + g2, cy + g2, w2, h2,
-                                List.of(PortShape.SQUARE, PortShape.TRIANGLE),
-                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
-                        ),
-                        new SystemBox(
-                                cx + g2, cy - g2, w2, h2,
-                                List.of(PortShape.SQUARE, PortShape.SQUARE),
-                                List.of(PortShape.TRIANGLE)
-                        ),
-                        new SystemBox(
-                                cx - g2, cy + g2, w2, h2,
-                                List.of(PortShape.TRIANGLE),
-                                List.of(PortShape.TRIANGLE, PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                cx - g2, cy - g2, w2, h2,
-                                List.of(PortShape.SQUARE),
-                                List.of(PortShape.SQUARE, PortShape.TRIANGLE)
-                        )
-                );
-                break;
-            }
-
-            default: {
-                systems = Arrays.asList(
-                        new SystemBox(
-                                80,  80, 100, 60,
-                                List.of(),
-                                List.of(PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                280, 80, 100, 60,
-                                List.of(PortShape.TRIANGLE),
-                                List.of(PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                480, 80, 100, 60,
-                                List.of(PortShape.SQUARE),
-                                List.of(PortShape.TRIANGLE)
-                        ),
-                        new SystemBox(
-                                80, 280, 100, 60,
-                                List.of(PortShape.SQUARE),
-                                List.of(PortShape.SQUARE)
-                        ),
-                        new SystemBox(
-                                280, 280,100, 60,
-                                List.of(PortShape.TRIANGLE),
-                                List.of(PortShape.TRIANGLE)
-                        ),
-                        new SystemBox(
-                                480, 280,100, 60,
-                                List.of(PortShape.SQUARE),
-                                List.of()
-                        )
-                );
-                break;
-            }
-        }
-
-        int totalPorts = systems.stream()
-                .mapToInt(s -> s.getInPorts().size() + s.getOutPorts().size())
-                .sum();
-
-
-        int originPorts = systems.stream()
-                .filter(s -> s.getInPorts().isEmpty())
-                .mapToInt(s -> s.getOutPorts().size())
-                .sum();
-        totalPackets = originPorts * 3;
-
-
-
-
-        double initialWire = totalPorts * WIRE_LENGTH_PER_PORT;
+        systems = LevelLoader.load(levelIndex, cx, cy);
+        int totalPorts = systems.stream().mapToInt(s -> s.getInPorts().size()+s.getOutPorts().size()).sum();
+        maxWireLength = totalPorts * WIRE_LENGTH_PER_PORT;
         wires = new ArrayList<>();
+        networkController = new NetworkController(wires, systems, maxWireLength);
+        timelineCtrl      = new TimelineController(networkController, 0);
 
-        networkController  = new NetworkController(wires, systems, initialWire);
-        maxWireLength      = initialWire;
+        /* ------------------ View و ورودی ------------------ */
+        inputManager = new InputManager(networkController);
+        networkView  = new NetworkView(inputManager);
+        networkView.setBounds(0,0,getWidth(),getHeight());
+        add(networkView, DEFAULT_LAYER);
 
-
-
-        timelineCapacity=0;
-        timelineCtrl=new TimelineController(networkController,timelineCapacity);
+        inputManager.registerHitContainer(this);
+        inputManager.registerEventContainer(networkView.getPreviewLayer());
 
         systems.forEach(s -> {
-            add(s);
-            setLayer(s, JLayeredPane.DEFAULT_LAYER);
-            s.addComponentListener(new ComponentAdapter() {
-                @Override
-                public void componentMoved(ComponentEvent e) {
-                    syncViewToModel2();
-                    updateHUD();
-                    hudPanel.repaint();
-                }
-            });
+            s.getOutPorts().forEach(inputManager::registerPort);
+            s.getInPorts().forEach(inputManager::registerPort);
+            s.addComponentListener(moveListenerFor(s));
+        });
+        networkView.setSystemsAndWires(systems, wires);
+
+        inputManager.setWireCreatedCallback(w -> {
+            wires.add(w);
+            add(w, DEFAULT_LAYER);
+            w.setBounds(0,0,getWidth(),getHeight());
+            updateHUD();
+            sounds.connect();
         });
 
+        /* ----------------------- HUD ----------------------- */
+        hudPanel = new HudPanel(() -> onStart(null), this::openShop, this::togglePausePlay);
+        hudPanel.setBounds(0,0,getWidth(),40);
+        add(hudPanel, PALETTE_LAYER);
+        timeSlider = hudPanel.getTimeSlider();
+        timeSlider.setVisible(false);
 
-
-        inputManager=new InputManager(networkController);
-        inputManager.setWireCreatedCallback(w->{wires.add(w);add(w,JLayeredPane.DEFAULT_LAYER);w.setBounds(0,0,getWidth(),getHeight());updateHUD();playConnect();});
-        previewLayer=new WirePreviewLayer(inputManager);
-        previewLayer.setBounds(0,0,getWidth(),getHeight());previewLayer.setEnabled(false);add(previewLayer,JLayeredPane.PALETTE_LAYER);
-        inputManager.registerHitContainer(this);
-        inputManager.registerEventContainer(previewLayer);
-        systems.forEach(s->{s.getOutPorts().forEach(inputManager::registerPort);s.getInPorts().forEach(inputManager::registerPort);}   );
-        initHUD();SwingUtilities.invokeLater(this::requestFocusInWindow);
-        addComponentListener(new ComponentAdapter(){@Override public void componentResized(ComponentEvent e){int w=getWidth(),h=getHeight();previewLayer.setBounds(0,0,w,h);wires.forEach(wr->wr.setBounds(0,0,w,h));if(hudPanel!=null)hudPanel.setBounds(0,0,w,hudPanel.getHeight());}});
-        revalidate();repaint();
-    }
-
-    private void initHUD() {
-        if (hudPanel != null) remove(hudPanel);
-        hudPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
-        hudPanel.setBackground(new Color(0, 0, 0, 160));
-        hudPanel.setBounds(0, 0, getWidth(), 40);
-
-        lblWire = new JLabel();
-        lblCoins = new JLabel();
-        lblLoss = new JLabel();
-        btnStart = new JButton("Start");
-        btnShop = new JButton("Shop");
-        sliderTime = new JSlider(0, 0, 0);
-        sliderTime.setEnabled(false);
-        btnPausePlay = new JButton("Pause");
-
-        btnStart.addActionListener(this::onStart);
-        btnShop.addActionListener(e -> openShop());
-        btnPausePlay.addActionListener(e -> {
-            if (timelineCtrl.isPlaying()) {
-                timelineCtrl.pause();
-                if (releaseTimer != null)
-                    releaseTimer.stop();
-                btnPausePlay.setText("Play");
-                sliderTime.setEnabled(true);
-                int sz = timelineCtrl.getSnapshotCount();
-                sliderTime.setMaximum(Math.max(0, sz - 1));
-                sliderTime.setValue(0);
-                if (sz > 0) {
-                    timelineCtrl.scrubTo(0);
-                    syncViewToModel2();
-                }
-            } else {
-                timelineCtrl.resume();
-                if (releaseTimer != null)
-                    releaseTimer.start();
-
-                btnPausePlay.setText("Pause");
-                sliderTime.setEnabled(false);
-                sliderTime.setValue(0);
-                syncViewToModel2();
-                SwingUtilities.invokeLater(this::requestFocusInWindow);
-            }
-        });
-
-        sliderTime.addChangeListener(e -> {
-            if (sliderTime.isEnabled() && !sliderTime.getValueIsAdjusting() && !timelineCtrl.isPlaying()) {
-                int val = sliderTime.getValue();
-                int count = timelineCtrl.getSnapshotCount();
-                if (val >= 0 && val < count) {
-                    timelineCtrl.scrubTo(val);
-                    syncViewToModel2();
-                }
-            }
-        });
-
-        hudPanel.add(lblWire); hudPanel.add(lblCoins); hudPanel.add(lblLoss);
-        hudPanel.add(btnStart); hudPanel.add(btnShop); hudPanel.add(sliderTime); hudPanel.add(btnPausePlay);
-        add(hudPanel, JLayeredPane.PALETTE_LAYER);
+        int originPorts = systems.stream().filter(s -> s.getInPorts().isEmpty()).mapToInt(s -> s.getOutPorts().size()).sum();
+        totalPackets = originPorts * 3;
         updateHUD();
     }
 
-    private void syncViewToModel2() {
-        Set<Packet> modelPackets = new HashSet<>(networkController.getPackets());
-        for (Component comp : getComponents()) {
-            if (comp instanceof Packet p && !modelPackets.contains(p)) {
-                remove(p);
+    /* ---------- Listener جابه‌جایی SystemBox (طول منفی) ---------- */
+    private ComponentAdapter moveListenerFor(SystemBox s) {
+        return new ComponentAdapter() {
+            Point lastPos = s.getLocation();
+            @Override public void componentMoved(ComponentEvent e) {
+                networkView.setSystemsAndWires(systems, wires);
+                updateHUD();
+                double used = wires.stream().mapToDouble(w -> {
+                    Point p1 = SwingUtilities.convertPoint(w.getSrcPort(), w.getSrcPort().getWidth()/2, w.getSrcPort().getHeight()/2, GameScreen.this);
+                    Point p2 = SwingUtilities.convertPoint(w.getDstPort(), w.getDstPort().getWidth()/2, w.getDstPort().getHeight()/2, GameScreen.this);
+                    return p1.distance(p2);
+                }).sum();
+                if (maxWireLength - used < 0) {
+                    s.setLocation(lastPos);
+                    Toolkit.getDefaultToolkit().beep();
+                    networkView.setSystemsAndWires(systems, wires);
+                    updateHUD();
+                } else {
+                    lastPos = s.getLocation();
+                }
             }
-        }
-        for (Packet p : modelPackets) {
-            if (p.getParent() == null) add(p, JLayeredPane.DEFAULT_LAYER);
-            p.updatePosition();
-        }
-        revalidate(); repaint();
+        };
     }
 
-    private void updateHUD() {
-        double used = wires.stream().mapToDouble(w -> {
-            Point p1 = SwingUtilities.convertPoint(
-                    w.getSrcPort(),
-                    w.getSrcPort().getWidth()/2, w.getSrcPort().getHeight()/2,
-                    this
-            );
-            Point p2 = SwingUtilities.convertPoint(
-                    w.getDstPort(),
-                    w.getDstPort().getWidth()/2, w.getDstPort().getHeight()/2,
-                    this
-            );
-            return p1.distance(p2);
-        }).sum();
-
-        double remaining = maxWireLength - used;
-
-        lblWire.setText("Wire Left: " + String.format("%.0f", remaining));
-        lblCoins.setText("Coins: "      + networkController.getCoins());
-        lblLoss.setText("Loss: "       + networkController.getPacketLoss() + " / " + totalPackets);
-    }
-
-
-
-
-
-
-
+    /* ======================== Start ============================ */
     private void onStart(ActionEvent e) {
-
-        generationComplete = false;
+        if (!areAllPortsConnected()) { Toolkit.getDefaultToolkit().beep(); return; }
+        if (gameController != null) { gameController.stopAll(); gameController = null; }
 
         List<Port> originPorts = systems.stream()
                 .filter(s -> s.getInPorts().isEmpty())
                 .flatMap(s -> s.getOutPorts().stream())
                 .collect(Collectors.toList());
 
-        totalPackets = originPorts.size() * 3;
-        updateHUD();
+        gameController = new GameController(networkController, timelineCtrl,
+                originPorts, systems, totalPackets,
+                this::onGameUpdate, sounds::impact,
+                this::triggerGameOver, this::triggerMissionPassed);
 
+        gameController.start();
+        hudPanel.setButtonsState(false, true);
 
-        int cycles = 3;
+    }
 
-        releaseTimer = new Timer(2000, null);
-        releaseTimer.addActionListener(new ActionListener() {
-            int cycleCount = 0;
-            Random rand = new Random();
+    /* ========= به‌روزرسانی کلیدها از SettingsScreen ========= */
+    public void updateKeyBindings(int newRewind, int newForward) {
+        if (inputBinder != null) inputBinder.rebind(newRewind, newForward);
+    }
 
-            @Override
-            public void actionPerformed(ActionEvent evt) {
-                if (cycleCount >= cycles) {
-                    releaseTimer.stop();
-                    generationComplete = true;
-                    return;
-                }
-                for (Port out : originPorts) {
-                    Wire w = wires.stream()
-                            .filter(x -> x.getSrcPort() == out)
-                            .findFirst().orElse(null);
-                    PacketType type = rand.nextBoolean()
-                            ? PacketType.SQUARE
-                            : PacketType.TRIANGLE;
-                    if (w != null) {
-                        Packet p = new Packet(type, 100);
-                        w.attachPacket(p, 0.0);
-                        add(p, JLayeredPane.DEFAULT_LAYER);
-                    } else {
-                        networkController.incrementPacketLoss();
-                        playImpact();
-                        updateHUD();
-                    }
-                }
-                cycleCount++;
-            }
-        });
-        releaseTimer.setInitialDelay(0);
-        releaseTimer.start();
+    private void scrub(int delta) {
+        // توقف موقت تایمرها تا هنگام اسکراب بستهٔ جدید ساخته نشود
+        if (gameController != null) gameController.pause();
 
-        timelineCtrl.resume();
+        int offset = timelineCtrl.getCurrentOffset() + delta;
+        offset = Math.max(0, Math.min(offset, timelineCtrl.getSnapshotCount() - 1));
+        timelineCtrl.scrubTo(offset);
+        networkView.syncToModel(networkController.getPackets());
 
-        if (gameTimer != null) gameTimer.stop();
-        gameTimer = new Timer(16, ev -> {
-            double dt = 0.016;
-            if (timelineCtrl.isPlaying()) {
-                networkController.tick(dt);
-                timelineCtrl.recordFrame();
-                syncViewToModel2();
-
-                int avail = timelineCtrl.getSnapshotCount();
-                if (avail > 0) {
-                    sliderTime.setMaximum(avail - 1);
-                    if (sliderTime.getValue() != 0) sliderTime.setValue(0);
-                }
-
-                updateHUD();
-
-                if (networkController.getPacketLoss() * 2 >= totalPackets) {
-                    triggerGameOver();
-                }
-
-
-                else if ( generationComplete &&allPacketsProcessed()) {
-                    triggerMissionPassed();
-                }
-
-            }
-            repaint();
-        });
-
-        gameTimer.start();
-
-        btnStart.setEnabled(false);
+        // ریست پرچم تا پس از Play دوباره بسته‌ها از مبدأ آزاد شوند
+        if (gameController != null) gameController.resetGenerationFlag();
     }
 
 
-    private void openShop() {
-        if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
-        timelineCtrl.pause(); syncViewToModel2();
-        ShopDialog dlg = new ShopDialog(SwingUtilities.getWindowAncestor(this), networkController, this::updateHUD);
-        dlg.setVisible(true);
-        timelineCtrl.resume(); syncViewToModel2();
-        if (gameTimer != null) gameTimer.start();
+
+
+    private void toggleDeleteMode() {
+        deleteMode = !deleteMode;
+        setCursor(deleteMode ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
+                : Cursor.getDefaultCursor());
     }
 
-    private void checkGameOver() {
-        if (networkController.getPacketLoss() * 2 >= totalPackets) {
-            triggerGameOver();
+    /* ======================= Pause/Resume ====================== */
+    private void togglePausePlay() {
+        if (gameController == null) return;
+        if (timelineCtrl.isPlaying()) {
+            gameController.pause();
+            hudPanel.setButtonsState(false, false);
+        } else {
+            gameController.resume();
+            hudPanel.setButtonsState(false, true);
+            requestFocusInWindow();
         }
     }
 
-
-    private boolean allPacketsProcessed() {
-        boolean noInFlight = networkController.getPackets().isEmpty();
-        boolean noInBuffer = systems.stream()
-                .filter(s -> !s.getOutPorts().isEmpty())
-                .flatMap(s -> s.getBuffer().stream())
-                .findAny().isEmpty();
-        return noInFlight && noInBuffer;
+    /* ======================= Frame Update ====================== */
+    private void onGameUpdate() {
+        networkView.syncToModel(networkController.getPackets());
+        updateHUD();
     }
 
+    /* --------------------------- Shop -------------------------- */
+    private void openShop() {
+        if (gameController != null) gameController.pause();
+        timelineCtrl.pause();
+        networkView.syncToModel(networkController.getPackets());
+        ShopDialog dlg = new ShopDialog(SwingUtilities.getWindowAncestor(this), networkController, this::updateHUD);
+        dlg.setVisible(true);
+        if (gameController != null) {
+            gameController.resume();
+            gameController.resetMissionFlag();
+        }
+        requestFocusInWindow();
+    }
 
-
+    /* ---------------- Game Over / Mission Passed -------------- */
     private void triggerGameOver() {
-        if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
-        playGameOverSound(); bgClip.stop();
-        GameOverScreen gos = new GameOverScreen(listener);
+        sounds.gameover();
+        sounds.stopBg();
+        if (gameController != null) gameController.pause();
+        GameOverScreen gos = new GameOverScreen((SettingsListener) SwingUtilities.getWindowAncestor(this));
         gos.setBounds(0, 0, getWidth(), getHeight());
-        add(gos, JLayeredPane.MODAL_LAYER); revalidate(); repaint();
-    }
-
-    private void triggerMissionPassed() {
-        if (gameTimer != null && gameTimer.isRunning()) gameTimer.stop();
-        MissionPassedScreen mps = new MissionPassedScreen(listener);
-        mps.setBounds(0, 0, getWidth(), getHeight());
-        add(mps, JLayeredPane.MODAL_LAYER);
+        add(gos, MODAL_LAYER);
         revalidate(); repaint();
     }
 
+    private void triggerMissionPassed() {
+        if (gameController != null) gameController.pause();
+        MissionPassedScreen mps = new MissionPassedScreen((SettingsListener) SwingUtilities.getWindowAncestor(this));
+        mps.setBounds(0, 0, getWidth(), getHeight());
+        add(mps, MODAL_LAYER);
+        revalidate(); repaint();
+    }
+
+    /* ------------------------ HUD ----------------------------- */
+    private void updateHUD() {
+        double used = wires.stream().mapToDouble(w -> {
+            Point p1 = SwingUtilities.convertPoint(w.getSrcPort(), w.getSrcPort().getWidth()/2, w.getSrcPort().getHeight()/2, this);
+            Point p2 = SwingUtilities.convertPoint(w.getDstPort(), w.getDstPort().getWidth()/2, w.getDstPort().getHeight()/2, this);
+            return p1.distance(p2);
+        }).sum();
+        hudPanel.update(maxWireLength - used, networkController.getCoins(), networkController.getPacketLoss(), totalPackets);
+        hudPanel.setButtonsState(areAllPortsConnected(), timelineCtrl.isPlaying());
+    }
+
+    /** آیا همهٔ پورت‌ها متصل‌اند؟ */
+    private boolean areAllPortsConnected() {
+        return systems.stream().flatMap(s -> {
+            List<Port> all = new ArrayList<>();
+            all.addAll(s.getOutPorts()); all.addAll(s.getInPorts());
+            return all.stream();
+        }).allMatch(p -> wires.stream().anyMatch(w -> w.getSrcPort()==p || w.getDstPort()==p));
+    }
+
+    /* ----------------------- Delete --------------------------- */
+    private void bindDeleteMouse() {
+        addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (!deleteMode || !SwingUtilities.isLeftMouseButton(e)) return;
+                Wire w = findWireAt(e.getPoint(), 12);
+                if (w == null) w = findWireAt(e.getPoint(), 20);
+                if (w != null) {
+                    networkController.removeWire(w);
+                    wires.remove(w);
+                    networkView.setSystemsAndWires(systems, wires);
+                    updateHUD();
+                }
+            }
+        });
+    }
+
+    private Wire findWireAt(Point click, double tol) {
+        Wire best = null; double bestDist = tol;
+        for (Wire w : wires) {
+            Point src = SwingUtilities.convertPoint(w.getSrcPort(), w.getSrcPort().getWidth()/2, w.getSrcPort().getHeight()/2, this);
+            Point dst = SwingUtilities.convertPoint(w.getDstPort(), w.getDstPort().getWidth()/2, w.getDstPort().getHeight()/2, this);
+            double d = pointToSegmentDistance(click, src, dst);
+            if (d < bestDist) { bestDist = d; best = w; }
+        }
+        return best;
+    }
 
     private double pointToSegmentDistance(Point p, Point p1, Point p2) {
         double x0 = p.x, y0 = p.y;
@@ -567,48 +306,4 @@ public class GameScreen extends JLayeredPane {
         double projx = x1 + t*dx, projy = y1 + t*dy;
         return p.distance(projx, projy);
     }
-
-
-    private Wire findWireAt(Point click, double tol) {
-        Wire best = null;
-        double bestDist = tol;
-        for (Wire w : wires) {
-            Point src = SwingUtilities.convertPoint(
-                    w.getSrcPort(), w.getSrcPort().getWidth()/2, w.getSrcPort().getHeight()/2, this);
-            Point dst = SwingUtilities.convertPoint(
-                    w.getDstPort(), w.getDstPort().getWidth()/2, w.getDstPort().getHeight()/2, this);
-            double d = pointToSegmentDistance(click, src, dst);
-            if (d < bestDist) {
-                bestDist = d;
-                best = w;
-            }
-        }
-        return best;
-    }
-
-
-
-    private void playBg() {
-        if (bgClip != null) bgClip.loop(Clip.LOOP_CONTINUOUSLY);
-    }
-    private void playImpact() {
-        if (impactClip == null) return;
-        if (impactClip.isRunning()) impactClip.stop();
-        impactClip.setFramePosition(0);
-        impactClip.start();
-    }
-    private void playConnect() {
-        if (connectClip == null) return;
-        if (connectClip.isRunning()) connectClip.stop();
-        connectClip.setFramePosition(0);
-        connectClip.start();
-    }
-    private void playGameOverSound() {
-        if (gameoverClip == null) return;
-        if (gameoverClip.isRunning()) gameoverClip.stop();
-        gameoverClip.setFramePosition(0);
-        gameoverClip.start();
-    }
-
-
 }

@@ -266,4 +266,8 @@ public class NetworkController {
     public List<Wire> getWires() {
         return wires;
     }
+
+    public List<SystemBox> getSystems() {
+        return systems;
+    }
 }
