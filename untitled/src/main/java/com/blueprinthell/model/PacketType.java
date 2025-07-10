@@ -1,12 +1,26 @@
 package com.blueprinthell.model;
 
-import java.awt.Color;
+import com.blueprinthell.config.Config;
 
+/**
+ * Enumeration of packet types in the domain model, without UI dependencies.
+ */
 public enum PacketType {
-    SQUARE(2,1,new Color(0x1E90FF)),
-    TRIANGLE(3,2,new Color(0xF4A742));
+    SQUARE(Config.PACKET_SIZE_UNITS_SQUARE, Config.PACKET_COINS_SQUARE),
+    TRIANGLE(Config.PACKET_SIZE_UNITS_TRIANGLE, Config.PACKET_COINS_TRIANGLE);
 
-    public final int sizeUnits, coins;
-    public final Color color;
-    PacketType(int u,int c,Color col){sizeUnits=u;coins=c;color=col;}
+    public final int sizeUnits;
+    public final int coins;
+
+    PacketType(int sizeUnits, int coins) {
+        this.sizeUnits = sizeUnits;
+        this.coins = coins;
+    }
+
+    /**
+     * Maps this packet type to the corresponding port shape.
+     */
+    public PortShape toPortShape() {
+        return this == SQUARE ? PortShape.SQUARE : PortShape.TRIANGLE;
+    }
 }

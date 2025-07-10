@@ -1,0 +1,62 @@
+package com.blueprinthell.model;
+
+import java.io.Serializable;
+
+/**
+ * Base model for all game objects, holding position and size without any UI dependencies.
+ */
+public abstract class GameObjectModel implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    protected int x;
+    protected int y;
+    protected int width;
+    protected int height;
+
+    protected GameObjectModel(int x, int y, int width, int height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    public int getX() {
+        return x;
+    }
+
+    public void setX(int x) {
+        this.x = x;
+    }
+
+    public int getY() {
+        return y;
+    }
+
+    public void setY(int y) {
+        this.y = y;
+    }
+
+    public int getWidth() {
+        return width;
+    }
+
+    public void setWidth(int width) {
+        this.width = width;
+    }
+
+    public int getHeight() {
+        return height;
+    }
+
+    public void setHeight(int height) {
+        this.height = height;
+    }
+
+    public int getCenterX() {
+        return x + width / 2;
+    }
+
+    public int getCenterY() {
+        return y + height / 2;
+    }
+}
