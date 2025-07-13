@@ -5,16 +5,20 @@ import java.awt.*;
 import java.awt.event.ActionListener;
 
 /**
- * HUD view for displaying game information such as score, wire length,
- * temporal progress, packet loss, and coins.
+ * HUD view for displaying live game metrics and basic controls.
  */
 public class HudView extends JPanel {
+    /* ------------- labels ------------- */
+    private final JLabel levelLabel;
     private final JLabel scoreLabel;
     private final JLabel wireLengthLabel;
-    private final JLabel timeLabel;
     private final JLabel packetLossLabel;
     private final JLabel coinsLabel;
-    private final JButton startButton;
+
+    /* ------------- buttons ------------- */
+    private final JButton startButton;   // first start of simulation
+    private final JButton toggleButton;  // pause / resume
+    private final JButton storeButton;   // opens shop
 
     public HudView(int x, int y, int width, int height) {
         setLayout(new FlowLayout(FlowLayout.LEFT));
@@ -22,64 +26,52 @@ public class HudView extends JPanel {
         setBackground(Color.BLACK);
         setBounds(x, y, width, height);
 
-        Font boldFont = new JLabel().getFont().deriveFont(Font.BOLD, 16f);
+        Font bold = new JLabel().getFont().deriveFont(Font.BOLD, 16f);
+        Color fg   = Color.WHITE;
 
-        scoreLabel = new JLabel("Score: 0");
-        scoreLabel.setFont(boldFont);
-        scoreLabel.setForeground(Color.WHITE);
-        add(scoreLabel);
+        levelLabel = makeLabel("Level: 1", bold, fg);
+        scoreLabel = makeLabel("Score: 0", bold, fg);
+        wireLengthLabel = makeLabel("Wire Left: 0", bold, fg);
+        packetLossLabel = makeLabel("Loss: 0", bold, fg);
+        coinsLabel = makeLabel("Coins: 0", bold, fg);
 
-        wireLengthLabel = new JLabel("Wire Left: 0");
-        wireLengthLabel.setFont(boldFont);
-        wireLengthLabel.setForeground(Color.WHITE);
-        add(wireLengthLabel);
+        startButton  = new JButton("Start");
+        toggleButton = new JButton("Pause");
+        storeButton  = new JButton("Store");
 
-        timeLabel = new JLabel("Time: 0");
-        timeLabel.setFont(boldFont);
-        timeLabel.setForeground(Color.WHITE);
-        add(timeLabel);
-
-        packetLossLabel = new JLabel("Loss: 0");
-        packetLossLabel.setFont(boldFont);
-        packetLossLabel.setForeground(Color.WHITE);
-        add(packetLossLabel);
-
-        coinsLabel = new JLabel("Coins: 0");
-        coinsLabel.setFont(boldFont);
-        coinsLabel.setForeground(Color.WHITE);
-        add(coinsLabel);
-
-        startButton = new JButton("Start");
-        add(startButton);
+        add(levelLabel);      add(scoreLabel);
+        add(wireLengthLabel); add(packetLossLabel); add(coinsLabel);
+        add(startButton);     add(toggleButton);    add(storeButton);
     }
 
-    /** Updates the score displayed in the HUD. */
-    public void setScore(int score) {
-        scoreLabel.setText("Score: " + score);
+    /* ------------------ helper ------------------ */
+    private JLabel makeLabel(String txt, Font f, Color c) {
+        JLabel l = new JLabel(txt);
+        l.setFont(f); l.setForeground(c); add(l); return l;
     }
 
-    /** Updates the remaining wire length displayed. */
-    public void setWireLength(double length) {
-        wireLengthLabel.setText(String.format("Wire Left: %.2f", length));
+    /* ------------------ setters ------------------ */
+    public void setLevel(int lv)           { levelLabel.setText("Level: " + lv); }
+    public void setScore(int score)        { scoreLabel.setText("Score: " + score); }
+    public void setWireLength(double len)  { wireLengthLabel.setText(String.format("Wire Left: %.2f", len)); }
+    public void setPacketLoss(int loss)    { packetLossLabel.setText("Loss: " + loss); }
+    public void setCoins(int coins)        { coinsLabel.setText("Coins: " + coins); }
+
+    /* ------------------ toggle button ------------------ */
+    public void setToggleText(String txt)  { toggleButton.setText(txt); }
+
+    /* ------------------ listeners ------------------ */
+    public void addStartListener(ActionListener l)  { startButton.addActionListener(l); }
+    public void addToggleListener(ActionListener l) { toggleButton.addActionListener(l); }
+    public void addStoreListener(ActionListener l)  { storeButton.addActionListener(l); }
+
+
+    public JButton getStartButton() {
+        return startButton;
     }
 
-    /** Updates the temporal progress displayed. */
-    public void setTime(double time) {
-        timeLabel.setText(String.format("Time: %.2f", time));
-    }
-
-    /** Updates the packet loss displayed. */
-    public void setPacketLoss(int loss) {
-        packetLossLabel.setText("Loss: " + loss);
-    }
-
-    /** Updates the coins displayed. */
-    public void setCoins(int coins) {
-        coinsLabel.setText("Coins: " + coins);
-    }
-
-    /** Allows a controller to listen for the Start button click. */
-    public void addStartListener(ActionListener listener) {
-        startButton.addActionListener(listener);
+    /** Returns the Pause/Resume toggle button so controllers can manage listeners. */
+    public JButton getToggleButton() {
+        return toggleButton;
     }
 }

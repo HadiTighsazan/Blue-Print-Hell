@@ -1,5 +1,6 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.media.ResourceManager;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
@@ -27,6 +28,7 @@ public class WireCreationController {
     private final Map<WireModel, SystemBoxModel> destMap;
     private final Map<PortModel, WireModel> portConnection = new HashMap<>();
     private final WireUsageModel usageModel;
+    private final Runnable networkChanged;
 
     // Preview state
     private boolean drawing = false;
@@ -42,13 +44,15 @@ public class WireCreationController {
                                   List<SystemBoxModel> boxes,
                                   List<WireModel> wires,
                                   Map<WireModel, SystemBoxModel> destMap,
-                                  WireUsageModel usageModel) {
+                                  WireUsageModel usageModel,
+                                  Runnable networkChanged) {
         this.gameView = gameView;
         this.simulation = simulation;
         this.boxes = boxes;
         this.wires = wires;
         this.destMap = destMap;
         this.usageModel = usageModel;
+        this.networkChanged = networkChanged;
 
         // Initialize existing wires and lock their ports
         for (WireModel w : wires) {
@@ -128,6 +132,14 @@ public class WireCreationController {
                 double length = wm.getLength();
                 // Check available wire length
                 if (usageModel.useWire(length)) {
+                    // Play connect sound
+                    try {
+                        var clip = ResourceManager.INSTANCE.getClip("connect_click.wav");
+                        clip.stop();
+                        clip.setFramePosition(0);
+                        clip.start();
+                    } catch (Exception ignored) {}
+
                     // Model
                     wires.add(wm);
                     destMap.put(wm, findDestBox(pm));
@@ -137,6 +149,7 @@ public class WireCreationController {
                     wv.setBounds(0, 0, area.getWidth(), area.getHeight());
                     area.add(wv, 0);
                     area.revalidate(); area.repaint();
+                    if (networkChanged != null) networkChanged.run();
 
                     // Lock ports
                     portConnection.put(startPort, wm);
@@ -162,8 +175,8 @@ public class WireCreationController {
     public void freePortsForWire(WireModel wm) {
         portConnection.remove(wm.getSrcPort());
         portConnection.remove(wm.getDstPort());
-        // free wire length
         usageModel.freeWire(wm.getLength());
+        if (networkChanged != null) networkChanged.run();
     }
 
     private SystemBoxModel findDestBox(PortModel pm) {

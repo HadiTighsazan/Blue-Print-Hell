@@ -1,75 +1,81 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.media.SoundSettings;
+import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.view.screens.*;
+
 import javax.swing.*;
 
 /**
- * Controller to attach menu button actions to screen navigation, including starting game.
+ * Wires UI buttons to navigation actions and level progression. Uses {@link LevelManager}
+ * to manage level flow and screen transitions.
  */
 public class MenuController {
     private final ScreenController screenController;
-    private final GameController gameController;
+    private final LevelManager     levelManager;
 
-    public MenuController(ScreenController screenController, GameController gameController) {
+    public MenuController(ScreenController screenController,
+                          GameController gameController) {
         this.screenController = screenController;
-        this.gameController   = gameController;
+        // LevelManager now needs ScreenController for mission‑passed screen
+        this.levelManager = new LevelManager(gameController, screenController);
+        // Inject back so GameController can notify success/fail
+        gameController.setLevelManager(levelManager);
         attachListeners();
     }
 
+    /* ---------------- Attach all UI listeners ---------------- */
     private void attachListeners() {
-        // Main Menu
+        /* ----- Main Menu ----- */
         MainMenuView mainMenu = screenController.getMainMenuView();
         mainMenu.startButton.addActionListener(e -> {
-            // اول کارت‌لی‌آوت رو به صفحهٔ بازی ببریم
+            levelManager.startGame();
             screenController.showScreen(ScreenController.GAME_SCREEN);
-            // بعد سطح رو ست کنیم (و ویو و کنترلرها رو init کنیم)
-            gameController.startLevel(1);
         });
-
         mainMenu.settingsButton.addActionListener(e ->
-                screenController.showScreen(ScreenController.SETTINGS)
-        );
-        mainMenu.exitButton.addActionListener(e ->
-                System.exit(0)
-        );
+                screenController.showScreen(ScreenController.SETTINGS));
+        mainMenu.exitButton.addActionListener(e -> System.exit(0));
 
-        // Settings Menu
+        /* ----- Settings Menu ----- */
         SettingsMenuView settings = screenController.getSettingsMenuView();
+        new SettingsController(settings);
+        settings.volumeSlider.setValue(Math.round(SoundSettings.getVolume() * 100));
+        settings.volumeSlider.addChangeListener(e -> {
+            if (!settings.volumeSlider.getValueIsAdjusting()) {
+                SoundSettings.setVolume(settings.volumeSlider.getValue() / 100f);
+            }
+        });
+        SoundSettings.addVolumeListener(v -> settings.volumeSlider.setValue(Math.round(v * 100)));
         settings.backButton.addActionListener(e ->
-                screenController.showScreen(ScreenController.MAIN_MENU)
-        );
+                screenController.showScreen(ScreenController.MAIN_MENU));
 
-        // Level Select - optional if bypassed
+        /* ----- Mission Passed ----- */
+        MissionPassedView missionPassed = screenController.getMissionPassedView();
+        missionPassed.nextMissionButton.addActionListener(e -> levelManager.startNextLevel());
+        missionPassed.mainMenuButton.addActionListener(e ->
+                screenController.showScreen(ScreenController.MAIN_MENU));
+
+        /* ----- Game Over ----- */
+        GameOverView gameOver = screenController.getGameOverView();
+        gameOver.retryButton.addActionListener(e -> {
+            levelManager.startGame();
+            screenController.showScreen(ScreenController.GAME_SCREEN);
+        });
+        gameOver.mainMenuButton.addActionListener(e ->
+                screenController.showScreen(ScreenController.MAIN_MENU));
+
+        /* ----- Level Select (optional debugging) ----- */
         LevelSelectView levelSelect = screenController.getLevelSelectView();
         for (JButton btn : levelSelect.getLevelButtons()) {
             btn.addActionListener(e -> {
-                int level = Integer.parseInt(btn.getText().split(" ")[1]);
-                gameController.startLevel(level);
+                int lv = Integer.parseInt(btn.getText().split(" ")[1]);
+                levelManager.startGame();
+                // Advance until desired level (1‑based index)
+                for (int i = 1; i < lv; i++) levelManager.startNextLevel();
                 screenController.showScreen(ScreenController.GAME_SCREEN);
             });
         }
         levelSelect.backButton.addActionListener(e ->
-                screenController.showScreen(ScreenController.MAIN_MENU)
-        );
-
-        // Mission Passed
-        MissionPassedView missionPassed = screenController.getMissionPassedView();
-        missionPassed.nextMissionButton.addActionListener(e -> {
-            gameController.startLevel(2); // next level example
-            screenController.showScreen(ScreenController.GAME_SCREEN);
-        });
-        missionPassed.mainMenuButton.addActionListener(e ->
-                screenController.showScreen(ScreenController.MAIN_MENU)
-        );
-
-        // Game Over
-        GameOverView gameOver = screenController.getGameOverView();
-        gameOver.retryButton.addActionListener(e -> {
-            gameController.startLevel(1);
-            screenController.showScreen(ScreenController.GAME_SCREEN);
-        });
-        gameOver.mainMenuButton.addActionListener(e ->
-                screenController.showScreen(ScreenController.MAIN_MENU)
-        );
+                screenController.showScreen(ScreenController.MAIN_MENU));
     }
 }

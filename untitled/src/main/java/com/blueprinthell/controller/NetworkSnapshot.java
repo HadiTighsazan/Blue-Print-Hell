@@ -2,7 +2,6 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.model.PacketType;
 import com.blueprinthell.model.PortShape;
-
 import java.util.List;
 
 /**
@@ -10,12 +9,13 @@ import java.util.List;
  */
 public record NetworkSnapshot(
         int score,
+        int coins,      // NEW: total coins at snapshot time
         int packetLoss,
         List<SystemBoxState> boxStates,
         List<WireState> wireStates
 ) {
     /**
-     * Immutable state of a SystemBoxModel.
+     * Immutable state of a SystemBoxModel **including its internal buffer**.
      */
     public record SystemBoxState(
             int x,
@@ -23,7 +23,8 @@ public record NetworkSnapshot(
             int width,
             int height,
             List<PortShape> inShapes,
-            List<PortShape> outShapes
+            List<PortShape> outShapes,
+            List<PacketState> bufferPackets // NEW: packets waiting inside the box
     ) {}
 
     /**
@@ -38,7 +39,7 @@ public record NetworkSnapshot(
     ) {}
 
     /**
-     * Immutable state of a PacketModel on a wire.
+     * Immutable state of a PacketModel (either on a wire or in a buffer).
      */
     public record PacketState(
             double progress,

@@ -1,13 +1,19 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.media.AudioController;
+import com.blueprinthell.media.ResourceManager;
 import com.blueprinthell.view.screens.*;
+
+import javax.sound.sampled.Clip;
 import javax.swing.*;
 import java.awt.*;
 
 /**
- * Controls navigation between different application screens using CardLayout.
+ * Controls navigation between application screens via CardLayout and, if an {@link AudioController}
+ * is injected, starts/stops background music and plays a game‑over jingle when appropriate.
  */
 public class ScreenController {
+    /* ---------- Screen identifiers ---------- */
     public static final String MAIN_MENU      = "MainMenu";
     public static final String SETTINGS       = "Settings";
     public static final String GAME_OVER      = "GameOver";
@@ -15,75 +21,86 @@ public class ScreenController {
     public static final String LEVEL_SELECT   = "LevelSelect";
     public static final String GAME_SCREEN    = "GameScreen";
 
-    private final JPanel mainPanel;
+    /* ---------- Swing components ---------- */
     private final CardLayout cardLayout;
+    private final JPanel mainPanel;
 
-    private final MainMenuView    mainMenuView;
-    private final SettingsMenuView settingsMenuView;
-    private final GameOverView     gameOverView;
+    /* ---------- View instances ---------- */
+    private final MainMenuView      mainMenuView;
+    private final SettingsMenuView  settingsMenuView;
+    private final GameOverView      gameOverView;
     private final MissionPassedView missionPassedView;
     private final LevelSelectView   levelSelectView;
 
+    /* ---------- Optional audio ---------- */
+    private AudioController audioController; // injected via setter
+    private String currentScreen = MAIN_MENU;
+
     public ScreenController(JFrame frame) {
         cardLayout = new CardLayout();
-        mainPanel = new JPanel(cardLayout);
+        mainPanel  = new JPanel(cardLayout);
         frame.getContentPane().removeAll();
         frame.getContentPane().add(mainPanel, BorderLayout.CENTER);
 
-        // Initialize screens
-        mainMenuView     = new MainMenuView();
-        settingsMenuView = new SettingsMenuView();
-        gameOverView     = new GameOverView();
-        missionPassedView= new MissionPassedView();
-        levelSelectView  = new LevelSelectView();
+        // Instantiate static screens
+        mainMenuView      = new MainMenuView();
+        settingsMenuView  = new SettingsMenuView();
+        gameOverView      = new GameOverView();
+        missionPassedView = new MissionPassedView();
+        levelSelectView   = new LevelSelectView();
 
-        // GameScreenView will be registered later by GameController
-
-        // Add to card layout
+        // Register them
         mainPanel.add(mainMenuView,      MAIN_MENU);
         mainPanel.add(settingsMenuView,  SETTINGS);
         mainPanel.add(gameOverView,      GAME_OVER);
         mainPanel.add(missionPassedView, MISSION_PASSED);
         mainPanel.add(levelSelectView,   LEVEL_SELECT);
 
-        // Show main menu initially
-        showScreen(MAIN_MENU);
+        showScreen(MAIN_MENU); // initial screen
     }
 
-    /**
-     * Registers the game screen panel for game play.
-     */
+    /* -------------------------------------------------- */
+    /** Registers the dynamic game screen built by {@link GameController}. */
     public void registerGameScreen(GameScreenView gameScreen) {
         mainPanel.add(gameScreen, GAME_SCREEN);
     }
 
+    /** Injects an {@link AudioController} so this class can manage background loop when switching screens. */
+    public void setAudioController(AudioController ac) { this.audioController = ac; }
+
+    /**
+     * Shows the requested screen and manages audio transitions.
+     * @param name one of the static screen identifiers
+     */
     public void showScreen(String name) {
+        boolean enteringGame   = GAME_SCREEN.equals(name) && !GAME_SCREEN.equals(currentScreen);
+        boolean leavingGame    = !GAME_SCREEN.equals(name) && GAME_SCREEN.equals(currentScreen);
+        boolean enteringGameOver = GAME_OVER.equals(name) && !GAME_OVER.equals(currentScreen);
+
+        // Background loop handling removed: music is started once at app launch and keeps looping across screens
+
+        // Game‑over jingle
+        if (enteringGameOver) {
+            try {
+                Clip clip = ResourceManager.INSTANCE.getClip("gameover_jingle.wav");
+                clip.stop();
+                clip.setFramePosition(0);
+                clip.start();
+            } catch (Exception ignored) { }
+        }
+
+        // Switch UI
+        currentScreen = name;
         cardLayout.show(mainPanel, name);
         mainPanel.revalidate();
         mainPanel.repaint();
     }
 
-    public JPanel getMainPanel() {
-        return mainPanel;
-    }
-
-    public MainMenuView getMainMenuView() {
-        return mainMenuView;
-    }
-
-    public SettingsMenuView getSettingsMenuView() {
-        return settingsMenuView;
-    }
-
-    public GameOverView getGameOverView() {
-        return gameOverView;
-    }
-
-    public MissionPassedView getMissionPassedView() {
-        return missionPassedView;
-    }
-
-    public LevelSelectView getLevelSelectView() {
-        return levelSelectView;
-    }
+    /* ---------- Getters for other controllers ---------- */
+    public JPanel getMainPanel()                 { return mainPanel;        }
+    public MainMenuView getMainMenuView()        { return mainMenuView;     }
+    public SettingsMenuView getSettingsMenuView(){ return settingsMenuView; }
+    public GameOverView getGameOverView()        { return gameOverView;     }
+    public MissionPassedView getMissionPassedView(){ return missionPassedView; }
+    public LevelSelectView getLevelSelectView()  { return levelSelectView;  }
 }

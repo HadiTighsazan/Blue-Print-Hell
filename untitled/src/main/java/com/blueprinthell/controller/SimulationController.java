@@ -11,7 +11,7 @@ import com.blueprinthell.controller.TimelineController;
  * and optionally records snapshots each second via a TimelineController.
  */
 public class SimulationController {
-    private final List<Updatable> updatables = new ArrayList<>();
+    private final List<Updatable> updatables = new ArrayList<>(); // guarded by 'updatables' itself
     private final Timer timer;
     private TimelineController timelineController;
     private double elapsedSeconds = 0.0;
@@ -25,7 +25,11 @@ public class SimulationController {
         this.timer = new Timer(delay, e -> {
             double dt = delay / 1000.0;
             // Update all registered updatables
-            for (Updatable u : updatables) {
+            List<Updatable> snapshot;
+            synchronized (updatables) {
+                snapshot = new ArrayList<>(updatables);
+            }
+            for (Updatable u : snapshot) {
                 u.update(dt);
             }
             // Record snapshot each second if a timeline controller is set
@@ -44,7 +48,9 @@ public class SimulationController {
      * @param u the updatable instance
      */
     public void register(Updatable u) {
-        updatables.add(u);
+        synchronized (updatables) {
+            updatables.add(u);
+        }
     }
 
     /**
@@ -70,6 +76,19 @@ public class SimulationController {
     public void stop() {
         if (timer.isRunning()) {
             timer.stop();
+        }
+    }
+    /**
+     * @return true if the simulation timer is currently running.
+     */
+    public boolean isRunning() {
+        return timer.isRunning();
+    }
+
+    /** Clears all registered Updatable instances (used when a new level starts). */
+    public void clearUpdatables() {
+        synchronized (updatables) {
+            updatables.clear();
         }
     }
 }

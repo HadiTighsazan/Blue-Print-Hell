@@ -8,6 +8,7 @@ import java.awt.*;
  */
 public class GameOverView extends JPanel {
     public final JButton retryButton = new JButton("Retry");
+    public final JLabel packetLossLabel = new JLabel("Loss: 0");
     public final JButton mainMenuButton = new JButton("Main Menu");
 
     public GameOverView() {
@@ -23,6 +24,9 @@ public class GameOverView extends JPanel {
         add(Box.createVerticalGlue());
         add(label);
         add(Box.createRigidArea(new Dimension(0, 20)));
+        packetLossLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        packetLossLabel.setForeground(Color.WHITE);
+        add(packetLossLabel);
         add(createButtonPanel(retryButton));
         add(createButtonPanel(mainMenuButton));
         add(Box.createVerticalGlue());

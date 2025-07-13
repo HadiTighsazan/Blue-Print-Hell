@@ -6,6 +6,7 @@ import java.io.Serializable;
 
 /**
  * Domain model for Packet, containing movement logic without UI dependencies.
+ * Advances based on speed, acceleration, and noise-driven speed scaling.
  */
 public class PacketModel extends GameObjectModel implements Serializable {
     private static final long serialVersionUID = 2L;
@@ -26,6 +27,8 @@ public class PacketModel extends GameObjectModel implements Serializable {
         this.type = type;
         this.baseSpeed = speed;
         this.speed = speed;
+        this.noise = 0.0;
+        this.acceleration = 0.0;
     }
 
     public PacketType getType() {
@@ -73,8 +76,20 @@ public class PacketModel extends GameObjectModel implements Serializable {
         this.acceleration = acceleration;
     }
 
+    /**
+     * Advances the packet along its current wire by dt seconds,
+     * scaling speed linearly with noise and smoothing the change.
+     */
     public void advance(double dt) {
+        // Compute noise ratio [0..1]
+        double noiseRatio = Math.min(1.0, noise / Config.MAX_NOISE_CAPACITY);
+        // Determine target speed based on noise
+        double targetSpeed = baseSpeed * (1.0 + noiseRatio);
+        // Smoothly adjust current speed toward target
+        speed += (targetSpeed - speed) * Config.NOISE_SPEED_SMOOTHING;
+        // Apply additional acceleration
         speed += acceleration * dt;
+
         if (currentWire != null) {
             double distance = speed * dt;
             double deltaProgress = distance / currentWire.getLength();
@@ -83,6 +98,9 @@ public class PacketModel extends GameObjectModel implements Serializable {
         }
     }
 
+    /**
+     * Attaches the packet to a wire at the given initial progress fraction.
+     */
     public void attachToWire(WireModel wire, double initProgress) {
         this.currentWire = wire;
         this.progress = initProgress;

@@ -32,8 +32,6 @@ public final class Config {
     // Stroke widths
     public static final float STROKE_WIDTH_WIRE = 2f;
 
-
-    // Future constants for simulation timing, colors, etc., can be added here
     // تعداد پکت‌ بر اساس هر پورت خروجی برای سیستم‌های مبدا
     public static final int PACKETS_PER_PORT = 3;
 
@@ -43,5 +41,12 @@ public final class Config {
     // فاصله‌ی زمانی (ثانیه) بین تولید پکت‌ها روی هر سیم
     public static final double PRODUCTION_INTERVAL_SECONDS = 1.0;
 
+    // حداکثر مقدار نویز تا حذف پکت
+    public static final double MAX_NOISE_CAPACITY = 100.0;
 
+    // ضریب هموارسازی تغییر سرعت بر اساس نویز (0..1)
+    public static final double NOISE_SPEED_SMOOTHING = 0.1;
+
+    public static final int SYSTEM_WIDTH = 96;
+    public static final int SYSTEM_HEIGHT = 96;
 }

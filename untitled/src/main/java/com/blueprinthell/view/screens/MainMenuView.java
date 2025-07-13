@@ -1,32 +1,41 @@
 package com.blueprinthell.view.screens;
 
+import com.blueprinthell.view.BackgroundPanel;
+
 import javax.swing.*;
 import java.awt.*;
 
 /**
- * Main menu screen with Start, Settings, and Exit buttons.
+ * Main menu screen with a shared background image and uniformly styled buttons.
  */
-public class MainMenuView extends JPanel {
-    public final JButton startButton = new JButton("Start");
-    public final JButton settingsButton = new JButton("Settings");
-    public final JButton exitButton = new JButton("Exit");
+public class MainMenuView extends BackgroundPanel {
+
+    public final JButton startButton    = makeButton("Start");
+    public final JButton settingsButton = makeButton("Settings");
+    public final JButton exitButton     = makeButton("Exit");
 
     public MainMenuView() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBackground(Color.DARK_GRAY);
         setPreferredSize(new Dimension(800, 600));
+        setOpaque(false); // BackgroundPanel already paints image
 
         add(Box.createVerticalGlue());
-        add(createButtonPanel(startButton));
-        add(createButtonPanel(settingsButton));
-        add(createButtonPanel(exitButton));
+        add(startButton);
+        add(Box.createRigidArea(new Dimension(0, 15)));
+        add(settingsButton);
+        add(Box.createRigidArea(new Dimension(0, 15)));
+        add(exitButton);
         add(Box.createVerticalGlue());
     }
 
-    private JPanel createButtonPanel(JButton button) {
-        JPanel panel = new JPanel();
-        panel.setOpaque(false);
-        panel.add(button);
-        return panel;
+    /* ---------------- helper ---------------- */
+    private JButton makeButton(String text) {
+        JButton btn = new JButton(text);
+        btn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btn.setFont(btn.getFont().deriveFont(Font.BOLD, 18f));
+        btn.setPreferredSize(new Dimension(200, 40));
+        btn.setMaximumSize(new Dimension(200, 40));
+        btn.setFocusPainted(false);
+        return btn;
     }
 }
