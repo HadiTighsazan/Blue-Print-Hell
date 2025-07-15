@@ -6,7 +6,7 @@ import java.io.Serializable;
 
 /**
  * Domain model for Packet, containing movement logic without UI dependencies.
- * Advances based on speed, acceleration, and noise-driven speed scaling.
+ * اکنون شامل شتاب افزایشی/کاهشی و اثر نویز بر سرعت است.
  */
 public class PacketModel extends GameObjectModel implements Serializable {
     private static final long serialVersionUID = 2L;
@@ -31,91 +31,76 @@ public class PacketModel extends GameObjectModel implements Serializable {
         this.acceleration = 0.0;
     }
 
-    public PacketType getType() {
-        return type;
-    }
-
-    public double getBaseSpeed() {
-        return baseSpeed;
-    }
-
-    public double getSpeed() {
-        return speed;
-    }
-
-    public void setSpeed(double speed) {
-        this.speed = speed;
-    }
-
-    public double getProgress() {
-        return progress;
-    }
-
-    public void setProgress(double progress) {
-        this.progress = progress;
-        updatePosition();
-    }
-
-    public double getNoise() {
-        return noise;
-    }
+    /* ---------------- Accessors ---------------- */
+    public PacketType getType()       { return type; }
+    public double getBaseSpeed()      { return baseSpeed; }
+    public double getSpeed()          { return speed; }
+    public void   setSpeed(double s)  { this.speed = s; }
+    public double getProgress()       { return progress; }
+    public void   setProgress(double p){ this.progress = p; updatePosition(); }
+    public double getNoise()          { return noise; }
+    public double getAcceleration()   { return acceleration; }
+    public void   setAcceleration(double a){ this.acceleration = a; }
 
     public void increaseNoise(double v) {
         this.noise += v;
+        recomputeSpeedFromNoise();
     }
-
     public void resetNoise() {
         this.noise = 0.0;
+        recomputeSpeedFromNoise();
     }
 
-    public double getAcceleration() {
-        return acceleration;
-    }
+    /* ---------------- Simulation step ---------------- */
 
-    public void setAcceleration(double acceleration) {
-        this.acceleration = acceleration;
-    }
-
-    /**
-     * Advances the packet along its current wire by dt seconds,
-     * scaling speed linearly with noise and smoothing the change.
-     */
     public void advance(double dt) {
-        // Compute noise ratio [0..1]
-        double noiseRatio = Math.min(1.0, noise / Config.MAX_NOISE_CAPACITY);
-        // Determine target speed based on noise
-        double targetSpeed = baseSpeed * (1.0 + noiseRatio);
-        // Smoothly adjust current speed toward target
+        // 1) dynamic acceleration toward noise‑scaled target speed
+        double noiseRatio   = Math.min(1.0, noise / Config.MAX_NOISE_CAPACITY);
+        double targetSpeed  = baseSpeed * (1.0 + noiseRatio);
         speed += (targetSpeed - speed) * Config.NOISE_SPEED_SMOOTHING;
-        // Apply additional acceleration
+
+        // 2) explicit acceleration from WireModel (acc field)
         speed += acceleration * dt;
 
+        // 3) deceleration in last 20% of the wire for smoother stop
+        if (currentWire != null && progress > 0.8) {
+            speed += Config.ACC_DECEL * dt;
+        }
+
+        // clamp speed
+        if (speed < 10) speed = 10; // حداقل برای جلوگیری از سکون کامل
+        if (speed > Config.MAX_SPEED) speed = Config.MAX_SPEED;
+
+        // 4) move along the wire
         if (currentWire != null) {
-            double distance = speed * dt;
+            double distance      = speed * dt;
             double deltaProgress = distance / currentWire.getLength();
             progress += deltaProgress;
             updatePosition();
         }
     }
 
-    /**
-     * Attaches the packet to a wire at the given initial progress fraction.
-     */
+    /* ---------------- Helpers ---------------- */
+    /** Re‑evaluates speed solely from noise (linear scaling) without touching acceleration. */
+    public void recomputeSpeedFromNoise() {
+        double noiseRatio  = Math.min(1.0, noise / Config.MAX_NOISE_CAPACITY);
+        double newSpeed    = baseSpeed * (1.0 + noiseRatio);
+        if (newSpeed > Config.MAX_SPEED) newSpeed = Config.MAX_SPEED;
+        this.speed = newSpeed;
+    }
+
     public void attachToWire(WireModel wire, double initProgress) {
         this.currentWire = wire;
-        this.progress = initProgress;
+        this.progress    = initProgress;
         updatePosition();
     }
 
     private void updatePosition() {
         if (currentWire == null) return;
         Point p = currentWire.pointAt(progress);
-        // center packet on wire point
         setX(p.x - getWidth() / 2);
         setY(p.y - getHeight() / 2);
     }
 
-    public WireModel getCurrentWire() {
-        return currentWire;
-    }
+    public WireModel getCurrentWire() { return currentWire; }
 }

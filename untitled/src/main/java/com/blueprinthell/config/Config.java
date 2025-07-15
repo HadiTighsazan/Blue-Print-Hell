@@ -6,20 +6,23 @@ import java.awt.Color;
  * Centralized configuration constants for BlueprintHell application.
  */
 public final class Config {
+    public static final int SYSTEM_WIDTH = 96;
+    public static final int SYSTEM_HEIGHT = 96;
+
     private Config() { /* Prevent instantiation */ }
 
-    // Model constants
-    public static final int PACKET_SIZE_MULTIPLIER = 6;
-    public static final int MAX_BUFFER_CAPACITY = 5;
-    public static final int PORT_SIZE = 14;
+    /* ===================== Model constants ===================== */
+    public static final int    PACKET_SIZE_MULTIPLIER   = 8; // بزرگ‌تر برای تمایز بصری
+    public static final int    MAX_BUFFER_CAPACITY      = 5;
+    public static final int    PORT_SIZE                = 14;
 
-    // PacketType constants (extracted from PacketType enum to avoid hardcoded values)
-    public static final int PACKET_SIZE_UNITS_SQUARE = 2;
-    public static final int PACKET_COINS_SQUARE = 1;
+    /* ---------------- Packet types ---------------- */
+    public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
+    public static final int PACKET_COINS_SQUARE        = 1;
     public static final int PACKET_SIZE_UNITS_TRIANGLE = 3;
-    public static final int PACKET_COINS_TRIANGLE = 2;
+    public static final int PACKET_COINS_TRIANGLE      = 2;
 
-    // Color constants for views
+    /* ===================== Visual palette ===================== */
     public static final Color COLOR_PACKET_SQUARE   = new Color(0x1E90FF);
     public static final Color COLOR_PACKET_TRIANGLE = new Color(0xF4A742);
     public static final Color COLOR_PORT_INPUT      = Color.GREEN.darker();
@@ -29,24 +32,28 @@ public final class Config {
     public static final Color COLOR_BOX_FILL        = new Color(0x888888);
     public static final Color COLOR_BOX_BORDER      = Color.WHITE;
 
-    // Stroke widths
     public static final float STROKE_WIDTH_WIRE = 2f;
 
-    // تعداد پکت‌ بر اساس هر پورت خروجی برای سیستم‌های مبدا
+    /* ===================== Gameplay numbers ===================== */
+    // تعداد پکت‌ تولیدی در مرحلهٔ ۱ به ازای هر پورت خروجی سیستم مبدا (Level × this)
     public static final int PACKETS_PER_PORT = 3;
 
-    // سرعت اولیه‌ی هر پکت (پیکسل بر ثانیه)
+    /* ===================== Physics / Movement ===================== */
+    // سرعت پایهٔ هر پکت هنگام ورود به اولین سیم (px/s)
     public static final double DEFAULT_PACKET_SPEED = 100.0;
 
-    // فاصله‌ی زمانی (ثانیه) بین تولید پکت‌ها روی هر سیم
-    public static final double PRODUCTION_INTERVAL_SECONDS = 1.0;
+    // شتاب افزایشی مثلث روی پورت ناسازگار (px/s²)
+    public static final double ACC_TRIANGLE         = 50.0;
+    // شتاب کاهشی عمومی در ۲۰٪ انتهایی سیم (px/s² – مقدار منفی)
+    public static final double ACC_DECEL            = -60.0;
+    // حداکثر سرعت مجاز برای پکت‌ها (px/s)
+    public static final double MAX_SPEED            = 300.0;
 
-    // حداکثر مقدار نویز تا حذف پکت
-    public static final double MAX_NOISE_CAPACITY = 100.0;
-
-    // ضریب هموارسازی تغییر سرعت بر اساس نویز (0..1)
+    // حداکثر نویز تا حذف پکت
+    public static final double MAX_NOISE_CAPACITY   = 100.0;
+    // ضریب نرم‌سازی اثر نویز روی سرعت
     public static final double NOISE_SPEED_SMOOTHING = 0.1;
 
-    public static final int SYSTEM_WIDTH = 96;
-    public static final int SYSTEM_HEIGHT = 96;
+    // فاصلهٔ زمانی تولید پکت روی هر سیم در منوی Sandbox (فعلاً بلااستفاده)
+    public static final double PRODUCTION_INTERVAL_SECONDS = 1.0;
 }

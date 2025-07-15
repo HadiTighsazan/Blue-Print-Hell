@@ -1,5 +1,7 @@
 package com.blueprinthell.model;
 
+import com.blueprinthell.config.Config;
+
 import java.awt.Point;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -9,7 +11,6 @@ import java.util.List;
 
 /**
  * Domain model for a wire connecting two ports, managing packet movement.
- * Length is computed dynamically based on port positions.
  */
 public class WireModel implements Serializable {
     private static final long serialVersionUID = 4L;
@@ -44,6 +45,25 @@ public class WireModel implements Serializable {
      * Attaches a packet to this wire at initial progress t in [0,1].
      */
     public void attachPacket(PacketModel packet, double initialProgress) {
+        // ----- physics tuning based on port compatibility & packet type -----
+        boolean compatible = src.getShape() == packet.getType().toPortShape();
+        double speed  = packet.getBaseSpeed();
+        double accel  = 0.0;
+
+        switch (packet.getType()) {
+            case SQUARE -> {
+                speed = speed * (compatible ? 0.5 : 1.0); // نصف سرعت روی پورت سازگار
+            }
+            case TRIANGLE -> {
+                if (!compatible) accel = Config.ACC_TRIANGLE; // شتاب مثبت در پورت ناسازگار
+            }
+        }
+        // cap speed
+        if (speed > Config.MAX_SPEED) speed = Config.MAX_SPEED;
+        packet.setSpeed(speed);
+        packet.setAcceleration(accel);
+
+        // attach to wire & set initial progress
         packets.add(packet);
         packet.attachToWire(this, initialProgress);
     }

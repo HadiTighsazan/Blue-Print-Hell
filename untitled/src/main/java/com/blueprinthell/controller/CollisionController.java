@@ -9,7 +9,9 @@ import com.blueprinthell.model.WireModel;
 import javax.sound.sampled.Clip;
 import java.awt.Point;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Detects collisions between packets using a spatial-hash grid; increases noise,
@@ -23,7 +25,7 @@ public class CollisionController implements Updatable {
 
     /* ---- Tunables ---- */
     private static final int CELL_SIZE = 50;
-    private static final double COLLISION_RADIUS = 20.0;
+    private static final double COLLISION_RADIUS = 18.0;
     private static final double NOISE_INCREMENT  = 0.5;
     private static final double MAX_NOISE        = 5.0;
     private static final double IMPACT_RADIUS    = 100.0;
@@ -34,9 +36,9 @@ public class CollisionController implements Updatable {
     private boolean impactWaveEnabled = true;
 
     public CollisionController(List<WireModel> wires, PacketLossModel lossModel) {
-        this.wires     = wires;
+        this.wires = wires;
         this.lossModel = lossModel;
-        this.grid      = new SpatialHashGrid<>(CELL_SIZE);
+        this.grid = new SpatialHashGrid<>(CELL_SIZE);
     }
 
     @Override
@@ -51,10 +53,6 @@ public class CollisionController implements Updatable {
         handleNoiseRemovalAndSound();
     }
 
-    /**
-     * Performs broad and narrow phase collision detection.
-     * Returns list of collision points for wave propagation.
-     */
     private List<Point> performCollisionPass() {
         List<Point> impactPoints = new ArrayList<>();
         grid.clear();
@@ -64,20 +62,21 @@ public class CollisionController implements Updatable {
                 grid.insert(p.getCenterX(), p.getCenterY(), p);
             }
         }
-        // Narrow phase: for each packet, test neighbors
+        // Narrow phase
+        Set<PacketModel> processed = new HashSet<>();
         for (WireModel w : wires) {
             for (PacketModel p : new ArrayList<>(w.getPackets())) {
-                if (p.getProgress() <= 0) continue;
+                if (p.getProgress() <= 0 || processed.contains(p)) continue;
                 for (PacketModel other : grid.retrieve(p.getCenterX(), p.getCenterY())) {
-                    if (other == p || other.getProgress() <= 0) continue;
-                    if (p.getCurrentWire() == other.getCurrentWire()) continue;
+                    if (other == p || other.getProgress() <= 0 || processed.contains(other)) continue;
                     double dx = p.getCenterX() - other.getCenterX();
                     double dy = p.getCenterY() - other.getCenterY();
                     if (Math.hypot(dx, dy) <= COLLISION_RADIUS) {
-                        // direct collision noise
                         p.increaseNoise(NOISE_INCREMENT);
                         other.increaseNoise(NOISE_INCREMENT);
-                        // record impact point
+                        processed.add(p);
+                        processed.add(other);
+                        // Calculate impact point
                         int ix = (int) ((p.getCenterX() + other.getCenterX()) / 2);
                         int iy = (int) ((p.getCenterY() + other.getCenterY()) / 2);
                         impactPoints.add(new Point(ix, iy));
@@ -88,9 +87,6 @@ public class CollisionController implements Updatable {
         return impactPoints;
     }
 
-    /**
-     * Propagates impact waves to nearby packets based on distance.
-     */
     private void propagateImpactWaves(List<Point> impacts) {
         for (Point pt : impacts) {
             for (PacketModel p : grid.retrieve(pt.x, pt.y)) {
@@ -110,7 +106,9 @@ public class CollisionController implements Updatable {
         for (WireModel w : wires) {
             List<PacketModel> doomed = new ArrayList<>();
             for (PacketModel p : w.getPackets()) {
-                if (p.getNoise() >= MAX_NOISE) doomed.add(p);
+                if (p.getNoise() >= MAX_NOISE) {
+                    doomed.add(p);
+                }
             }
             for (PacketModel p : doomed) {
                 w.removePacket(p);
@@ -118,7 +116,9 @@ public class CollisionController implements Updatable {
                 played = true;
             }
         }
-        if (played) playImpactSound();
+        if (played) {
+            playImpactSound();
+        }
     }
 
     private void playImpactSound() {
@@ -130,8 +130,15 @@ public class CollisionController implements Updatable {
         } catch (Exception ignored) { }
     }
 
-    /* ---- Public control flags exposed for power‑ups ---- */
-    public void pauseCollisions() { this.collisionsEnabled = false; }
-    public void resumeCollisions() { this.collisionsEnabled = true; }
-    public void setImpactWaveEnabled(boolean enabled) { this.impactWaveEnabled = enabled; }
+    public void pauseCollisions() {
+        this.collisionsEnabled = false;
+    }
+
+    public void resumeCollisions() {
+        this.collisionsEnabled = true;
+    }
+
+    public void setImpactWaveEnabled(boolean enabled) {
+        this.impactWaveEnabled = enabled;
+    }
 }
