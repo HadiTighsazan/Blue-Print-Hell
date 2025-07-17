@@ -1,10 +1,10 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.Updatable;
+
 import javax.swing.*;
 import java.util.ArrayList;
 import java.util.List;
-import com.blueprinthell.controller.TimelineController;
 
 /**
  * Main simulation controller that triggers update(dt) on all registered Updatable models
@@ -22,25 +22,27 @@ public class SimulationController {
      */
     public SimulationController(int fps) {
         int delay = 1000 / fps;
-        this.timer = new Timer(delay, e -> {
-            double dt = delay / 1000.0;
-            // Update all registered updatables
-            List<Updatable> snapshot;
-            synchronized (updatables) {
-                snapshot = new ArrayList<>(updatables);
+        this.timer = new Timer(delay, e -> tick(delay));
+    }
+
+    private void tick(int delay) {
+        double dt = delay / 1000.0;
+        // Update all registered updatables
+        List<Updatable> snapshot;
+        synchronized (updatables) {
+            snapshot = new ArrayList<>(updatables);
+        }
+        for (Updatable u : snapshot) {
+            u.update(dt);
+        }
+        // Record snapshot each second if a timeline controller is set
+        if (timelineController != null) {
+            elapsedSeconds += dt;
+            if (elapsedSeconds >= 1.0) {
+                elapsedSeconds -= 1.0;
+                timelineController.recordFrame();
             }
-            for (Updatable u : snapshot) {
-                u.update(dt);
-            }
-            // Record snapshot each second if a timeline controller is set
-            if (timelineController != null) {
-                elapsedSeconds += dt;
-                if (elapsedSeconds >= 1.0) {
-                    elapsedSeconds -= 1.0;
-                    timelineController.recordFrame();
-                }
-            }
-        });
+        }
     }
 
     /**
@@ -49,7 +51,19 @@ public class SimulationController {
      */
     public void register(Updatable u) {
         synchronized (updatables) {
-            updatables.add(u);
+            if (!updatables.contains(u)) {
+                updatables.add(u);
+            }
+        }
+    }
+
+    /**
+     * Unregisters a previously registered Updatable.
+     * @param u the updatable to remove
+     */
+    public void unregister(Updatable u) {
+        synchronized (updatables) {
+            updatables.remove(u);
         }
     }
 
@@ -78,6 +92,7 @@ public class SimulationController {
             timer.stop();
         }
     }
+
     /**
      * @return true if the simulation timer is currently running.
      */
@@ -85,10 +100,14 @@ public class SimulationController {
         return timer.isRunning();
     }
 
-    /** Clears all registered Updatable instances (used when a new level starts). */
+    /**
+     * Clears all registered Updatable instances and resets elapsed time.
+     * Used when a new level starts.
+     */
     public void clearUpdatables() {
         synchronized (updatables) {
             updatables.clear();
         }
+        elapsedSeconds = 0.0;
     }
 }

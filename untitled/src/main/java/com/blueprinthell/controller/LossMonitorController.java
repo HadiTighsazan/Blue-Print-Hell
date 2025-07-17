@@ -2,20 +2,21 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.Updatable;
-import com.blueprinthell.controller.PacketProducerController;
 import com.blueprinthell.view.screens.GameOverView;
+import com.blueprinthell.controller.SimulationController;
+import com.blueprinthell.controller.ScreenController;
 
 import javax.swing.*;
 
 /**
- * Monitors PacketLoss each tick; when loss exceeds threshold on total planned packets,
+ * Monitors packet loss each tick; when loss exceeds threshold on total planned packets,
  * stops simulation and shows Game‑Over screen.
  */
 public class LossMonitorController implements Updatable {
 
     private final PacketLossModel lossModel;
-    private final double plannedPackets;  // total packets planned for level
-    private final double thresholdRatio;  // e.g. 0.5 for 50 %
+    private final double plannedPackets;   // total packets planned for level
+    private final double thresholdRatio;   // e.g. 0.5 for 50%
     private final SimulationController simulation;
     private final ScreenController screenCtrl;
     private final Runnable resetLevel;
@@ -38,16 +39,24 @@ public class LossMonitorController implements Updatable {
 
     @Override
     public void update(double dt) {
-        if (triggered) return;
-        if (plannedPackets <= 0) return;
+        if (triggered) {
+            return;
+        }
+        if (plannedPackets <= 0) {
+            return;
+        }
+        if (screenCtrl == null) {
+            return;
+        }
+
         double ratio = lossModel.getLostCount() / plannedPackets;
         if (ratio >= thresholdRatio) {
             triggered = true;
             simulation.stop();
             SwingUtilities.invokeLater(() -> {
                 GameOverView gov = screenCtrl.getGameOverView();
-                gov.packetLossLabel.setText("Loss: " + lossModel.getLostCount());
-                gov.retryButton.addActionListener(e -> resetLevel.run());
+                gov.getPacketLossLabel().setText("Loss: " + lossModel.getLostCount());
+                gov.getRetryButton().addActionListener(e -> resetLevel.run());
                 screenCtrl.showScreen(ScreenController.GAME_OVER);
             });
         }

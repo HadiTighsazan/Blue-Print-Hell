@@ -82,7 +82,6 @@ public final class HudCoordinator {
 
     /* ----------------------------- Refresh labels ----------------------------- */
     public void refresh() {
-        hud.setScore(scoreModel.getScore());
         hud.setCoins(coinModel.getCoins());
         hud.setPacketLoss(lossModel.getLostCount());
     }

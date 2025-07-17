@@ -39,15 +39,13 @@ public class WireRemovalController {
         this.networkChanged = networkChanged;
 
         JPanel area = gameView.getGameArea();
-        area.setFocusable(true);
-        area.requestFocusInWindow();
-
-        InputMap im = area.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        ActionMap am = area.getActionMap();
+        // Register Space key on the root pane to toggle removal mode
+        JRootPane root = SwingUtilities.getRootPane(area);
+        InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap am = root.getActionMap();
         im.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "TOGGLE_REMOVE");
         am.put("TOGGLE_REMOVE", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
+            @Override public void actionPerformed(ActionEvent e) {
                 removalMode = !removalMode;
                 Cursor cursor = removalMode
                         ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
@@ -55,6 +53,8 @@ public class WireRemovalController {
                 area.setCursor(cursor);
             }
         });
+
+
 
         area.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
@@ -72,9 +72,11 @@ public class WireRemovalController {
                             creator.freePortsForWire(wm);
                             usageModel.freeWire(wm.getLength());
                             area.remove(wv);
-                            area.revalidate();
-                            area.repaint();
+                            area.revalidate(); area.repaint();
                             if (networkChanged != null) networkChanged.run();
+                            // exit removal mode after one deletion
+                            removalMode = false;
+                            area.setCursor(Cursor.getDefaultCursor());
                             break;
                         }
                     }

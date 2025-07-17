@@ -1,9 +1,11 @@
 package com.blueprinthell.controller;
 
 import javax.swing.*;
+import com.blueprinthell.view.HudView;
+import java.util.List;
 
 /**
- * Entry‑point class that wires together the high‑level controllers and shows the main window.
+ * Entry-point class that wires together the high-level controllers and shows the main window.
  */
 public class MainController {
     public static void main(String[] args) {
@@ -19,7 +21,12 @@ public class MainController {
             ScreenController screenController = new ScreenController(frame);
 
             // 2. Core game logic controller
-            GameController gameController = new GameController(screenController);
+            GameController gameController = new GameController(frame);
+            // provide ScreenController for game-over and other screen flows
+            gameController.setScreenController(screenController);
+
+            // Register the dynamic game screen so it can be displayed
+            screenController.registerGameScreen(gameController.getGameView());
 
             // 3. Menu navigation controller
             new MenuController(screenController, gameController);
@@ -27,12 +34,13 @@ public class MainController {
             // 4. UI controller (Store + Audio)
             UIController ui = new UIController(
                     frame,
-                    gameController.getGameView().getHudView(),
+                    (HudView) gameController.getGameView().getHudView(),
                     gameController.getSimulation(),
                     gameController.getCoinModel(),
                     gameController.getCollisionController(),
                     gameController.getLossModel(),
-                    gameController.getWires()
+                    gameController.getWires(),
+                    gameController.getHudController()
             );
 
             // Inject AudioController into ScreenController (music keeps looping across screens)

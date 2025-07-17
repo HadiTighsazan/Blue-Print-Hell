@@ -12,7 +12,7 @@ import com.blueprinthell.view.WireView;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -38,6 +38,8 @@ public class GameScreenView extends JPanel {
 
         // Game area panel
         gameArea = new JPanel(null);
+        // ensure gameArea does not steal focus from GameScreenView
+        gameArea.setFocusable(false);
         gameArea.setOpaque(false);
         add(gameArea, BorderLayout.CENTER);
 
@@ -70,25 +72,51 @@ public class GameScreenView extends JPanel {
 
     public interface TemporalNavigationListener { void onNavigate(int direction); }
 
+    /**
+     * Collects all SystemBoxView instances currently in the game area.
+     */
+    public List<SystemBoxView> getSystemBoxViews() {
+        List<SystemBoxView> list = new ArrayList<>();
+        collectSystemBoxViews(gameArea, list);
+        return list;
+    }
+
+    private void collectSystemBoxViews(Container c, List<SystemBoxView> list) {
+        for (Component comp : c.getComponents()) {
+            if (comp instanceof SystemBoxView sbv) {
+                list.add(sbv);
+            } else if (comp instanceof Container inner) {
+                collectSystemBoxViews(inner, list);
+            }
+        }
+    }
+
     /* ---------------- Reset / view building ---------------- */
     public void reset(List<SystemBoxModel> boxes, List<WireModel> wires) {
         gameArea.removeAll();
         // boxes
-        for (SystemBoxModel b : boxes) gameArea.add(new SystemBoxView(b));
+        for (SystemBoxModel b : boxes) {
+            gameArea.add(new SystemBoxView(b));
+        }
         // wires
         for (WireModel w : wires) {
             PortView src = findPortView(gameArea, w.getSrcPort());
             PortView dst = findPortView(gameArea, w.getDstPort());
-            if (src != null && dst != null) gameArea.add(new WireView(w, src, dst), 0);
+            if (src != null && dst != null) {
+                gameArea.add(new WireView(w, src, dst), 0);
+            }
         }
         gameArea.revalidate();
         gameArea.repaint();
+        // keep focus on GameScreenView to ensure key events fire
         requestFocusInWindow();
     }
 
     private PortView findPortView(Container c, PortModel pm) {
         for (Component comp : c.getComponents()) {
-            if (comp instanceof PortView pv && pv.getModel() == pm) return pv;
+            if (comp instanceof PortView pv && pv.getModel() == pm) {
+                return pv;
+            }
             if (comp instanceof Container inner) {
                 PortView f = findPortView(inner, pm);
                 if (f != null) return f;
@@ -98,7 +126,12 @@ public class GameScreenView extends JPanel {
     }
 
     /* ---------------- Visibility helpers ---------------- */
-    public void showScreen() { setVisible(true); requestFocusInWindow(); }
+    public void showScreen() {
+        setVisible(true);
+        // prioritize focus for key handling
+        requestFocusInWindow();
+        gameArea.requestFocusInWindow();
+    }
     public void hideScreen() { setVisible(false); }
 
     /* ---------------- Accessors ---------------- */

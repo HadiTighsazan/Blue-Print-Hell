@@ -38,4 +38,12 @@ public class GameOverView extends JPanel {
         panel.add(button);
         return panel;
     }
+
+    public JLabel getPacketLossLabel() {
+        return packetLossLabel;
+    }
+
+    public JButton getRetryButton() {
+        return retryButton;
+    }
 }

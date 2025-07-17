@@ -8,35 +8,42 @@ import com.blueprinthell.view.screens.ShopView;
 
 import javax.swing.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Controller to manage the in‑game shop: pausing the simulation, handling purchases,
- * applying temporary power‑ups, and resuming the simulation when done.
+ * Controller to manage the in‑game shop: pausing simulation, handling purchases,
+ * applying temporary power‑ups, and updating the HUD with active effects.
  */
 public class ShopController {
     private final SimulationController simulation;
     private final CoinModel coinModel;
     private final CollisionController collisionController;
     private final PacketLossModel lossModel;
-    private final List<WireModel> wires; // all active wires, used for O’Anahita
+    private final List<WireModel> wires;
+    private final HudController hudController;
 
     private final ShopView shopView;
     private final JDialog dialog;
+
+    // Track active scroll effects and their remaining seconds
+    private final List<String> activeNames  = new ArrayList<>();
+    private final List<Integer> activeTimes = new ArrayList<>();
 
     public ShopController(JFrame parentFrame,
                           SimulationController simulation,
                           CoinModel coinModel,
                           CollisionController collisionController,
                           PacketLossModel lossModel,
-                          List<WireModel> wires) {
-        this.simulation = simulation;
-        this.coinModel = coinModel;
+                          List<WireModel> wires,
+                          HudController hudController) {
+        this.simulation          = simulation;
+        this.coinModel          = coinModel;
         this.collisionController = collisionController;
-        this.lossModel = lossModel;
-        this.wires = wires;
-        this.shopView = new ShopView();
+        this.lossModel          = lossModel;
+        this.wires               = wires;
+        this.hudController       = hudController;
+        this.shopView            = new ShopView();
 
         // Setup modal dialog
         dialog = new JDialog(parentFrame, "Store", true);
@@ -63,46 +70,45 @@ public class ShopController {
         simulation.start();
     }
 
-    /**
-     * O’Atar – Disable impact wave noise propagation for 10 seconds (cost: 3 coins).
-     */
+    /** O’Atar – Disable impact wave noise propagation for 10 seconds (cost: 3 coins). */
     private void buyOAtar() {
-        int cost = 3;
+        int cost = 3, duration = 10;
         if (!deductCoins(cost)) return;
-        shopView.setMessage("O’Atar purchased: Impact waves disabled for 10 s");
+        shopView.setMessage("O’Atar purchased: Impact waves disabled for " + duration + " s");
 
+        activateFeature("O’Atar", duration);
         collisionController.setImpactWaveEnabled(false);
-        Timer t = new Timer(10_000, new ActionListener() {
-            @Override public void actionPerformed(ActionEvent e) {
-                collisionController.setImpactWaveEnabled(true);
-            }
+        Timer t = new Timer(duration * 1000, (ActionEvent e) -> {
+            collisionController.setImpactWaveEnabled(true);
+            deactivateFeature("O’Atar");
         });
         t.setRepeats(false);
         t.start();
     }
 
-    /**
-     * O’Airyaman – Disable all collisions for 5 seconds (cost: 4 coins).
-     */
+    /** O’Airyaman – Disable collisions for 5 seconds (cost: 4 coins). */
     private void buyOAiryaman() {
-        int cost = 4;
+        int cost = 4, duration = 5;
         if (!deductCoins(cost)) return;
-        shopView.setMessage("O’Airyaman purchased: Collisions disabled for 5 s");
+        shopView.setMessage("O’Airyaman purchased: Collisions disabled for " + duration + " s");
 
+        activateFeature("O’Airyaman", duration);
         collisionController.pauseCollisions();
-        Timer t = new Timer(5_000, e -> collisionController.resumeCollisions());
+        Timer t = new Timer(duration * 1000, e -> {
+            collisionController.resumeCollisions();
+            deactivateFeature("O’Airyaman");
+        });
         t.setRepeats(false);
         t.start();
     }
 
-    /**
-     * O’Anahita – Clear noise from all packets and reset packet‑loss counter (cost: 5 coins).
-     */
+    /** O’Anahita – Clear noise from all packets and reset packet‑loss counter (cost: 5 coins). */
     private void buyOAnahita() {
         int cost = 5;
         if (!deductCoins(cost)) return;
         shopView.setMessage("O’Anahita purchased: Noise cleared");
 
+        activateFeature("O’Anahita", 0); // instantaneous effect
         // Reset noise on every packet currently travelling
         for (WireModel w : wires) {
             for (PacketModel p : w.getPackets()) {
@@ -111,14 +117,32 @@ public class ShopController {
         }
         // Reset accumulated packet loss metric
         lossModel.reset();
+        deactivateFeature("O’Anahita");
     }
 
-    /** Helper: tries to deduct coins; returns true on success, false if not enough. */
+    /** Helper: deducts coins or shows error. */
     private boolean deductCoins(int cost) {
         if (!coinModel.spend(cost)) {
             shopView.setMessage("Not enough coins (need " + cost + ")");
             return false;
         }
         return true;
+    }
+
+    /** Marks a scroll as active, updates HUD. */
+    private void activateFeature(String name, int seconds) {
+        activeNames.add(name);
+        activeTimes.add(seconds);
+        hudController.setActiveFeatures(List.copyOf(activeNames), List.copyOf(activeTimes));
+    }
+
+    /** Removes a scroll from active list and updates HUD. */
+    private void deactivateFeature(String name) {
+        int idx = activeNames.indexOf(name);
+        if (idx >= 0) {
+            activeNames.remove(idx);
+            activeTimes.remove(idx);
+            hudController.setActiveFeatures(List.copyOf(activeNames), List.copyOf(activeTimes));
+        }
     }
 }

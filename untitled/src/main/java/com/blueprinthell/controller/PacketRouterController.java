@@ -1,17 +1,21 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.*;
+import com.blueprinthell.motion.ConstantSpeedStrategy;
+import com.blueprinthell.motion.MotionStrategy;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * Routes packets from a system‑box buffer onto outgoing wires.
- * ‑ اولویت با پورت سازگار و خالی
- * ‑ سپس پورت سازگار تصادفی
- * ‑ سپس هر پورت خالی
- * اگر هیچ پورتی موجود نباشد:
- *   • تلاش می‌کند پکت را مجدد در بافر قرار دهد؛ اگر بافر پر بود -> Packet‑Loss ++
- * همچنین سرعت و شتاب پکت را بر اساس سازگاری پورت و نوع پکت تنظیم می‌کند.
+ * <ul>
+ *   <li>اولویت با پورت خالی و سازگار</li>
+ *   <li>در غیر این صورت پورت سازگار تصادفی</li>
+ *   <li>در غیر این صورت پورت خالی</li>
+ *   <li>در صورت عدم امکان، تلاش برای بازگرداندن به بافر یا شمارش Packet Loss</li>
+ * </ul>
+ * Kinematics now driven by MotionStrategy instead of direct speed/acc.
  */
 public class PacketRouterController implements Updatable {
     private final SystemBoxModel box;
@@ -32,12 +36,12 @@ public class PacketRouterController implements Updatable {
 
     @Override
     public void update(double dt) {
-        // 1) drain buffer to avoid infinite re‑enqueue loops
+        // 1) Drain buffer
         List<PacketModel> toRoute = new ArrayList<>();
         PacketModel p;
         while ((p = box.pollPacket()) != null) toRoute.add(p);
 
-        // 2) attempt routing each packet once this tick
+        // 2) Route each
         for (PacketModel packet : toRoute) {
             List<PortModel> outs = box.getOutPorts();
             if (outs.isEmpty()) {
@@ -45,20 +49,23 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
-            // compatible ports
-            List<PortModel> compat = outs.stream().filter(port -> port.isCompatible(packet)).collect(Collectors.toList());
-            // empty compatible
-            List<PortModel> emptyCompat = compat.stream().filter(port -> isWireEmpty(port)).collect(Collectors.toList());
-            // empty any
-            List<PortModel> emptyAny = outs.stream().filter(this::isWireEmpty).collect(Collectors.toList());
+            // 3) select candidate port
+            List<PortModel> compat = outs.stream()
+                    .filter(port -> port.isCompatible(packet))
+                    .collect(Collectors.toList());
+            List<PortModel> emptyCompat = compat.stream()
+                    .filter(this::isWireEmpty)
+                    .collect(Collectors.toList());
+            List<PortModel> emptyAny = outs.stream()
+                    .filter(this::isWireEmpty)
+                    .collect(Collectors.toList());
 
             PortModel chosen = null;
             if (!emptyCompat.isEmpty()) chosen = emptyCompat.get(0);
-            else if (!compat.isEmpty())  chosen = compat.get(rnd.nextInt(compat.size()));
+            else if (!compat.isEmpty()) chosen = compat.get(rnd.nextInt(compat.size()));
             else if (!emptyAny.isEmpty()) chosen = emptyAny.get(0);
 
             if (chosen == null) {
-                // هیچ پورتی در دسترس نیست → سعی در برگرداندن به بافر
                 if (!box.enqueue(packet)) drop(packet);
                 continue;
             }
@@ -69,17 +76,14 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
-            // تنظیم سرعت / شتاب
-            double base = packet.getBaseSpeed();
+            // 4) assign motion strategy based on compatibility
             boolean comp = chosen.isCompatible(packet);
-            switch (packet.getType()) {
-                case SQUARE -> packet.setSpeed(comp ? base / 2 : base);
-                case TRIANGLE -> packet.setAcceleration(comp ? 0 : base);
-            }
+            double base = packet.getBaseSpeed();
+            MotionStrategy ms = new ConstantSpeedStrategy(comp ? base / 2 : base);
+            packet.setMotionStrategy(ms);
 
-            // اتصال به سیم
+            // 5) attach to wire
             wire.attachPacket(packet, 0.0);
-            destMap.putIfAbsent(wire, destMap.get(wire));
         }
     }
 
@@ -95,7 +99,6 @@ public class PacketRouterController implements Updatable {
     }
 
     private void drop(PacketModel packet) {
-        // simply count as loss; packet will be GC‑ed because no references held
         lossModel.increment();
     }
 }

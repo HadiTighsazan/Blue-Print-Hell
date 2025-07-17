@@ -130,7 +130,7 @@ public final class SnapshotService {
         SwingUtilities.invokeLater(() -> {
             gameView.reset(boxes, wires);
             packetRenderer.refreshAll();
-            hudView.setScore(scoreModel.getScore());
+
             hudView.setCoins(coinModel.getCoins());
             hudView.setPacketLoss(lossModel.getLostCount());
         });

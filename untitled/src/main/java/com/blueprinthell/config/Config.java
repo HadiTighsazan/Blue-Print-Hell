@@ -56,4 +56,8 @@ public final class Config {
 
     // فاصلهٔ زمانی تولید پکت روی هر سیم در منوی Sandbox (فعلاً بلااستفاده)
     public static final double PRODUCTION_INTERVAL_SECONDS = 1.0;
+
+    /** پایهٔ ظرفیت سپرِ پکت‌های محافظت-شده (noise units). */
+    public static final double DEFAULT_SHIELD_CAPACITY = 8.0;  // ← هر عدد منطقی ۵-۱۵ خوب است
+
 }
