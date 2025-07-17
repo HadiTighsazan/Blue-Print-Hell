@@ -13,10 +13,11 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Facade class that orchestrates high‑level flow, delegating detailed work to
- * helper services extracted from the original monolithic version.
+ * Facade class that orchestrates high‑level flow and delegates detailed work to helper services.
  */
 public class GameController implements NetworkController {
+
+    /* ---------------- Runtime‑injected ---------------- */
     private ScreenController screenController;
 
     /* ================================================================ */
@@ -40,8 +41,8 @@ public class GameController implements NetworkController {
     private ShopController       shopController;
 
     /* -------------------- Wiring -------------------- */
-    private final List<WireModel>                 wires   = new CopyOnWriteArrayList<>();
-    private final Map<WireModel, SystemBoxModel>  destMap = new HashMap<>();
+    private final List<WireModel>                wires   = new CopyOnWriteArrayList<>();
+    private final Map<WireModel, SystemBoxModel> destMap = new HashMap<>();
 
     /* -------------------- Services -------------------- */
     private final CollisionController collisionCtrl;
@@ -54,9 +55,13 @@ public class GameController implements NetworkController {
     private PacketRenderController packetRenderer;
     private LevelManager           levelManager;
 
+    /* -------------------- Producer Controller -------------------- */
+    private PacketProducerController producerController;
+
     /* ================================================================ */
     public GameController(JFrame mainFrame) {
         this.mainFrame = mainFrame;
+
         /* Build HUD + Game view */
         this.hudView  = new HudView(0, 0, 800, 50);
         this.gameView = new GameScreenView(hudView);
@@ -71,80 +76,150 @@ public class GameController implements NetworkController {
         /* Timeline */
         simulation.setTimelineController(timeline);
 
-        /* Key navigation (← / →) */
+        /* Key navigation (←/→) */
         gameView.setTemporalNavigationListener(this::onNavigateTime);
     }
 
     /* ---------------- Temporal navigation handler ---------------- */
-    /* ---------------- Temporal navigation handler ---------------- */
-    /**
-     * dir = -1 ⟹ یک فریم به عقب، dir = +1 ⟹ یک فریم به جلو.
-     * <p>هنگام اسکراب باید <b>حلقهٔ شبیه‌سازی</b> متوقف بماند تا تولیدکنندهٔ پکت‌ها
-     * دوباره فعال نشود؛ در غیر این صورت پس از بازگشت پکت به مبدأ، Producer مثل
-     * «شروع جدید» رفتار می‌کند و بسته‌های تکراری می‌سازد.</p>
-     */
     private void onNavigateTime(int dir) {
-        if (timeline.isPlaying()) return;           // فقط در حالت Pause مجاز است
-        simulation.stop();                          // اطمینان: هیچ Updatable اجرا نشود
-
+        if (timeline.isPlaying()) return;
+        simulation.stop();
         int target = timeline.getCurrentOffset() + (dir < 0 ? 1 : -1);
         timeline.scrubTo(target);
-
-        gameView.requestFocusInWindow();            // حفظ فوکوس
+        gameView.requestFocusInWindow();
     }
 
     /* ---------------- Level management ---------------- */
     public void setLevelManager(LevelManager mgr) { this.levelManager = mgr; }
-    public void startLevel(int idx) { LevelDefinition def = LevelGenerator.firstLevel(); for (int i=1;i<idx;i++) def = LevelGenerator.nextLevel(def); startLevel(def);}
-    public void startLevel(LevelDefinition def) {
-        if (levelManager == null) throw new IllegalStateException("LevelManager must be set before starting level");
-        /* Reset */
-        simulation.stop(); simulation.clearUpdatables();
-        scoreModel.reset(); coinModel.reset(); lossModel.reset(); snapshotMgr.clear();
-        timeline.resume(); usageModel.reset(def.totalWireLength());
-        wires.clear(); destMap.clear();
 
-        /* Build */
+    public void startLevel(int idx) {
+        LevelDefinition def = LevelGenerator.firstLevel();
+        for (int i = 1; i < idx; i++) def = LevelGenerator.nextLevel(def);
+        startLevel(def);
+    }
+
+    public void startLevel(LevelDefinition def) {
+        if (levelManager == null)
+            throw new IllegalStateException("LevelManager must be set before starting level");
+
+        /* ---------- Reset ---------- */
+        simulation.stop();
+        simulation.clearUpdatables();
+        scoreModel.reset();
+        coinModel.reset();
+        lossModel.reset();
+        snapshotMgr.clear();
+        timeline.resume();
+        usageModel.reset(def.totalWireLength());
+        wires.clear();
+        destMap.clear();
+
+        /* ---------- Build level ---------- */
         boxes = levelBuilder.build(def);
         buildWireControllers();
 
         /* Sources & sink */
-        List<SystemBoxModel> sources = new ArrayList<>(); SystemBoxModel sink=null;
-        for(int i=0;i<def.boxes().size();i++){var spec=def.boxes().get(i);var box=boxes.get(i); if(spec.isSource())sources.add(box); if(spec.isSink())sink=box;}
+        List<SystemBoxModel> sources = new ArrayList<>();
+        SystemBoxModel       sink    = null;
+        for (int i = 0; i < def.boxes().size(); i++) {
+            var spec = def.boxes().get(i);
+            var box  = boxes.get(i);
+            if (spec.isSource()) sources.add(box);
+            if (spec.isSink())   sink = box;
+        }
 
-        int count = Config.PACKETS_PER_PORT * (levelManager.getLevelIndex()+1);
-        PacketProducerController producer = new PacketProducerController(sources, wires, destMap, Config.DEFAULT_PACKET_SPEED, count);
-        hudCoord.wireLevel(producer);
-        simulation.register(producer);
+        /* Tag ports & callbacks */
+        WireModel.setSourceInputPorts(sources);
+        WireModel.setSimulationController(simulation);
+
+        /* ---------- Packet counts ---------- */
+        int stageIndex     = levelManager.getLevelIndex() + 1; // starts from 1
+        int perPortCount   = Config.PACKETS_PER_PORT * stageIndex;           // همان فرمول قبلی
+        int totalOutPorts  = sources.stream()
+                .mapToInt(b -> b.getOutPorts().size())  // ← جایگزین getOutPortCount()
+                .sum();
+        int plannedPackets = perPortCount * totalOutPorts;                   // کل بسته‌های این مرحله
+
+        /* ---------- Producer ---------- */
+        producerController = new PacketProducerController(
+                sources, wires, destMap,
+                Config.DEFAULT_PACKET_SPEED,
+                perPortCount); // به ازای هر پورت
+        hudCoord.wireLevel(producerController);
+        simulation.setPacketProducerController(producerController); // registers internally
+
+        /* ---------- Loss monitor ---------- */
+        LossMonitorController lossCtrl = new LossMonitorController(
+                lossModel,
+                plannedPackets,   // کل بسته‌های برنامه‌ریزی‌شده‌ی مرحله
+                0.5,              // آستانهٔ ۵۰٪
+                simulation,
+                screenController,
+                () -> startLevel(def)); // retry same level
+        simulation.register(lossCtrl);
+
+        /* ---------- Rendering & HUD ---------- */
         packetRenderer = new PacketRenderController(gameView.getGameArea(), wires);
 
-        this.hudController = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
-        this.shopController = new ShopController(mainFrame, simulation, coinModel, collisionCtrl, lossModel, wires, hudController);
+        hudController  = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
+        shopController = new ShopController(mainFrame, simulation, coinModel, collisionCtrl, lossModel, wires, hudController);
         hudView.getStoreButton().addActionListener(e -> shopController.openShop());
 
-        snapshotSvc = new SnapshotService(boxes, wires, scoreModel, coinModel, lossModel, usageModel, snapshotMgr, hudView, gameView, packetRenderer, List.of(producer));
-        registrar = new SimulationRegistrar(simulation, null, collisionCtrl, packetRenderer, scoreModel, coinModel, lossModel, usageModel, snapshotMgr, hudView, levelManager);
+        /* ---------- Snapshot services ---------- */
+        snapshotSvc = new SnapshotService(boxes, wires, scoreModel, coinModel, lossModel, usageModel, snapshotMgr,
+                hudView, gameView, packetRenderer, List.of(producerController));
 
-        List<Updatable> systemControllers = new ArrayList<>(); systemControllers.add(hudController);
-        registrar.registerAll(boxes, wires, destMap, sources, sink, producer, systemControllers);
+        registrar = new SimulationRegistrar(simulation, null, collisionCtrl, packetRenderer, scoreModel, coinModel,
+                lossModel, usageModel, snapshotMgr, hudView, levelManager);
+
+        List<Updatable> systemControllers = new ArrayList<>();
+        systemControllers.add(hudController);
+        registrar.registerAll(boxes, wires, destMap, sources, sink, producerController, systemControllers);
+
         updateStartEnabled();
     }
 
+    /* ---------- Helpers ---------- */
     private void buildWireControllers() {
-        WireCreationController creator = new WireCreationController(gameView, simulation, boxes, wires, destMap, usageModel, coinModel, this::updateStartEnabled);
+        WireCreationController creator = new WireCreationController(gameView, simulation, boxes,
+                wires, destMap, usageModel, coinModel, this::updateStartEnabled);
         new WireRemovalController(gameView, wires, destMap, creator, usageModel, this::updateStartEnabled);
     }
 
     private void updateStartEnabled() {
-        boolean allConnected = boxes.stream().allMatch(b -> b.getInPorts().stream().allMatch(this::isPortConnected) && b.getOutPorts().stream().allMatch(this::isPortConnected));
+        boolean allConnected = boxes.stream()
+                .allMatch(b -> b.getInPorts().stream().allMatch(this::isPortConnected)
+                        && b.getOutPorts().stream().allMatch(this::isPortConnected));
         hudCoord.setStartEnabled(allConnected);
     }
-    private boolean isPortConnected(PortModel p){return wires.stream().anyMatch(w->w.getSrcPort()==p||w.getDstPort()==p);}
+
+    private boolean isPortConnected(PortModel p) {
+        return wires.stream().anyMatch(w -> w.getSrcPort() == p || w.getDstPort() == p);
+    }
 
     /* ---------------- Snapshot API ---------------- */
-    @Override public NetworkSnapshot captureSnapshot(){return snapshotSvc.buildSnapshot();}
-    @Override public void restoreState(NetworkSnapshot snap){snapshotSvc.restore(snap);}
+    @Override
+    public NetworkSnapshot captureSnapshot() { return snapshotSvc.buildSnapshot(); }
 
-    /* ---------------- Getters ---------------- */
-    public GameScreenView getGameView(){return gameView;} public List<WireModel> getWires(){return wires;} public SimulationController getSimulation(){return simulation;} public CoinModel getCoinModel(){return coinModel;} public CollisionController getCollisionController(){return collisionCtrl;} public PacketLossModel getLossModel(){return lossModel;} public ScoreModel getScoreModel(){return scoreModel;} public HudController getHudController(){return hudController;} public void setScreenController(ScreenController sc){this.screenController=sc;}
+    @Override
+    public void restoreState(NetworkSnapshot snap) { snapshotSvc.restore(snap); }
+
+    /* ---------------- Getters & Setters ---------------- */
+    public GameScreenView getGameView()             { return gameView; }
+    public List<WireModel> getWires()               { return wires; }
+    public SimulationController getSimulation()     { return simulation; }
+    public CoinModel getCoinModel()                 { return coinModel; }
+    public CollisionController getCollisionController() { return collisionCtrl; }
+    public PacketLossModel getLossModel()           { return lossModel; }
+    public ScoreModel getScoreModel()               { return scoreModel; }
+    public HudController getHudController()         { return hudController; }
+
+    public void setScreenController(ScreenController sc) { this.screenController = sc; }
+
+    /**
+     * Returns the packet producer controller for external access.
+     */
+    public PacketProducerController getProducerController() {
+        return producerController;
+    }
 }

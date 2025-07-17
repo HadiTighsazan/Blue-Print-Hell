@@ -3,6 +3,9 @@ package com.blueprinthell.controller;
 import javax.swing.*;
 import com.blueprinthell.view.HudView;
 import java.util.List;
+import com.blueprinthell.controller.SimulationController;
+import com.blueprinthell.controller.PacketProducerController;
+import com.blueprinthell.model.WireModel;
 
 /**
  * Entry-point class that wires together the high-level controllers and shows the main window.
@@ -25,6 +28,14 @@ public class MainController {
             // provide ScreenController for game-over and other screen flows
             gameController.setScreenController(screenController);
 
+            // جدید: لینک دادن Simulation و PacketProducer
+            SimulationController simController = gameController.getSimulation();
+            PacketProducerController producerController = gameController.getProducerController();
+            // ثبت کنترلر شبیه‌سازی در WireModel برای دریافت اعلان بازگشت پکت
+            WireModel.setSimulationController(simController);
+            // ثبت تولیدکننده پکت در SimulationController
+            simController.setPacketProducerController(producerController);
+
             // Register the dynamic game screen so it can be displayed
             screenController.registerGameScreen(gameController.getGameView());
 
@@ -35,7 +46,7 @@ public class MainController {
             UIController ui = new UIController(
                     frame,
                     (HudView) gameController.getGameView().getHudView(),
-                    gameController.getSimulation(),
+                    simController,
                     gameController.getCoinModel(),
                     gameController.getCollisionController(),
                     gameController.getLossModel(),

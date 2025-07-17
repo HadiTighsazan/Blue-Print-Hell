@@ -9,12 +9,16 @@ import java.util.List;
 /**
  * Main simulation controller that triggers update(dt) on all registered Updatable models
  * and optionally records snapshots each second via a TimelineController.
+ * همچنین وظیفه‌ی مدیریت بازتولید پکت‌های بازگشتی را به عهده دارد.
  */
 public class SimulationController {
-    private final List<Updatable> updatables = new ArrayList<>(); // guarded by 'updatables' itself
+    private final List<Updatable> updatables = new ArrayList<>(); // guarded by itself
     private final Timer timer;
     private TimelineController timelineController;
     private double elapsedSeconds = 0.0;
+
+    // برای نگهداری مرجع به PacketProducerController جهت بازتولید پکت‌های بازگشتی
+    private PacketProducerController packetProducer;
 
     /**
      * Constructs a simulation controller with the given frame rate.
@@ -109,5 +113,25 @@ public class SimulationController {
             updatables.clear();
         }
         elapsedSeconds = 0.0;
+    }
+
+    /**
+     * Sets the PacketProducerController so that SimulationController
+     * can forward returned-packet notifications.
+     * @param producer the packet producer controller
+     */
+    public void setPacketProducerController(PacketProducerController producer) {
+        this.packetProducer = producer;
+        register(producer);
+    }
+
+    /**
+     * هر زمان که یک پکت به مبدا برگشت باید این متد فراخوانی شود
+     * تا اعتبار بازگشتی در تولیدکننده افزایش یابد.
+     */
+    public void onPacketReturned() {
+        if (packetProducer != null) {
+            packetProducer.onPacketReturned();
+        }
     }
 }
