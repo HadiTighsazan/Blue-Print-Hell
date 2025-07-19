@@ -12,10 +12,6 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class GameController implements NetworkController {
-    // Track last level for retry handling
-    private LevelDefinition lastDef = null;
-    private int lastBoxesCount = 0;
-
     private ScreenController screenController;
 
     private final SimulationController simulation = new SimulationController(60);
@@ -84,25 +80,6 @@ public class GameController implements NetworkController {
     }
 
     public void startLevel(LevelDefinition def) {
-        // Handle retry of same level: remove boxes and wires from prior attempt of this level
-        if (lastDef != null && lastDef.equals(def)) {
-            // Preserve only boxes up to lastBoxesCount
-            List<SystemBoxModel> prev = new ArrayList<>(boxes.subList(0, lastBoxesCount));
-            // Determine valid ports of preserved boxes
-            Set<PortModel> validPorts = new HashSet<>();
-            for (SystemBoxModel b : prev) {
-                validPorts.addAll(b.getInPorts());
-                validPorts.addAll(b.getOutPorts());
-            }
-            // Remove wires that reference removed boxes
-            wires.removeIf(w -> !validPorts.contains(w.getSrcPort()) || !validPorts.contains(w.getDstPort()));
-            // Clean up destMap entries for removed wires
-            destMap.keySet().removeIf(w -> !wires.contains(w));
-            boxes = prev;
-        }
-        // Update for new build
-        lastDef = def;
-        lastBoxesCount = boxes.size();
         if (levelManager == null) {
             throw new IllegalStateException("LevelManager must be set before starting level");
         }
@@ -128,18 +105,17 @@ public class GameController implements NetworkController {
 
         buildWireControllers();
 
-        // Identify sources & sink among the newly added boxes only
         List<SystemBoxModel> sources = new ArrayList<>();
         SystemBoxModel sink = null;
-        int specCount = def.boxes().size();
-        int offset = boxes.size() - specCount;
-        for (int i = 0; i < specCount; i++) {
+        for (int i = 0; i < boxes.size(); i++) {
             LevelDefinition.BoxSpec spec = def.boxes().get(i);
-            int idx = offset + i;
-            if (idx < 0 || idx >= boxes.size()) continue;
-            SystemBoxModel box = boxes.get(idx);
-            if (spec.isSource()) sources.add(box);
-            if (spec.isSink()) sink = box;
+            SystemBoxModel box = boxes.get(i);
+            if (spec.isSource()) {
+                sources.add(box);
+            }
+            if (spec.isSink()) {
+                sink = box;
+            }
         }
 
         WireModel.setSourceInputPorts(sources);
@@ -147,7 +123,9 @@ public class GameController implements NetworkController {
 
         int stageIndex = levelManager.getLevelIndex() + 1;
         int perPortCount = Config.PACKETS_PER_PORT * stageIndex;
-        int totalOutPorts = sources.stream().mapToInt(b -> b.getOutPorts().size()).sum();
+        int totalOutPorts = sources.stream()
+                .mapToInt(b -> b.getOutPorts().size())
+                .sum();
         int plannedPackets = perPortCount * totalOutPorts;
 
         producerController = new PacketProducerController(
