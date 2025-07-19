@@ -50,19 +50,14 @@ public class WireRemovalController {
                 Cursor cursor = removalMode
                         ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
                         : Cursor.getDefaultCursor();
-                // Set cursor on both area and glass pane
                 area.setCursor(cursor);
                 JComponent glass = (JComponent) root.getGlassPane();
                 glass.setCursor(cursor);
                 glass.setVisible(removalMode);
-                if (removalMode) {
-                    // Ensure focus for mouse events
-                    glass.requestFocusInWindow();
-                }
+                if (removalMode) glass.requestFocusInWindow();
             }
         });
 
-        // Define removal listener
         removalMouseAdapter = new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (!removalMode) return;
@@ -74,19 +69,30 @@ public class WireRemovalController {
                         Point local = SwingUtilities.convertPoint(area, click, wv);
                         if (wv.contains(local.x, local.y)) {
                             WireModel wm = wv.getModel();
+                            // Prevent removal of wires from previous levels
+                            if (wm.isForPreviousLevels()) {
+                                Toolkit.getDefaultToolkit().beep();
+                                removalMode = false;
+                                area.setCursor(Cursor.getDefaultCursor());
+                                JComponent glassPane = (JComponent) root.getGlassPane();
+                                glassPane.setCursor(Cursor.getDefaultCursor());
+                                glassPane.setVisible(false);
+                                break;
+                            }
+                            // Proceed with removal for current-level wires
                             wires.remove(wm);
                             destMap.remove(wm);
                             creator.freePortsForWire(wm);
                             usageModel.freeWire(wm.getLength());
                             area.remove(wv);
-                            area.revalidate(); area.repaint();
+                            area.revalidate();
+                            area.repaint();
                             if (networkChanged != null) networkChanged.run();
-                            // exit removal mode after one deletion
                             removalMode = false;
                             area.setCursor(Cursor.getDefaultCursor());
-                            JComponent glass = (JComponent) root.getGlassPane();
-                            glass.setCursor(Cursor.getDefaultCursor());
-                            glass.setVisible(false);
+                            JComponent glass2 = (JComponent) root.getGlassPane();
+                            glass2.setCursor(Cursor.getDefaultCursor());
+                            glass2.setVisible(false);
                             break;
                         }
                     }
@@ -94,13 +100,11 @@ public class WireRemovalController {
             }
         };
 
-        // Attach listener to glass pane to catch clicks above any overlay
-        JComponent glass = (JComponent) root.getGlassPane();
-        glass.setVisible(false);
-        glass.setFocusable(true);
-        glass.addMouseListener(removalMouseAdapter);
+        JComponent glassPane = (JComponent) root.getGlassPane();
+        glassPane.setVisible(false);
+        glassPane.setFocusable(true);
+        glassPane.addMouseListener(removalMouseAdapter);
 
-        // Also ensure the game area can receive focus if needed
         area.setFocusable(true);
     }
 }

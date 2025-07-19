@@ -1,5 +1,7 @@
 package com.blueprinthell.config;
 
+import com.blueprinthell.model.PortShape;
+
 import java.awt.Color;
 
 /**
@@ -8,6 +10,10 @@ import java.awt.Color;
 public final class Config {
     public static final int SYSTEM_WIDTH = 96;
     public static final int SYSTEM_HEIGHT = 96;
+    public static final int MAX_OUTPUT_PORTS = 3;
+
+    //**********************حذف کنش
+    public static final PortShape DEFAULT_PORT_SHAPE = PortShape.SQUARE;
 
     private Config() { /* Prevent instantiation */ }
 

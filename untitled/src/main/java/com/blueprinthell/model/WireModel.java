@@ -38,6 +38,11 @@ public class WireModel implements Serializable {
      */
     private static Set<PortModel> sourceInputPorts = Collections.emptySet();
 
+    /**
+     * اگر true باشد، این سیم متعلق به مراحل قبلی است و غیرقابل حذف خواهد بود.
+     */
+    private boolean isForPreviousLevels = false;
+
     /** تنظیم SimulationController برای دریافت اعلان‌های بازگشت پکت */
     public static void setSimulationController(SimulationController sc) {
         simulationController = sc;
@@ -56,6 +61,20 @@ public class WireModel implements Serializable {
         this.src = src;
         this.dst = dst;
         this.path = buildDefaultPath();
+    }
+
+    /**
+     * آیا این سیم متعلق به سطوح قبلی است؟
+     */
+    public boolean isForPreviousLevels() {
+        return isForPreviousLevels;
+    }
+
+    /**
+     * تعیین اینکه سیم به مراحل قبلی تعلق دارد یا خیر
+     */
+    public void setForPreviousLevels(boolean flag) {
+        this.isForPreviousLevels = flag;
     }
 
     private void syncEndpoints() {

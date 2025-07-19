@@ -132,4 +132,25 @@ public class SystemBoxModel extends GameObjectModel implements Serializable {
                 ? (Queue<PacketModel>) java.util.Collections.unmodifiableCollection(buffer)
                 : new ArrayDeque<>(buffer);
     }
+    /**
+     * Adds one output port if total does not exceed a maximum (e.g., 3).
+     */
+    public void addOutputPort(PortShape shape) {
+        if (outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
+        int portSize = Config.PORT_SIZE;
+        // Add new port at end of outPorts
+        outPorts.add(new PortModel(getX() + getWidth() - portSize,
+                getY(), shape, false));
+        updatePortsPosition();
+    }
+
+    /**
+     * Attempts to remove one output port; returns true if successful.
+     */
+    public boolean removeOutputPort() {
+        if (outPorts.isEmpty()) return false;
+        outPorts.remove(outPorts.size() - 1);
+        updatePortsPosition();
+        return true;
+    }
 }

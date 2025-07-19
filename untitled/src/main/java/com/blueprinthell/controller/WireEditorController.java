@@ -32,7 +32,7 @@ public class WireEditorController {
     private final WireView            wireView;
     private final List<SystemBoxView> obstacles;
     private final CoinModel           coins;
-    private final WireUsageModel      usage;     // ‑‑‑ NEW: برای بروزرسانی طول مصرفی
+    private final WireUsageModel      usage;
     private final Runnable            networkChanged;
 
     /* state */
@@ -55,7 +55,6 @@ public class WireEditorController {
         installMouseHandlers();
     }
 
-    /* ------------------------------------------------------------------ */
     private void installMouseHandlers() {
         MouseAdapter ma = new MouseAdapter() {
             @Override public void mousePressed(MouseEvent e) {
@@ -72,8 +71,12 @@ public class WireEditorController {
         wireView.addMouseMotionListener(ma);
     }
 
-    /* ---------------- handle selection / creation ---------------------- */
     private void selectOrAddHandle(Point click) {
+        // Prevent editing of wires from previous levels
+        if (wire.isForPreviousLevels()) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
         List<Point> cps = new java.util.ArrayList<>(wire.getPath().getPoints());
         for (int i = 1; i < cps.size() - 1; i++) {
             if (cps.get(i).distance(click) <= HANDLE_RADIUS) { dragIndex = i; return; }
@@ -89,8 +92,13 @@ public class WireEditorController {
         }
     }
 
-    /* ---------------- dragging ---------------------------------------- */
     private void dragHandle(Point p) {
+        // Prevent dragging of wires from previous levels
+        if (wire.isForPreviousLevels()) {
+            Toolkit.getDefaultToolkit().beep();
+            dragIndex = -1;
+            return;
+        }
         if (dragIndex < 0) return;
         List<Point> cps = new java.util.ArrayList<>(wire.getPath().getPoints());
         cps.set(dragIndex, p);
@@ -98,19 +106,15 @@ public class WireEditorController {
         commitPath(cps);
     }
 
-    /* ---------------- commit with usage update ------------------------ */
     private void commitPath(List<Point> cps) {
         double oldLen = wire.getLength();
         WirePath newPath = new WirePath(cps);
         double newLen = WirePhysics.length(newPath);
         double delta  = newLen - oldLen;
 
-        // تلاش برای رزرو طول اضافی (در صورت افزایشی بودن)
-        if (delta > 1e-6) { // افزایش طول
+        if (delta > 1e-6) {
             if (!usage.useWire(delta)) { Toolkit.getDefaultToolkit().beep(); return; }
-        }
-        // آزاد کردن طول در صورت کوتاه‌تر شدن
-        else if (delta < -1e-6) {
+        } else if (delta < -1e-6) {
             usage.freeWire(-delta);
         }
 
@@ -119,7 +123,6 @@ public class WireEditorController {
         if (networkChanged != null) networkChanged.run();
     }
 
-    /* ---------------- obstacle & geometry helpers --------------------- */
     private boolean intersectsAnyObstacle(List<Point> cps) {
         for (int i = 0; i < cps.size() - 1; i++) {
             Point a = cps.get(i), b = cps.get(i + 1);
@@ -141,7 +144,6 @@ public class WireEditorController {
         return true;
     }
 
-    /* ---------------- misc helpers ------------------------------------ */
     private static int nearestSegmentIndex(List<Point> cps, Point click) {
         double min = CLICK_DIST; int idx = -1;
         for (int i = 0; i < cps.size() - 1; i++) {

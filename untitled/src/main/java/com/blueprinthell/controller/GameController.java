@@ -51,7 +51,7 @@ public class GameController implements NetworkController {
     private SimulationRegistrar       registrar;
 
     /* -------------------- Runtime per‑level -------------------- */
-    private List<SystemBoxModel>   boxes = Collections.emptyList();
+    private List<SystemBoxModel>   boxes = new ArrayList<>();
     private PacketRenderController packetRenderer;
     private LevelManager           levelManager;
 
@@ -111,11 +111,12 @@ public class GameController implements NetworkController {
         snapshotMgr.clear();
         timeline.resume();
         usageModel.reset(def.totalWireLength());
-        wires.clear();
-        destMap.clear();
+        // Preserve previous wires and destMap to maintain connections
+        // wires.clear();
+        // destMap.clear();
 
         /* ---------- Build level ---------- */
-        boxes = levelBuilder.build(def);
+        boxes = levelBuilder.build(def, boxes);
         buildWireControllers();
 
         /* Sources & sink */
@@ -169,8 +170,9 @@ public class GameController implements NetworkController {
         snapshotSvc = new SnapshotService(boxes, wires, scoreModel, coinModel, lossModel, usageModel, snapshotMgr,
                 hudView, gameView, packetRenderer, List.of(producerController));
 
-        registrar = new SimulationRegistrar(simulation, null, collisionCtrl, packetRenderer, scoreModel, coinModel,
-                lossModel, usageModel, snapshotMgr, hudView, levelManager);
+
+        registrar = new SimulationRegistrar(simulation, null, collisionCtrl, packetRenderer, scoreModel, coinModel, lossModel, usageModel, snapshotMgr, hudView, levelManager);
+
 
         List<Updatable> systemControllers = new ArrayList<>();
         systemControllers.add(hudController);
