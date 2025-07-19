@@ -24,6 +24,7 @@ public class WireRemovalController {
     private final WireUsageModel usageModel;
     private final Runnable networkChanged;
     private boolean removalMode = false;
+    private final MouseAdapter removalMouseAdapter;
 
     public WireRemovalController(GameScreenView gameView,
                                  List<WireModel> wires,
@@ -39,7 +40,6 @@ public class WireRemovalController {
         this.networkChanged = networkChanged;
 
         JPanel area = gameView.getGameArea();
-        // Register Space key on the root pane to toggle removal mode
         JRootPane root = SwingUtilities.getRootPane(area);
         InputMap im = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = root.getActionMap();
@@ -50,16 +50,23 @@ public class WireRemovalController {
                 Cursor cursor = removalMode
                         ? Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)
                         : Cursor.getDefaultCursor();
+                // Set cursor on both area and glass pane
                 area.setCursor(cursor);
+                JComponent glass = (JComponent) root.getGlassPane();
+                glass.setCursor(cursor);
+                glass.setVisible(removalMode);
+                if (removalMode) {
+                    // Ensure focus for mouse events
+                    glass.requestFocusInWindow();
+                }
             }
         });
 
-
-
-        area.addMouseListener(new MouseAdapter() {
+        // Define removal listener
+        removalMouseAdapter = new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 if (!removalMode) return;
-                Point click = e.getPoint();
+                Point click = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), area);
                 Component[] comps = area.getComponents();
                 for (int i = comps.length - 1; i >= 0; i--) {
                     Component c = comps[i];
@@ -77,11 +84,23 @@ public class WireRemovalController {
                             // exit removal mode after one deletion
                             removalMode = false;
                             area.setCursor(Cursor.getDefaultCursor());
+                            JComponent glass = (JComponent) root.getGlassPane();
+                            glass.setCursor(Cursor.getDefaultCursor());
+                            glass.setVisible(false);
                             break;
                         }
                     }
                 }
             }
-        });
+        };
+
+        // Attach listener to glass pane to catch clicks above any overlay
+        JComponent glass = (JComponent) root.getGlassPane();
+        glass.setVisible(false);
+        glass.setFocusable(true);
+        glass.addMouseListener(removalMouseAdapter);
+
+        // Also ensure the game area can receive focus if needed
+        area.setFocusable(true);
     }
 }
