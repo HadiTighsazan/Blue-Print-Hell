@@ -19,7 +19,8 @@ public class MainController {
             frame.setResizable(false);
             frame.setSize(800, 650);
 
-            /* ---------------- Controllers wiring ---------------- */
+            /* --------
+            -------- Controllers wiring ---------------- */
             // 1. Screen manager (CardLayout)
             ScreenController screenController = new ScreenController(frame);
 

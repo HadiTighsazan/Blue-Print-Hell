@@ -53,9 +53,21 @@ public final class LevelBuilder {
         List<LevelDefinition.BoxSpec> newSpecs = existingCount < allSpecs.size()
                 ? allSpecs.subList(existingCount, allSpecs.size())
                 : List.of();
-        int requiredPorts = newSpecs.stream()
+        // Calculate net required new output ports: inputPorts(new) - outputPorts(new)
+        int inputPortsNew = newSpecs.stream()
+                .mapToInt(spec -> spec.inShapes().size())
+                .sum();
+        int outputPortsNew = newSpecs.stream()
                 .mapToInt(spec -> spec.outShapes().size())
                 .sum();
+        int requiredPorts = Math.max(0, inputPortsNew - outputPortsNew);
+        // Check available capacity in existing boxes
+        int availableCapacity = existingBoxes.stream()
+                .mapToInt(box -> Config.MAX_OUTPUT_PORTS - box.getOutPorts().size())
+                .sum();
+        if (requiredPorts > availableCapacity) {
+            throw new IllegalStateException("Insufficient port capacity in existing systems for new stage");
+        }
 
         // 1) distribute ports among existing boxes based on new specs need
         for (SystemBoxModel box : existingBoxes) {
