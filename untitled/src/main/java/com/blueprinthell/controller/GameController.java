@@ -75,6 +75,15 @@ public class GameController implements NetworkController {
     private WireCreationController        wireCreator;
 
     /* ================================================================ */
+    /*                    ***  NEW persistent field  ***                */
+    /* ================================================================ */
+    /**
+     * Stores the definition of the level currently running so that we can restart (retry)
+     * the exact same stage later without relying on external callers to re‑pass it.
+     */
+    private LevelDefinition currentDef;
+
+    /* ================================================================ */
     /*                               Ctor                               */
     /* ================================================================ */
     public GameController(JFrame mainFrame) {
@@ -125,6 +134,9 @@ public class GameController implements NetworkController {
     /*                Core level bootstrap (fresh start)               */
     /* --------------------------------------------------------------- */
     public void startLevel(LevelDefinition def) {
+        // ① remember the definition we are about to run
+        this.currentDef = def;
+
         if (levelManager == null) {
             throw new IllegalStateException("LevelManager must be set before starting level");
         }
@@ -132,12 +144,6 @@ public class GameController implements NetworkController {
         /* ------------------------------------------------------------------ */
         /*  Fresh game (index 0) ⇒ full reset of boxes & wires collections   */
         /* ------------------------------------------------------------------ */
-        // When a brand‑new game is launched from the main menu we may still
-        // be holding onto boxes / wires from a previous run (e.g. after the
-        // player quit to menu without restarting the JVM).  Starting level 1
-        // with those leftovers causes size mismatch (ArrayIndexOutOfBounds).
-        // If the LevelManager index is 0 we assume a fresh run and wipe all
-        // transient collections so the engine can rebuild cleanly.
         if (levelManager.getLevelIndex() == 0) {
             boxes.clear();
             wires.clear();
@@ -147,11 +153,6 @@ public class GameController implements NetworkController {
         /* More defensively, ensure boxes list never exceeds definition size  */
         if (boxes.size() > def.boxes().size()) {
             boxes = new ArrayList<>(boxes.subList(0, def.boxes().size()));
-        }
-
-        /* ----- hard reset sim & HUD for new stage ----- */
-        if (levelManager == null) {
-            throw new IllegalStateException("LevelManager must be set before starting level");
         }
 
         /* ----- hard reset sim & HUD for new stage ----- */
@@ -210,7 +211,7 @@ public class GameController implements NetworkController {
                 0.5,
                 simulation,
                 screenController,
-                () -> retryLevel(def)               // ✨ changed
+                this::retryStage              // 🎯 use new retry method
         );
         simulation.register(lossCtrl);
 
@@ -313,10 +314,28 @@ public class GameController implements NetworkController {
     }
 
     /**
-     * Called by LossMonitor when player clicks “Retry”.
-     * Stops simulation, purges current‑level wires, then restarts the same
-     * LevelDefinition from scratch while preserving carry‑over circuits.
+     * Public helper to retry the current stage, preserving carry‑over circuits.
+     * Stops simulation, purges current‑level wires, then restarts using the
+     * {@code currentDef} stored when the level was first launched.
      */
+    public void retryStage() {
+        if (currentDef == null) {
+            throw new IllegalStateException("Cannot retry before a level has been started");
+        }
+        simulation.stop();
+        purgeCurrentLevelWires();
+        startLevel(currentDef);
+    }
+
+    /* --------------------------------------------------------------- */
+    /*           Legacy helper kept for backward compatibility         */
+    /* --------------------------------------------------------------- */
+    /**
+     * @deprecated Use {@link #retryStage()} instead. This variant keeps the
+     *             previous signature for callers that still pass the
+     *             definition explicitly.
+     */
+    @Deprecated
     private void retryLevel(LevelDefinition def) {
         simulation.stop();
         purgeCurrentLevelWires();

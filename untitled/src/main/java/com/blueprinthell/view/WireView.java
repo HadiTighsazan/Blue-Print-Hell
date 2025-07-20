@@ -26,7 +26,7 @@ public class WireView extends JComponent {
     private static final int BEND_RADIUS = 8;
 
     // Hit‑test tolerance (pixels)
-    private static final int HIT_PAD = (int) Math.max(6, Config.STROKE_WIDTH_WIRE + 2);
+    private static final int HIT_PAD = 8;
 
     public WireView(WireModel model, PortView src, PortView dst) {
         this.model = model;

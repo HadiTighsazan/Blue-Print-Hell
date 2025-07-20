@@ -13,10 +13,12 @@ import javax.swing.*;
 public class MenuController {
     private final ScreenController screenController;
     private final LevelManager     levelManager;
+    private final GameController   gameController;   // reference needed for retry
 
     public MenuController(ScreenController screenController,
                           GameController gameController) {
         this.screenController = screenController;
+        this.gameController   = gameController; // save for later
         // LevelManager now needs ScreenController for mission‑passed screen
         this.levelManager = new LevelManager(gameController, screenController);
         // Inject back so GameController can notify success/fail
@@ -57,10 +59,12 @@ public class MenuController {
 
         /* ----- Game Over ----- */
         GameOverView gameOver = screenController.getGameOverView();
+        // Retry now uses GameController.retryStage() instead of starting a fresh game
         gameOver.retryButton.addActionListener(e -> {
-            levelManager.startGame();
-            screenController.showScreen(ScreenController.GAME_SCREEN);
+            gameController.retryStage();                             // ریست منطق بازی
+            screenController.showScreen(ScreenController.GAME_SCREEN); // برگشت به نمای بازی
         });
+
         gameOver.mainMenuButton.addActionListener(e ->
                 screenController.showScreen(ScreenController.MAIN_MENU));
 
