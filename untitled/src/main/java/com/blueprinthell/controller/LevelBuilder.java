@@ -93,6 +93,15 @@ public final class LevelBuilder {
         // 3) merge existing and new, then paint
         List<SystemBoxModel> all = new ArrayList<>(existingBoxes);
         all.addAll(newBoxes);
+
+        // 🔧 تضمین وجود حداقل یک سیستم مقصد (بدون خروجی)
+        boolean hasDestination = all.stream()
+                .anyMatch(box -> box.getOutPorts().isEmpty());
+        if (!hasDestination && !all.isEmpty()) {
+            // حذف یک خروجی از آخرین جعبه برای ایجاد سیستم مقصد
+            all.get(all.size() - 1).removeOutputPort();
+        }
+
         gameView.reset(all, wires);
 
         // 4) attach drag behaviour

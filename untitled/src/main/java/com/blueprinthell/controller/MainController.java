@@ -2,6 +2,8 @@ package com.blueprinthell.controller;
 
 import javax.swing.*;
 import com.blueprinthell.view.HudView;
+
+import java.awt.*;
 import java.util.List;
 import com.blueprinthell.controller.SimulationController;
 import com.blueprinthell.controller.PacketProducerController;
@@ -18,8 +20,13 @@ public class MainController {
             JFrame frame = new JFrame("BlueprintHell");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setResizable(false);
-            frame.setSize(800, 650);
-
+            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+// (۱) تنظیم اندازهٔ پنجره برابر اندازهٔ صفحه
+            frame.setSize(screenSize.width, screenSize.height);
+// (۲) قرار دادن پنجره در حالت بزرگنمایی‌شده (maximized)
+            frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+// اگر می‌خواهید نوار عنوان و حاشیه‌ها هم حذف شوند، قبل از setVisible:
+            frame.setUndecorated(true);
             /* --------
             -------- Controllers wiring ---------------- */
             // 1. Screen manager (CardLayout)
