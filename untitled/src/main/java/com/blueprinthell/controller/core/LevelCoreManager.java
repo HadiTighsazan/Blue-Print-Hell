@@ -7,6 +7,7 @@ import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
+import com.blueprinthell.model.PortModel;
 
 import java.util.*;
 
@@ -32,6 +33,9 @@ public class LevelCoreManager {
     private final List<SystemBoxModel>  boxes   = new ArrayList<>();
     private final List<WireModel>       wires   = new ArrayList<>();
     private final Map<WireModel, SystemBoxModel> destMap = new HashMap<>();
+
+    // Map پورت → باکس برای Bounce در CollisionController
+    private final Map<PortModel, SystemBoxModel> portToBox = new HashMap<>();
 
     // کنترلرهای وابسته به سیم‌کشی
     private WireCreationController wireCreator;
@@ -81,6 +85,8 @@ public class LevelCoreManager {
 
         // 3) ساخت Box ها (LevelBuilder در صورت داشتن registry برای هر Box رفتار Normal ثبت می‌کند)
         boxes.addAll(levelBuilder.build(def));
+        // بازسازی نگاشت پورت→باکس برای برخوردها
+        rebuildPortToBoxMap();
 
         // 4) ساخت کنترلرهای سیم‌کشی
         buildWireControllers();
@@ -108,6 +114,7 @@ public class LevelCoreManager {
         List<SystemBoxModel> all = levelBuilder.extend(boxes, specs);
         boxes.clear();
         boxes.addAll(all);
+        rebuildPortToBoxMap();
         // چون لیست boxes در WireCreationController به صورت reference پاس شده، اگر عوض شد باید کنترلر را دوباره بسازیم
         buildWireControllers();
     }
@@ -161,6 +168,16 @@ public class LevelCoreManager {
     public WireRemovalController  getWireRemover() { return wireRemover; }
     public WireUsageModel         getUsageModel()  { return usageModel; }
     public BehaviorRegistry       getBehaviorRegistry() { return behaviorRegistry; }
+    public Map<PortModel, SystemBoxModel> getPortToBoxMap() { return portToBox; }
+
+    /** بازسازی Map پورت→باکس بر اساس لیست فعلی باکس‌ها */
+    private void rebuildPortToBoxMap() {
+        portToBox.clear();
+        for (SystemBoxModel b : boxes) {
+            for (PortModel p : b.getInPorts())  portToBox.put(p, b);
+            for (PortModel p : b.getOutPorts()) portToBox.put(p, b);
+        }
+    }
 
     /* ============================ UI Sync ============================ */
     /**

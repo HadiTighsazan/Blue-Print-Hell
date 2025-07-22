@@ -1,50 +1,63 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.model.PacketLossModel;
-import com.blueprinthell.model.PacketModel;
-import com.blueprinthell.model.ProtectedPacket;
-import com.blueprinthell.model.WireModel;
-import com.blueprinthell.controller.SpatialHashGrid;
+import com.blueprinthell.media.ResourceManager;
+import com.blueprinthell.model.*;
+import com.blueprinthell.motion.KinematicsProfile;
+import com.blueprinthell.motion.KinematicsRegistry;
 
 import javax.sound.sampled.Clip;
-import com.blueprinthell.media.ResourceManager;
-import java.awt.Point;
-import java.util.ArrayList;
-import java.util.HashSet;
+import java.awt.*;
+import java.util.*;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Detects collisions between packets using a spatial-hash grid; increases noise,
- * propagates impact waves to nearby packets, and removes packets whose noise exceeds MAX_NOISE.
- * Ignores collisions for ProtectedPacket while its shield remains.
+ * propagates impact waves, removes over‑noised packets, **و** پکت‌های MSG1 را پس از برخورد
+ * به باکس مبدأ بازمی‌گرداند (Bounce).
  */
-public class CollisionController implements com.blueprinthell.model.Updatable {
+public class CollisionController implements Updatable {
     private final List<WireModel> wires;
     private final SpatialHashGrid<PacketModel> grid;
     private final PacketLossModel lossModel;
 
+    /** Map پورت → باکس برای بازگرداندن پکت‌ها */
+    private Map<PortModel, SystemBoxModel> portToBox = Collections.emptyMap();
+
     /* ---- Tunables ---- */
-    private static final int    CELL_SIZE       = 50;
-    private static final double COLLISION_RADIUS= 18.0;
-    private static final double NOISE_INCREMENT = 0.5;
-    private static final double MAX_NOISE       = 5.0;
-    private static final double IMPACT_RADIUS   = 100.0;
-    private static final double IMPACT_STRENGTH = 1.0;
+    private static final int    CELL_SIZE        = 50;
+    private static final double COLLISION_RADIUS = 18.0;
+    private static final double NOISE_INCREMENT  = 0.5;
+    private static final double MAX_NOISE        = 5.0;
+    private static final double IMPACT_RADIUS    = 100.0;
+    private static final double IMPACT_STRENGTH  = 1.0;
 
     /* ---- Runtime Flags ---- */
-    private boolean collisionsEnabled  = true;
-    private boolean impactWaveEnabled  = true;
+    private boolean collisionsEnabled = true;
+    private boolean impactWaveEnabled = true;
 
+    /* ------------------------- Ctors ------------------------- */
     public CollisionController(List<WireModel> wires, PacketLossModel lossModel) {
+        this(wires, lossModel, Collections.emptyMap());
+    }
+
+    public CollisionController(List<WireModel> wires,
+                               PacketLossModel lossModel,
+                               Map<PortModel, SystemBoxModel> portToBox) {
         this.wires     = wires;
         this.lossModel = lossModel;
         this.grid      = new SpatialHashGrid<>(CELL_SIZE);
+        if (portToBox != null) this.portToBox = portToBox;
     }
 
+    /** تزریق/به‌روزرسانی نقشهٔ پورت→باکس در زمان اجرا (مثلاً پس از rebuild). */
+    public void setPortToBoxMap(Map<PortModel, SystemBoxModel> map) {
+        this.portToBox = (map != null) ? map : Collections.emptyMap();
+    }
+
+    /* ------------------------- Update ------------------------- */
     @Override
     public void update(double dt) {
-        List<Point> impacts = new ArrayList<>();
+        List<Point> impacts = Collections.emptyList();
         if (collisionsEnabled) {
             impacts = performCollisionPass();
         }
@@ -54,13 +67,14 @@ public class CollisionController implements com.blueprinthell.model.Updatable {
         handleNoiseRemovalAndSound();
     }
 
+    /* -------------------- Collision pass --------------------- */
     private List<Point> performCollisionPass() {
         List<Point> impactPoints = new ArrayList<>();
         grid.clear();
-        // Broad phase: insert positions on wire path
+        // Broad phase
         for (WireModel w : wires) {
             for (PacketModel p : w.getPackets()) {
-                if (p instanceof ProtectedPacket pp && pp.getShield() > 0) continue;
+                if (isShielded(p)) continue;
                 Point pos = w.pointAt(p.getProgress());
                 grid.insert(pos.x, pos.y, p);
             }
@@ -70,15 +84,16 @@ public class CollisionController implements com.blueprinthell.model.Updatable {
         for (WireModel w : wires) {
             for (PacketModel p : new ArrayList<>(w.getPackets())) {
                 if (processed.contains(p) || p.getProgress() <= 0) continue;
-                if (p instanceof ProtectedPacket pp && pp.getShield() > 0) continue;
+                if (isShielded(p)) continue;
                 Point pPos = w.pointAt(p.getProgress());
                 for (PacketModel other : grid.retrieve(pPos.x, pPos.y)) {
                     if (other == p || processed.contains(other)) continue;
-                    if (other instanceof ProtectedPacket op && op.getShield() > 0) continue;
+                    if (isShielded(other)) continue;
                     Point oPos = other.getCurrentWire().pointAt(other.getProgress());
                     double dx = pPos.x - oPos.x;
                     double dy = pPos.y - oPos.y;
                     if (Math.hypot(dx, dy) <= COLLISION_RADIUS) {
+                        // Noise
                         p.increaseNoise(NOISE_INCREMENT);
                         other.increaseNoise(NOISE_INCREMENT);
                         processed.add(p);
@@ -86,6 +101,10 @@ public class CollisionController implements com.blueprinthell.model.Updatable {
                         int ix = (pPos.x + oPos.x) / 2;
                         int iy = (pPos.y + oPos.y) / 2;
                         impactPoints.add(new Point(ix, iy));
+
+                        // Bounce logic for MSG1 profile
+                        if (isMsg1(p))     bounceToSource(p, w);
+                        if (isMsg1(other)) bounceToSource(other, other.getCurrentWire());
                     }
                 }
             }
@@ -93,6 +112,31 @@ public class CollisionController implements com.blueprinthell.model.Updatable {
         return impactPoints;
     }
 
+    private boolean isShielded(PacketModel p) {
+        return (p instanceof ProtectedPacket pp) && pp.getShield() > 0;
+    }
+
+    private boolean isMsg1(PacketModel p) {
+        KinematicsProfile prof = KinematicsRegistry.getProfile(p);
+        return prof == KinematicsProfile.MSG1;
+    }
+
+    /** Remove packet from wire and try to enqueue into its source box. */
+    private void bounceToSource(PacketModel p, WireModel w) {
+        if (w == null) return;
+        w.removePacket(p);
+        SystemBoxModel srcBox = (portToBox != null) ? portToBox.get(w.getSrcPort()) : null;
+        if (srcBox != null) {
+            if (!srcBox.enqueue(p)) {
+                // Buffer full → packet loss
+                lossModel.increment();
+            }
+        } else {
+            lossModel.increment();
+        }
+    }
+
+    /* ---------------- Impact wave & noise cleanup -------------- */
     private void propagateImpactWaves(List<Point> impacts) {
         for (Point pt : impacts) {
             for (PacketModel p : grid.retrieve(pt.x, pt.y)) {
@@ -133,6 +177,7 @@ public class CollisionController implements com.blueprinthell.model.Updatable {
         } catch (Exception ignored) {}
     }
 
+    /* ------------------------ Controls ------------------------ */
     public void pauseCollisions()  { this.collisionsEnabled = false; }
     public void resumeCollisions() { this.collisionsEnabled = true; }
     public void setImpactWaveEnabled(boolean enabled) { this.impactWaveEnabled = enabled; }

@@ -5,31 +5,12 @@ import com.blueprinthell.motion.ConstantSpeedStrategy;
 import com.blueprinthell.motion.MotionStrategy;
 import java.util.Objects;
 
-/**
- * <h2>PacketFactory – single entry‑point for building packets</h2>
- * <p>Hides the growing decision logic for choosing the concrete
- * {@link MotionStrategy} **and** possible decorators (e.g. <i>ProtectedPacket</i>)
- * from the rest of the code‑base.  New rules can be added in a single place
- * without touching callers.</p>
- *
- * <pre>
- * PacketModel pkt = PacketFactory.create(type, srcPort, dstPort);
- * wire.attachPacket(pkt, 0.0);
- * </pre>
- */
+
 public final class PacketFactory {
 
     private PacketFactory() { /* static‑only */ }
 
-    /* ------------------------------------------------------------------ */
-    /**
-     * Creates a new {@link PacketModel} (or decorator) of the given {@code type} and assigns
-     * the most suitable {@link MotionStrategy} based on source/destination compatibility.
-     *
-     * @param type   logical packet type to spawn
-     * @param src    source port (must be output)
-     * @param dst    destination port (must be input)
-     */
+
     public static PacketModel create(PacketType type,
                                      PortModel src,
                                      PortModel dst) {

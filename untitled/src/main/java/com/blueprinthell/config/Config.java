@@ -66,4 +66,7 @@ public final class Config {
     /** پایهٔ ظرفیت سپرِ پکت‌های محافظت-شده (noise units). */
     public static final double DEFAULT_SHIELD_CAPACITY = 8.0;  // ← هر عدد منطقی ۵-۱۵ خوب است
 
+    public static final double ANTI_TROJAN_RADIUS_PX   = 140.0;
+    public static final double ANTI_TROJAN_COOLDOWN_S  = 2.0;
+
 }

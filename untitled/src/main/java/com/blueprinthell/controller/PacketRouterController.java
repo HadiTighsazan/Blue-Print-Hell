@@ -1,26 +1,23 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.model.*;
-import com.blueprinthell.motion.ConstantSpeedStrategy;
 import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.MotionStrategyFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Routes packets from a system‑box buffer onto outgoing wires.
- * <ul>
- *   <li>اولویت با پورت خالی و سازگار</li>
- *   <li>در غیر این صورت پورت سازگار تصادفی</li>
- *   <li>در غیر این صورت پورت خالی</li>
- *   <li>در صورت عدم امکان، تلاش برای بازگرداندن به بافر یا شمارش Packet Loss</li>
- * </ul>
- * Kinematics now driven by MotionStrategy instead of direct speed/acc.
+ * G1 – مرحلهٔ ۴ (Malicious): نسخهٔ به‌روزشدهٔ Router با پشتیبانی از "اجبار پورت ناسازگار".
+ *
+ * رفتار اصلی تغییری نکرده، فقط اگر MaliciousBehavior روی پکت فلگ بگذارد، این‌جا اولویت انتخاب پورت
+ * معکوس می‌شود (اول ناسازگار، سپس سایرین). پس در حالت عادی (بدون فلگ) همان منطق قبلی اجرا می‌شود.
  */
 public class PacketRouterController implements Updatable {
     private final SystemBoxModel box;
     private final List<WireModel> wires;
-    private final Map<WireModel, SystemBoxModel> destMap;
+    private final Map<WireModel, SystemBoxModel> destMap; // فعلاً استفاده نمی‌شود ولی برای سازگاری نگه داشته‌ایم
     private final PacketLossModel lossModel;
     private final Random rnd = new Random();
 
@@ -49,11 +46,21 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
-            // 3) select candidate port
+            // --- NEW: did a Malicious system force incompatible routing? ---
+            boolean forceIncompat = RouteHints.consumeForceIncompatible(packet);
+
+            // 3) classify ports
             List<PortModel> compat = outs.stream()
                     .filter(port -> port.isCompatible(packet))
                     .collect(Collectors.toList());
+            List<PortModel> incompat = outs.stream()
+                    .filter(port -> !port.isCompatible(packet))
+                    .collect(Collectors.toList());
+
             List<PortModel> emptyCompat = compat.stream()
+                    .filter(this::isWireEmpty)
+                    .collect(Collectors.toList());
+            List<PortModel> emptyIncompat = incompat.stream()
                     .filter(this::isWireEmpty)
                     .collect(Collectors.toList());
             List<PortModel> emptyAny = outs.stream()
@@ -61,9 +68,17 @@ public class PacketRouterController implements Updatable {
                     .collect(Collectors.toList());
 
             PortModel chosen = null;
-            if (!emptyCompat.isEmpty()) chosen = emptyCompat.get(0);
-            else if (!compat.isEmpty()) chosen = compat.get(rnd.nextInt(compat.size()));
-            else if (!emptyAny.isEmpty()) chosen = emptyAny.get(0);
+            if (forceIncompat) {
+                if (!emptyIncompat.isEmpty())      chosen = emptyIncompat.get(0);
+                else if (!incompat.isEmpty())      chosen = incompat.get(rnd.nextInt(incompat.size()));
+                else if (!emptyCompat.isEmpty())   chosen = emptyCompat.get(0);
+                else if (!compat.isEmpty())        chosen = compat.get(rnd.nextInt(compat.size()));
+                else if (!emptyAny.isEmpty())      chosen = emptyAny.get(0);
+            } else {
+                if (!emptyCompat.isEmpty())        chosen = emptyCompat.get(0);
+                else if (!compat.isEmpty())        chosen = compat.get(rnd.nextInt(compat.size()));
+                else if (!emptyAny.isEmpty())      chosen = emptyAny.get(0);
+            }
 
             if (chosen == null) {
                 if (!box.enqueue(packet)) drop(packet);
@@ -76,10 +91,9 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
-            // 4) assign motion strategy based on compatibility
+            // 4) assign motion strategy using MotionStrategyFactory
             boolean comp = chosen.isCompatible(packet);
-            double base = packet.getBaseSpeed();
-            MotionStrategy ms = new ConstantSpeedStrategy(comp ? base / 2 : base);
+            MotionStrategy ms = MotionStrategyFactory.create(packet, comp);
             packet.setMotionStrategy(ms);
 
             // 5) attach to wire

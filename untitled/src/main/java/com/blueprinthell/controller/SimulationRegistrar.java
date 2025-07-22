@@ -9,6 +9,7 @@ import com.blueprinthell.view.HudView;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 /**
  * G0 – SimulationRegistrar (finalize):
@@ -93,12 +94,18 @@ public class SimulationRegistrar {
 
 
         simulation.register(router);
+
+        // 1.7) Confidential throttle: کند کردن پکت‌های محرمانه قبل از باکسِ شلوغ
+        ConfidentialThrottleController confThrottle = new ConfidentialThrottleController(wires, destMap);
+        simulation.register(confThrottle);
         simulation.register(consumer);
 
         // 2) Rendering
         simulation.register(packetRenderer);
 
         // 3) Collision & loss
+        // Inject port->box map for bounce logic (MSG1) into CollisionController
+        collisionController.setPortToBoxMap(buildPortToBoxMap(boxes));
         simulation.register(collisionController);
         simulation.register(lossMonitor);
 
@@ -121,5 +128,17 @@ public class SimulationRegistrar {
         simulation.register(new HudController(
                 usageModel, lossModel, coinModel, levelManager, hudView
         ));
+
+    }
+    /**
+     * Builds a Port -> Box map so CollisionController can bounce MSG1 packets back to their source box.
+     */
+    private Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {
+        Map<PortModel, SystemBoxModel> map = new HashMap<>();
+        for (SystemBoxModel b : boxes) {
+            for (PortModel p : b.getInPorts())  map.put(p, b);
+            for (PortModel p : b.getOutPorts()) map.put(p, b);
+        }
+        return map;
     }
 }
