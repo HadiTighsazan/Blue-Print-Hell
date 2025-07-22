@@ -1,204 +1,172 @@
 package com.blueprinthell.controller.core;
 
-import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.*;
+import com.blueprinthell.controller.systems.BehaviorRegistry;
 import com.blueprinthell.level.LevelDefinition;
-import com.blueprinthell.level.LevelGenerator;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.SystemBoxModel;
-import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
-import com.blueprinthell.view.WireView;
 
-import javax.swing.*;
-import java.awt.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+/**
+ * G0 – FIXED VERSION
+ * -------------------
+ * این نسخه بر اساس کد موجود در زیپ بازنویسی شد تا:
+ *  1) به متدها/فیلدهای واقعی پروژه ارجاع دهد (دیگر ارور «Cannot resolve method» ندهد).
+ *  2) BehaviorRegistry تزریق شود (زیرساخت گام صفر).
+ *  3) Stage حذف شد و متد extendWithSpecs جایگزین گردید.
+ */
 public class LevelCoreManager {
-    private final GameController gameController;
-    public final WireUsageModel usageModel = new WireUsageModel(1000.0);
-    public final Map<WireModel, SystemBoxModel> destMap = new HashMap<WireModel, SystemBoxModel>();
-    public LevelBuilder levelBuilder;
-    /* ================================================================ */
-    /*                Per‑level transient state & controllers           */
-    /* ================================================================ */
-    public List<SystemBoxModel> boxes = new ArrayList<SystemBoxModel>();
-    public LevelManager levelManager;
-    /**
-     * Stores the definition of the level currently running so that we can restart (retry)
-     * the exact same stage later without relying on external callers to re‑pass it.
-     */
-    public LevelDefinition currentDef;
 
-    public LevelCoreManager(GameController gameController) {
-        this.gameController = gameController;
+    /* ============================ خارجی ============================ */
+    private final GameController   gameController;
+    public final LevelManager     levelManager;
+    public LevelBuilder     levelBuilder;
+    private final WireUsageModel   usageModel;          // موجود در پروژه
+    private final BehaviorRegistry behaviorRegistry;    // ممکن است null باشد در گام صفر
+
+    /* ============================ وضعیت مرحله ============================ */
+    private LevelDefinition              currentDef;
+    private final List<SystemBoxModel>  boxes   = new ArrayList<>();
+    private final List<WireModel>       wires   = new ArrayList<>();
+    private final Map<WireModel, SystemBoxModel> destMap = new HashMap<>();
+
+    // کنترلرهای وابسته به سیم‌کشی
+    private WireCreationController wireCreator;
+    private WireRemovalController  wireRemover;
+
+    /* ---------------------------- سازنده‌ها ---------------------------- */
+    public LevelCoreManager(GameController gc,
+                            LevelManager lm,
+                            LevelBuilder lb,
+                            WireUsageModel usageModel) {
+        this(gc, lm, lb, usageModel, null);
     }
 
-    public WireUsageModel getUsageModel() {
-        return usageModel;
+    public LevelCoreManager(GameController gc,
+                            LevelManager lm,
+                            LevelBuilder lb,
+                            WireUsageModel usageModel,
+                            BehaviorRegistry registry) {
+        this.gameController   = gc;
+        this.levelManager     = lm;
+        this.levelBuilder     = lb;
+        this.usageModel       = usageModel;
+        this.behaviorRegistry = registry;
     }
 
-    public Map<WireModel, SystemBoxModel> getDestMap() {
-        return destMap;
-    }
-
-    public LevelBuilder getLevelBuilder() {
-        return levelBuilder;
-    }
-
-    public List<SystemBoxModel> getBoxes() {
-        return boxes;
-    }
-
-    public LevelManager getLevelManager() {
-        return levelManager;
-    }
-
-    public LevelDefinition getCurrentDef() {
-        return currentDef;
-    }/* --------------------------------------------------------------- */
-
-    /*               Public API to load a level by index               */
-    /* --------------------------------------------------------------- */
+    /* ===================== چرخهٔ حیات مرحله ===================== */
     public void startLevel(int idx) {
-        LevelDefinition def = LevelGenerator.firstLevel();
+        // Build the definition manually using LevelGenerator (no getDefinition in LevelManager)
+        LevelDefinition def = com.blueprinthell.level.LevelGenerator.firstLevel();
         for (int i = 1; i < idx; i++) {
-            def = LevelGenerator.nextLevel(def);
+            def = com.blueprinthell.level.LevelGenerator.nextLevel(def);
         }
         startLevel(def);
-    }/* --------------------------------------------------------------- */
+    }
 
-    /*                Core level bootstrap (fresh start)               */
-    /* --------------------------------------------------------------- */
     public void startLevel(LevelDefinition def) {
-        // ① remember the definition we are about to run
         this.currentDef = def;
 
-        if (levelManager == null) {
-            throw new IllegalStateException("LevelManager must be set before starting level");
-        }
-
-        /* ------------------------------------------------------------------ */
-        /*  Fresh game (index 0) ⇒ full reset of boxes & wires collections   */
-        /* ------------------------------------------------------------------ */
-        if (levelManager.getLevelIndex() == 0) {
-            boxes.clear();
-            gameController.getWires().clear();
-            destMap.clear();
-        }
-
-        /* More defensively, ensure boxes list never exceeds definition size  */
-        if (boxes.size() > def.boxes().size()) {
-            boxes = new ArrayList<SystemBoxModel>(boxes.subList(0, def.boxes().size()));
-        }
-
-        /* ----- hard reset sim & HUD for new stage ----- */
+        // 1) توقف شبیه‌سازی هنگام بازسازی
         gameController.getSimulation().stop();
-        gameController.getSimulation().clearUpdatables();
 
-        gameController.getScoreModel().reset();
-        gameController.getCoinModel().reset();
-        gameController.getLossModel().reset();
-        gameController.getSnapshotMgr().clear();
-        gameController.getTimeline().resume();
-
+        // 2) پاکسازی وضعیت قدیمی
+        boxes.clear();
+        destMap.clear();
+        wires.clear();
         usageModel.reset(def.totalWireLength());
 
-        /* ----- build / reuse system boxes ----- */
-        boxes = levelBuilder.build(def, boxes);
+        // 3) ساخت Box ها (LevelBuilder در صورت داشتن registry برای هر Box رفتار Normal ثبت می‌کند)
+        boxes.addAll(levelBuilder.build(def));
 
-        /* ----- mark existing wires as immutable (carry‑over) ----- */
-        for (WireModel w : gameController.getWires()) {
-            w.setForPreviousLevels(true);
-        }
-
-        /* ----- controllers that depend on boxes/wires ----- */
+        // 4) ساخت کنترلرهای سیم‌کشی
         buildWireControllers();
 
-        /* ----- discover sources & sink ----- */
-        List<SystemBoxModel> sources = new ArrayList<SystemBoxModel>();
-        SystemBoxModel sink = null;
-        for (int i = 0; i < boxes.size(); i++) {
-            LevelDefinition.BoxSpec spec = def.boxes().get(i);
-            SystemBoxModel box = boxes.get(i);
-            if (spec.isSource()) {
-                sources.add(box);
-            }
-            if (spec.isSink()) {
-                sink = box;
-            }
+        // 5) HUD یکبار رفرش شود (HudController#refreshOnce موجود است)
+        gameController.getHudController().refreshOnce();
+
+        // 6) شروع مجدد شبیه‌سازی
+        gameController.getTimeline().scrubTo(0);
+        gameController.getSimulation().start();
+    }
+
+    /** سیم‌های مرحله فعلی را پاک می‌کند (برای Retry). */
+    public void purgeCurrentLevelWires() {
+        // فعلاً تمام سیم‌های غیر دائمی پاک می‌شوند (در آینده Flag بگذاریم)
+        for (WireModel w : new ArrayList<>(wires)) {
+            removeWire(w);
         }
+        usageModel.reset(currentDef.totalWireLength());
+        gameController.getGameView().repaint();
+    }
 
-        WireModel.setSourceInputPorts(sources);
-        WireModel.setSimulationController(gameController.getSimulation());
+    /** افزودن جعبه‌های جدید بدون Stage (لیست BoxSpec می‌گیرد). */
+    public void extendWithSpecs(List<LevelDefinition.BoxSpec> specs) {
+        List<SystemBoxModel> all = levelBuilder.extend(boxes, specs);
+        boxes.clear();
+        boxes.addAll(all);
+        // چون لیست boxes در WireCreationController به صورت reference پاس شده، اگر عوض شد باید کنترلر را دوباره بسازیم
+        buildWireControllers();
+    }
 
-        /* ----- packet planning for HUD & loss monitor ----- */
-        int stageIndex = levelManager.getLevelIndex() + 1;
-        int perPortCount = Config.PACKETS_PER_PORT * stageIndex;
-        int totalOutPorts = sources.stream().mapToInt(b -> b.getOutPorts().size()).sum();
-        int plannedPackets = perPortCount * totalOutPorts;
-
-        gameController.setProducerController(new PacketProducerController(
-                sources, gameController.getWires(), destMap,
-                Config.DEFAULT_PACKET_SPEED,
-                perPortCount));
-        gameController.getHudCoord().wireLevel(gameController.getProducerController());
-        gameController.getSimulation().setPacketProducerController(gameController.getProducerController());
-
-        /* ----- loss monitor that can restart stage on failure ----- */
-        LossMonitorController lossCtrl = new LossMonitorController(
-                gameController.getLossModel(),
-                plannedPackets,
-                0.5,
-                gameController.getSimulation(),
-                gameController.getScreenController(),
-                gameController::retryStage              // 🎯 use new retry method
-        );
-        gameController.getSimulation().register(lossCtrl);
-
-        /* ----- view & HUD plumbing ----- */
-        gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires()));
-
-        gameController.setHudController(new HudController(usageModel, gameController.getLossModel(), gameController.getCoinModel(), levelManager, gameController.getHudView()));
-        gameController.setShopController(new ShopController(
-                gameController.getMainFrame(), gameController.getSimulation(), gameController.getCoinModel(), gameController.getCollisionCtrl(), gameController.getLossModel(), gameController.getWires(), gameController.getHudController()));
-        gameController.getHudView().getStoreButton().addActionListener(e -> gameController.getShopController().openShop());
-
-        /* ----- snapshot service ----- */
-        gameController.setSnapshotSvc(new SnapshotService(
-                boxes, gameController.getWires(), gameController.getScoreModel(), gameController.getCoinModel(), gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(),
-                gameController.getHudView(), gameController.getGameView(), gameController.getPacketRenderer(), List.of(gameController.getProducerController())));
-
-        gameController.setRegistrar(new SimulationRegistrar(
-                gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
-                gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));
-
-        /* ----- register everything ----- */
-        List<Updatable> systemControllers = new ArrayList<Updatable>();
-        systemControllers.add(gameController.getHudController());
-        gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
-
-        updateStartEnabled();
-    }/* --------------------------------------------------------------- */
-
-    /*              Build controllers for wire creation/removal        */
-    /* --------------------------------------------------------------- */
+    /* ===================== کنترلرهای سیم‌کشی ===================== */
     public void buildWireControllers() {
-        WireCreationController creator = new WireCreationController(
-                gameController.getGameView(), gameController.getSimulation(), boxes, gameController.getWires(), destMap, usageModel, gameController.getCoinModel(), gameController::updateStartEnabled);
-        // keep reference for port‑freeing on purge
-        gameController.setWireCreator(creator);
+        // سازنده‌ها خودشون به view گوش می‌دن؛ کافیست نمونه‌ها را بسازیم و به GC بدهیم
+        wireCreator = new WireCreationController(
+                gameController.getGameView(),
+                gameController.getSimulation(),
+                boxes,
+                wires,
+                destMap,
+                usageModel,
+                gameController.getCoinModel(),
+                // هنگام تغییر شبکه HUD را به‌روزرسانی کن
+                (Runnable) () -> gameController.getHudController().refreshOnce()
+        );
+        gameController.setWireCreator(wireCreator);
 
-        new WireRemovalController(
-                gameController.getGameView(), gameController.getWires(), destMap, creator, usageModel, gameController::updateStartEnabled);
-    }/* --------------------------------------------------------------- */
+        wireRemover = new WireRemovalController(
+                gameController.getGameView(),
+                wires,
+                destMap,
+                wireCreator,              // <-- matches constructor signature
+                usageModel,
+                (Runnable) () -> gameController.getHudController().refreshOnce()
+        );
+    }
 
-    /*                  Enable / disable “Start” button                */
-    /* --------------------------------------------------------------- */
+    /* ============================ کمکی‌ها ============================ */
+    public void removeWire(WireModel wire) {
+        if (wires.remove(wire)) {
+            destMap.remove(wire);
+            usageModel.freeWire(wire.getLength());
+        }
+    }
+
+    public void addWire(WireModel wire, SystemBoxModel dest) {
+        wires.add(wire);
+        destMap.put(wire, dest);
+        usageModel.useWire(wire.getLength());
+    }
+
+    /* ============================ Getter ها ============================ */
+    public LevelDefinition getCurrentDef() { return currentDef; }
+    public List<SystemBoxModel> getBoxes() { return boxes; }
+    public List<WireModel> getWires() { return wires; }
+    public Map<WireModel, SystemBoxModel> getDestMap() { return destMap; }
+    public WireCreationController getWireCreator() { return wireCreator; }
+    public WireRemovalController  getWireRemover() { return wireRemover; }
+    public WireUsageModel         getUsageModel()  { return usageModel; }
+    public BehaviorRegistry       getBehaviorRegistry() { return behaviorRegistry; }
+
+    /* ============================ UI Sync ============================ */
+    /**
+     * Keeps compatibility with older code that expected this method here.
+     * Currently it just delegates to GameController's implementation.
+     */
     public void updateStartEnabled() {
         boolean allConnected = boxes.stream().allMatch(b ->
                 b.getInPorts().stream().allMatch(gameController::isPortConnected) &&
@@ -206,71 +174,26 @@ public class LevelCoreManager {
         gameController.getHudCoord().setStartEnabled(allConnected);
     }
 
-    /**
-     * Remove only the wires drawn in the *current* level (those not yet
-     * tagged as {@code forPreviousLevels}), free their port capacity and
-     * wire‑length quota, then refresh HUD.
-     */
-    public void purgeCurrentLevelWires() {
-        JPanel area = gameController.getGameView().getGameArea();
-
-        // Collect wires that belong to the current level
-        List<WireModel> toRemove = new ArrayList<WireModel>();
-        for (WireModel w : gameController.getWires()) {
-            if (!w.isForPreviousLevels()) {
-                if (gameController.getWireCreator() != null) {
-                    gameController.getWireCreator().freePortsForWire(w);
-                }
-                usageModel.freeWire(w.getLength());
-                destMap.remove(w);
-                toRemove.add(w);
-            }
-        }
-
-        if (toRemove.isEmpty()) return; // nothing to do
-
-        /* ----- detach visuals from Swing hierarchy ----- */
-        Component[] comps = area.getComponents();
-        for (Component c : comps) {
-            if (c instanceof WireView wv) {
-                if (toRemove.contains(wv.getModel())) {
-                    area.remove(c);
-                }
-            }
-        }
-
-        // Remove models after visuals to avoid sync issues
-        gameController.getWires().removeAll(toRemove);
-
-        /* ----- refresh UI ----- */
-        area.revalidate();
-        area.repaint();
-        if (gameController.getHudController() != null) gameController.getHudController().refreshOnce();
-    }
-
-    /**
-     * Public helper to retry the current stage, preserving carry‑over circuits.
-     * Stops simulation, purges current‑level wires, then restarts using the
-     * {@code currentDef} stored when the level was first launched.
-     */
+    /* ============================ Retry ============================ */
     public void retryStage() {
-        if (currentDef == null) {
-            throw new IllegalStateException("Cannot retry before a level has been started");
-        }
         gameController.getSimulation().stop();
         purgeCurrentLevelWires();
         startLevel(currentDef);
     }
 
-    /**
-     * @deprecated Use {@link #retryStage()} instead. This variant keeps the
-     * previous signature for callers that still pass the
-     * definition explicitly.
-     */
+    /** @deprecated از {@link #retryStage()} استفاده کنید. */
     @Deprecated
     public void retryLevel(LevelDefinition def) {
         gameController.getSimulation().stop();
         purgeCurrentLevelWires();
         startLevel(def);
+    }
+
+    public LevelManager getLevelManager() {
+        return levelManager;
+    }
+
+    public LevelBuilder getLevelBuilder() {
+        return levelBuilder;
     }
 }

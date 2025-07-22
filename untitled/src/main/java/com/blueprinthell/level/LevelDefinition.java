@@ -38,4 +38,6 @@ public record LevelDefinition(List<BoxSpec> boxes, double totalWireLength) {
             this(UUID.randomUUID().toString(), x, y, w, h, inShapes, outShapes, isSource, isSink);
         }
     }
+
+
 }
