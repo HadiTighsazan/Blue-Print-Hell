@@ -1,12 +1,13 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
-import com.blueprinthell.controller.systems.BehaviorRegistry;
-import com.blueprinthell.controller.systems.NormalBehavior;
+import com.blueprinthell.controller.systems.*;
+import com.blueprinthell.level.LevelDefinition;
+import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
-import com.blueprinthell.level.LevelDefinition;
+import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.view.SystemBoxView;
 import com.blueprinthell.view.screens.GameScreenView;
 
@@ -15,49 +16,57 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
+
 /**
- * G0 – Infrastructure update:
- * <ul>
- *   <li>Still responsible فقط برای ساخت اجزای استاتیک مرحله (Box ها) و وصل کردن Drag.</li>
- *   <li>اکنون اگر {@link BehaviorRegistry} داده شود، برای هر Box یک {@link NormalBehavior} ثبت می‌شود
- *       تا در گام‌های بعدی بتوانیم رفتارهای خاص (Spy/Malicious/...) را تزریق کنیم.</li>
- * </ul>
+ * LevelBuilder
+ *  - ساخت باکس‌ها از LevelDefinition
+ *  - ثبت رفتارها در BehaviorRegistry با توجه به kind هر باکس
+ *  - اتصال کنترلر درگ
  */
 public final class LevelBuilder {
 
     private final GameScreenView gameView;
-    private final List<WireModel> wires;         // shared list, mutated by drag/wire controllers
+    private final List<WireModel> wires;
     private final WireUsageModel usageModel;
-    private final BehaviorRegistry behaviorRegistry; // nullable در گام صفر
+    private final BehaviorRegistry behaviorRegistry;   // nullable
+    private final LargeGroupRegistry largeRegistry;     // nullable
+    private final PacketLossModel    lossModel;         // nullable
 
-    /**
-     * قدیمی – بدون رجیستری رفتار (برای سازگاری موقت). پیشنهاد می‌شود از سازندهٔ کامل استفاده شود.
-     */
+    /* ---------------- Constructors ---------------- */
+
+    // قدیمی
     public LevelBuilder(GameScreenView gameView,
                         List<WireModel> wires,
                         WireUsageModel usageModel) {
-        this(gameView, wires, usageModel, null);
+        this(gameView, wires, usageModel, null, null, null);
     }
 
-    /**
-     * سازندهٔ جدید با BehaviorRegistry.
-     */
+    // میانی
     public LevelBuilder(GameScreenView gameView,
                         List<WireModel> wires,
                         WireUsageModel usageModel,
                         BehaviorRegistry behaviorRegistry) {
+        this(gameView, wires, usageModel, behaviorRegistry, null, null);
+    }
+
+    // کامل
+    public LevelBuilder(GameScreenView gameView,
+                        List<WireModel> wires,
+                        WireUsageModel usageModel,
+                        BehaviorRegistry behaviorRegistry,
+                        LargeGroupRegistry largeRegistry,
+                        PacketLossModel lossModel) {
         this.gameView = gameView;
         this.wires = wires;
         this.usageModel = usageModel;
         this.behaviorRegistry = behaviorRegistry;
+        this.largeRegistry = largeRegistry;
+        this.lossModel = lossModel;
     }
 
-    /**
-     * Builds the given level definition (full stage) and returns the new box list.
-     * Any previous boxes are discarded by caller responsibility.
-     */
+    /* ---------------- Build API ---------------- */
+
     public List<SystemBoxModel> build(LevelDefinition def) {
-        // 1) build boxes
         List<SystemBoxModel> boxes = new ArrayList<>();
         for (LevelDefinition.BoxSpec spec : def.boxes()) {
             SystemBoxModel box = new SystemBoxModel(
@@ -65,19 +74,54 @@ public final class LevelBuilder {
                     spec.inShapes(), spec.outShapes());
             boxes.add(box);
 
-            // Register default behaviour
             if (behaviorRegistry != null) {
-                behaviorRegistry.register(box, new NormalBehavior(box));
+                registerBehaviors(box, spec);
             }
         }
 
-        // 2) paint them
         gameView.reset(boxes, wires);
-
-        // 3) attach drag behaviour
         attachDragControllers();
         return boxes;
     }
+
+    public List<SystemBoxModel> extend(List<SystemBoxModel> existingBoxes,
+                                       List<LevelDefinition.BoxSpec> newSpecs) {
+        int neededInputs = newSpecs.stream().mapToInt(s -> s.inShapes().size()).sum();
+        int freeOutputs = 0;
+        for (SystemBoxModel box : existingBoxes) {
+            freeOutputs += Math.max(0, Config.MAX_OUTPUT_PORTS - box.getOutPorts().size());
+        }
+        if (neededInputs > freeOutputs) {
+            throw new IllegalStateException("Insufficient port capacity in existing systems for new stage");
+        }
+
+        List<SystemBoxModel> newBoxes = new ArrayList<>();
+        for (LevelDefinition.BoxSpec spec : newSpecs) {
+            SystemBoxModel box = new SystemBoxModel(
+                    spec.x(), spec.y(), spec.width(), spec.height(),
+                    spec.inShapes(), spec.outShapes());
+            newBoxes.add(box);
+
+            if (behaviorRegistry != null) {
+                registerBehaviors(box, spec);
+            }
+        }
+
+        List<SystemBoxModel> all = new ArrayList<>(existingBoxes);
+        all.addAll(newBoxes);
+
+        // تضمین حداقل یک مقصد بدون خروجی
+        boolean hasDestination = all.stream().anyMatch(b -> b.getOutPorts().isEmpty());
+        if (!hasDestination && !all.isEmpty()) {
+            all.get(all.size() - 1).removeOutputPort();
+        }
+
+        gameView.reset(all, wires);
+        attachDragControllers();
+        return all;
+    }
+
+    /* ---------------- Helpers ---------------- */
 
     private void attachDragControllers() {
         for (Component c : gameView.getGameArea().getComponents()) {
@@ -87,54 +131,31 @@ public final class LevelBuilder {
         }
     }
 
-    /**
-     * Progressive levels: add a new stage on top of existing boxes.
-     * Re-uses free output ports from previous boxes to satisfy input ports of new systems.
-     * Throws if capacity is insufficient.
-     */
-    public List<SystemBoxModel> extend(List<SystemBoxModel> existingBoxes,
-                                       List<LevelDefinition.BoxSpec> newSpecs) {
-        // 1) calculate how many new input ports we need to feed
-        int neededInputs = newSpecs.stream()
-                .mapToInt(spec -> spec.inShapes().size())
-                .sum();
+    private void registerBehaviors(SystemBoxModel box, LevelDefinition.BoxSpec spec) {
+        SystemKind kind = spec.kind();
+        if (kind == null) kind = SystemKind.NORMAL;
 
-        // 2) count available free outputs in existing boxes
-        int freeOutputs = 0;
-        for (SystemBoxModel box : existingBoxes) {
-            freeOutputs += Math.max(0, Config.MAX_OUTPUT_PORTS - box.getOutPorts().size());
-        }
-        if (neededInputs > freeOutputs) {
-            throw new IllegalStateException("Insufficient port capacity in existing systems for new stage");
-        }
-
-        // 3) create new boxes
-        List<SystemBoxModel> newBoxes = new ArrayList<>();
-        for (LevelDefinition.BoxSpec spec : newSpecs) {
-            SystemBoxModel box = new SystemBoxModel(
-                    spec.x(), spec.y(), spec.width(), spec.height(),
-                    spec.inShapes(), spec.outShapes());
-            newBoxes.add(box);
-
-            if (behaviorRegistry != null) {
+        switch (kind) {
+            case DISTRIBUTOR -> {
                 behaviorRegistry.register(box, new NormalBehavior(box));
+                if (largeRegistry != null && lossModel != null) {
+                    behaviorRegistry.register(box,
+                            new DistributorBehavior(box, largeRegistry, lossModel));
+                }
+                behaviorRegistry.register(box, new PortRandomizerBehavior(box));
+            }
+            case MERGER -> {
+                behaviorRegistry.register(box, new NormalBehavior(box));
+                if (largeRegistry != null && lossModel != null) {
+                    behaviorRegistry.register(box,
+                            new MergerBehavior(box, largeRegistry, lossModel));
+                }
+                behaviorRegistry.register(box, new PortRandomizerBehavior(box));
+            }
+            default -> {
+                behaviorRegistry.register(box, new NormalBehavior(box));
+                behaviorRegistry.register(box, new PortRandomizerBehavior(box));
             }
         }
-
-        // 4) merge existing and new, then paint
-        List<SystemBoxModel> all = new ArrayList<>(existingBoxes);
-        all.addAll(newBoxes);
-
-        // 🔧 تضمین وجود حداقل یک سیستم مقصد (بدون خروجی)
-        boolean hasDestination = all.stream().anyMatch(box -> box.getOutPorts().isEmpty());
-        if (!hasDestination && !all.isEmpty()) {
-            all.get(all.size() - 1).removeOutputPort();
-        }
-
-        gameView.reset(all, wires);
-
-        // 5) attach drag behaviour (again, for new components)
-        attachDragControllers();
-        return all;
     }
 }

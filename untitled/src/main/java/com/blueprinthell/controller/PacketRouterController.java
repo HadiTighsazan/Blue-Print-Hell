@@ -2,6 +2,8 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.BitPacket;
+import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.MotionStrategyFactory;
 
@@ -9,15 +11,16 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * G1 – مرحلهٔ ۴ (Malicious): نسخهٔ به‌روزشدهٔ Router با پشتیبانی از "اجبار پورت ناسازگار".
- *
- * رفتار اصلی تغییری نکرده، فقط اگر MaliciousBehavior روی پکت فلگ بگذارد، این‌جا اولویت انتخاب پورت
- * معکوس می‌شود (اول ناسازگار، سپس سایرین). پس در حالت عادی (بدون فلگ) همان منطق قبلی اجرا می‌شود.
+ * Router به‌روزشده برای گام ۲ – مرحله ۵:
+ * <ul>
+ *   <li>پشتیبانی از پرچم «اجبار ناسازگار» (Malicious).</li>
+ *   <li>نادیده گرفتن سازگاری برای {@link LargePacket} و {@link BitPacket} (سازگاری برایشان بی‌معناست).</li>
+ * </ul>
  */
 public class PacketRouterController implements Updatable {
     private final SystemBoxModel box;
     private final List<WireModel> wires;
-    private final Map<WireModel, SystemBoxModel> destMap; // فعلاً استفاده نمی‌شود ولی برای سازگاری نگه داشته‌ایم
+    private final Map<WireModel, SystemBoxModel> destMap; // برای سازگاری با کد قبلی نگه داشته شده
     private final PacketLossModel lossModel;
     private final Random rnd = new Random();
 
@@ -33,42 +36,33 @@ public class PacketRouterController implements Updatable {
 
     @Override
     public void update(double dt) {
-        // 1) Drain buffer
+        // 1) تخلیه بافر
         List<PacketModel> toRoute = new ArrayList<>();
         PacketModel p;
         while ((p = box.pollPacket()) != null) toRoute.add(p);
 
-        // 2) Route each
+        // 2) مسیریابی هر پکت
         for (PacketModel packet : toRoute) {
             List<PortModel> outs = box.getOutPorts();
-            if (outs.isEmpty()) {
-                drop(packet);
-                continue;
-            }
+            if (outs.isEmpty()) { drop(packet); continue; }
 
-            // --- NEW: did a Malicious system force incompatible routing? ---
             boolean forceIncompat = RouteHints.consumeForceIncompatible(packet);
+            boolean ignoreCompat  = (packet instanceof LargePacket) || (packet instanceof BitPacket);
 
-            // 3) classify ports
-            List<PortModel> compat = outs.stream()
-                    .filter(port -> port.isCompatible(packet))
-                    .collect(Collectors.toList());
-            List<PortModel> incompat = outs.stream()
-                    .filter(port -> !port.isCompatible(packet))
-                    .collect(Collectors.toList());
+            // طبقه‌بندی پورت‌ها
+            List<PortModel> compat = outs.stream().filter(port -> port.isCompatible(packet)).collect(Collectors.toList());
+            List<PortModel> incompat = outs.stream().filter(port -> !port.isCompatible(packet)).collect(Collectors.toList());
 
-            List<PortModel> emptyCompat = compat.stream()
-                    .filter(this::isWireEmpty)
-                    .collect(Collectors.toList());
-            List<PortModel> emptyIncompat = incompat.stream()
-                    .filter(this::isWireEmpty)
-                    .collect(Collectors.toList());
-            List<PortModel> emptyAny = outs.stream()
-                    .filter(this::isWireEmpty)
-                    .collect(Collectors.toList());
+            List<PortModel> emptyCompat   = compat.stream().filter(this::isWireEmpty).collect(Collectors.toList());
+            List<PortModel> emptyIncompat = incompat.stream().filter(this::isWireEmpty).collect(Collectors.toList());
+            List<PortModel> emptyAny      = outs.stream().filter(this::isWireEmpty).collect(Collectors.toList());
 
             PortModel chosen = null;
-            if (forceIncompat) {
+            if (ignoreCompat) {
+                // برای Large/Bit فقط سعی می‌کنیم پورت خالی بگیریم، وگرنه رندوم هر پورت
+                if (!emptyAny.isEmpty()) chosen = emptyAny.get(0);
+                else chosen = outs.get(rnd.nextInt(outs.size()));
+            } else if (forceIncompat) {
                 if (!emptyIncompat.isEmpty())      chosen = emptyIncompat.get(0);
                 else if (!incompat.isEmpty())      chosen = incompat.get(rnd.nextInt(incompat.size()));
                 else if (!emptyCompat.isEmpty())   chosen = emptyCompat.get(0);
@@ -91,12 +85,12 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
-            // 4) assign motion strategy using MotionStrategyFactory
-            boolean comp = chosen.isCompatible(packet);
+            // 4) استراتژی حرکتی
+            boolean comp = chosen.isCompatible(packet); // حتی اگر ignoreCompat باشد، برای انتخاب rule ضرری ندارد
             MotionStrategy ms = MotionStrategyFactory.create(packet, comp);
             packet.setMotionStrategy(ms);
 
-            // 5) attach to wire
+            // 5) الصاق به سیم
             wire.attachPacket(packet, 0.0);
         }
     }

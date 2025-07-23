@@ -2,26 +2,24 @@ package com.blueprinthell.controller.systems;
 
 import com.blueprinthell.model.SystemBoxModel;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
-public final class BehaviorRegistry {
-    private final Map<SystemBoxModel, SystemBehavior> map = new HashMap<>();
+public class BehaviorRegistry {
+    private final Map<SystemBoxModel, List<SystemBehavior>> map = new HashMap<>();
 
     public void register(SystemBoxModel box, SystemBehavior behavior) {
-        map.put(Objects.requireNonNull(box), Objects.requireNonNull(behavior));
+        map.computeIfAbsent(box, b -> new ArrayList<>()).add(behavior);
     }
 
-    public SystemBehavior get(SystemBoxModel box) {
-        return map.get(box);
+    public List<SystemBehavior> get(SystemBoxModel box) {
+        return map.getOrDefault(box, List.of());
     }
 
     public boolean has(SystemBoxModel box) {
         return map.containsKey(box);
     }
 
-    public Map<SystemBoxModel, SystemBehavior> view() {
-        return Map.copyOf(map);
+    public Map<SystemBoxModel, List<SystemBehavior>> view() {
+        return Collections.unmodifiableMap(map);
     }
 }

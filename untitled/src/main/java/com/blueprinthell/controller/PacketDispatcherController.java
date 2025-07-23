@@ -1,6 +1,7 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.controller.systems.BehaviorRegistry;
+import com.blueprinthell.controller.systems.SystemBehavior;
 import com.blueprinthell.model.*;
 
 import java.util.List;
@@ -21,6 +22,8 @@ public class PacketDispatcherController implements Updatable {
     private final CoinModel coinModel;
     private final PacketLossModel lossModel;
     private final BehaviorRegistry behaviorRegistry; // ممکن است null باشد
+    // اختیاری: کنترل‌کننده دوام سیم برای ثبت عبور پکت‌های حجیم
+    private WireDurabilityController durabilityCtrl;
 
     /** سازندهٔ قدیمی برای سازگاری */
     public PacketDispatcherController(List<WireModel> wires,
@@ -41,6 +44,21 @@ public class PacketDispatcherController implements Updatable {
         this.coinModel = coinModel;
         this.lossModel = lossModel;
         this.behaviorRegistry = behaviorRegistry;
+        this.durabilityCtrl = null;
+    }
+    /** سازندهٔ کامل با DurabilityController */
+    public PacketDispatcherController(List<WireModel> wires,
+                                      Map<WireModel, SystemBoxModel> destinationMap,
+                                      CoinModel coinModel,
+                                      PacketLossModel lossModel,
+                                      BehaviorRegistry behaviorRegistry,
+                                      WireDurabilityController durabilityCtrl) {
+        this.wires = wires;
+        this.destinationMap = destinationMap;
+        this.coinModel = coinModel;
+        this.lossModel = lossModel;
+        this.behaviorRegistry = behaviorRegistry;
+        this.durabilityCtrl = durabilityCtrl;
     }
 
     @Override
@@ -62,16 +80,25 @@ public class PacketDispatcherController implements Updatable {
 
                     // Hook behaviour (if any)
                     if (behaviorRegistry != null) {
-                        var behavior = behaviorRegistry.get(dest);
-                        if (behavior != null) {
-                            behavior.onPacketEnqueued(packet);
+                        List<SystemBehavior> list = behaviorRegistry.get(dest);
+                        for (SystemBehavior b : list) {
+                            b.onPacketEnqueued(packet, wire.getDstPort());
                         }
                     }
+
                 } else {
                     // Buffer full: drop packet and count as loss
                     lossModel.increment();
                 }
+                // ثبت عبور پکت‌های حجیم از سیم برای تخریب احتمالی
+                if (durabilityCtrl != null) {
+                    durabilityCtrl.onPacketArrived(packet, wire);
+                }
             }
         }
+    }
+    /** تزریق بعدی DurabilityController در صورت نیاز */
+    public void setDurabilityController(WireDurabilityController ctrl) {
+        this.durabilityCtrl = ctrl;
     }
 }

@@ -8,6 +8,10 @@ import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
 import com.blueprinthell.model.PortModel;
+import com.blueprinthell.model.large.LargeGroupRegistry;
+import com.blueprinthell.controller.WireDurabilityController;
+import com.blueprinthell.controller.systems.RouteHints;
+import com.blueprinthell.controller.systems.VpnRevertHints;
 
 import java.util.*;
 
@@ -27,6 +31,9 @@ public class LevelCoreManager {
     public LevelBuilder     levelBuilder;
     private final WireUsageModel   usageModel;          // موجود در پروژه
     private final BehaviorRegistry behaviorRegistry;    // ممکن است null باشد در گام صفر
+    // --- افزوده برای گام ۲: پاکسازی بین ریست‌ها ---
+    private LargeGroupRegistry       largeRegistry;           // nullable – تزریق بعدی
+    private WireDurabilityController durabilityController;    // nullable – تزریق بعدی
 
     /* ============================ وضعیت مرحله ============================ */
     private LevelDefinition              currentDef;
@@ -76,6 +83,8 @@ public class LevelCoreManager {
 
         // 1) توقف شبیه‌سازی هنگام بازسازی
         gameController.getSimulation().stop();
+        // پاکسازی وضعیت موقتی قبل از شروع دوباره مرحله
+        clearTransientState();
 
         // 2) پاکسازی وضعیت قدیمی
         boxes.clear();
@@ -179,6 +188,20 @@ public class LevelCoreManager {
         }
     }
 
+    /* ============================ Helpers: Clear ============================ */
+    /** پاکسازی رجیستری‌ها و هینت‌ها هنگام ریست مرحله */
+    private void clearTransientState() {
+        if (largeRegistry != null) {
+            largeRegistry.clear();
+        }
+        if (durabilityController != null) {
+            durabilityController.clear();
+        }
+        // هینت‌های استاتیک (اگر وجود دارند)
+        try { RouteHints.clear(); } catch (Throwable ignored) {}
+        try { VpnRevertHints.clear(); } catch (Throwable ignored) {}
+    }
+
     /* ============================ UI Sync ============================ */
     /**
      * Keeps compatibility with older code that expected this method here.
@@ -210,7 +233,13 @@ public class LevelCoreManager {
         return levelManager;
     }
 
-    public LevelBuilder getLevelBuilder() {
-        return levelBuilder;
-    }
+    public LevelBuilder getLevelBuilder() { return levelBuilder; }
+
+    /** تزریق بعدی رجیستری پکت‌های حجیم */
+    public void setLargeRegistry(LargeGroupRegistry reg) { this.largeRegistry = reg; }
+    public LargeGroupRegistry getLargeRegistry() { return largeRegistry; }
+
+    /** تزریق بعدی کنترلر دوام سیم */
+    public void setDurabilityController(WireDurabilityController ctrl) { this.durabilityController = ctrl; }
+    public WireDurabilityController getDurabilityController() { return durabilityController; }
 }

@@ -80,14 +80,8 @@ public class WireRemovalController {
                                 break;
                             }
                             // Proceed with removal for current-level wires
-                            wires.remove(wm);
-                            destMap.remove(wm);
-                            creator.freePortsForWire(wm);
-                            usageModel.freeWire(wm.getLength());
-                            area.remove(wv);
-                            area.revalidate();
-                            area.repaint();
-                            if (networkChanged != null) networkChanged.run();
+                            performRemoval(wm);
+
                             removalMode = false;
                             area.setCursor(Cursor.getDefaultCursor());
                             JComponent glass2 = (JComponent) root.getGlassPane();
@@ -107,4 +101,38 @@ public class WireRemovalController {
 
         area.setFocusable(true);
     }
+    /** حذف برنامه‌محور یک سیم (برای WireDurabilityController و ...). */
+    public void removeWire(WireModel wm) {
+        if (wm == null) return;
+        if (wm.isForPreviousLevels()) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+        SwingUtilities.invokeLater(() -> performRemoval(wm));
+    }
+
+    /** منطق مشترک حذف سیم از مدل و UI. */
+    private void performRemoval(WireModel wm) {
+        JPanel area = gameView.getGameArea();
+        JRootPane root = SwingUtilities.getRootPane(area);
+
+        // حذف از مدل
+        wires.remove(wm);
+        destMap.remove(wm);
+        creator.freePortsForWire(wm);
+        usageModel.freeWire(wm.getLength());
+
+        // حذف ویو متناظر
+        for (Component c : area.getComponents()) {
+            if (c instanceof WireView wv && wv.getModel() == wm) {
+                area.remove(wv);
+                break;
+            }
+        }
+
+        area.revalidate();
+        area.repaint();
+        if (networkChanged != null) networkChanged.run();
+    }
+
 }

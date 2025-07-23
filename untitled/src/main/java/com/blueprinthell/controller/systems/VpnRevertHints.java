@@ -28,4 +28,11 @@ public final class VpnRevertHints {
     public static PacketModel consume(PacketModel maybeProtected) {
         return REVERT.remove(maybeProtected);
     }
+
+    /**
+     * Clears all VPN revert mappings (used on level reset).
+     */
+    public static void clear() {
+        REVERT.clear();
+    }
 }

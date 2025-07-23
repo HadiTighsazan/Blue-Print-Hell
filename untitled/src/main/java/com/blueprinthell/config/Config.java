@@ -69,4 +69,6 @@ public final class Config {
     public static final double ANTI_TROJAN_RADIUS_PX   = 140.0;
     public static final double ANTI_TROJAN_COOLDOWN_S  = 2.0;
 
+    public static final int MAX_HEAVY_PASSES_PER_WIRE = 3;
+
 }

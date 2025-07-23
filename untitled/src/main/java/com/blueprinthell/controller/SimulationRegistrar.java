@@ -10,6 +10,7 @@ import com.blueprinthell.view.HudView;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import com.blueprinthell.config.Config;
 
 /**
  * G0 – SimulationRegistrar (finalize):
@@ -85,10 +86,17 @@ public class SimulationRegistrar {
         simulation.register(producer);
         simulation.register(dispatcher);
 
+        // 1.3) Wire durability: شمارش عبور پکت‌های حجیم و تخریب سیم‌ها
+        WireDurabilityController durability = new WireDurabilityController(wires, lossModel, Config.MAX_HEAVY_PASSES_PER_WIRE);
+        dispatcher.setDurabilityController(durability);
+        simulation.register(durability);
+
         // 1.5) Register behaviours (if any) BEFORE router so they can transform packets in buffers
         if (behaviorRegistry != null) {
-            for (SystemBehavior b : behaviorRegistry.view().values()) {
-                simulation.register(dt -> b.update(dt));
+            for (java.util.List<SystemBehavior> list : behaviorRegistry.view().values()) {
+                for (SystemBehavior b : list) {
+                    simulation.register(dt -> b.update(dt));
+                }
             }
         }
 

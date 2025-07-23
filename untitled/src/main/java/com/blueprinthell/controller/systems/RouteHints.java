@@ -24,4 +24,11 @@ public final class RouteHints {
         // read-once semantics: remove after read so it doesn't affect future hops
         return FORCE_INCOMPATIBLE.remove(p) != null;
     }
+
+    /**
+     * Clears all routing hints (used when resetting a level).
+     */
+    public static void clear() {
+        FORCE_INCOMPATIBLE.clear();
+    }
 }

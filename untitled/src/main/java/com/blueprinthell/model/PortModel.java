@@ -9,7 +9,7 @@ import java.io.Serializable;
 public class PortModel extends GameObjectModel implements Serializable {
     private static final long serialVersionUID = 3L;
 
-    private final PortShape shape;
+    private  PortShape shape;
     private final boolean input;
 
     public PortModel(int x, int y, PortShape shape, boolean input) {
@@ -36,6 +36,10 @@ public class PortModel extends GameObjectModel implements Serializable {
 
     public boolean isCompatibleWith(PortModel other) {
         return !this.input && other.input;
+    }
+
+    public void setShape(PortShape newShape){
+        this.shape = newShape;
     }
 
 
