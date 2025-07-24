@@ -6,19 +6,17 @@ import com.blueprinthell.model.ProtectedPacket;
 import com.blueprinthell.model.ConfidentialPacket;
 import com.blueprinthell.model.WireModel;
 
-import java.util.Objects;
-import java.util.Random;
+import java.util.*;
 
 /**
  * <h2>MotionStrategyFactory</h2>
- * نقطهٔ مرکزی ساخت {@link com.blueprinthell.motion.MotionStrategy} بر اساس:
+ * نقطهٔ مرکزی ساخت {@link MotionStrategy} براساس:
  * <ul>
- *   <li>پروفایل حرکتی ثبت‌شده در {@link KinematicsRegistry}</li>
- *   <li>سازگار/ناسازگار بودن پورت انتخاب شده</li>
+ *   <li>پروفایل ثبت‌شده در {@link KinematicsRegistry}</li>
+ *   <li>سازگار/ناسازگار بودن پورت انتخاب‌شده</li>
  * </ul>
- *
- * <p>برای ساده‌سازی، چند استراتژی داخلی (LinearAccelStrategy، KeepDistanceStrategy، DriftStrategy)
- * در همین فایل به صورت کلاس‌های private static پیاده شده‌اند تا وابستگی اضافی ایجاد نشود.</p>
+ * استراتژی‌های داخلی (LinearAccelStrategy، KeepDistanceStrategy، DriftStrategy، ...) در همین کلاس به‌صورت
+ * private static پیاده‌سازی شده‌اند تا وابستگی اضافه ایجاد نشود.
  */
 public final class MotionStrategyFactory {
 
@@ -27,38 +25,38 @@ public final class MotionStrategyFactory {
     private MotionStrategyFactory() {}
 
     /**
-     * می‌سازد و برمی‌گرداند Strategy مناسب. اگر پروفایل تعریف نشده باشد، تعیین و ثبت می‌کند.
-     * @param packet      پکت
-     * @param compatible  آیا پورت خروجی سازگار بود؟
+     * استراتژی مناسب را می‌سازد. اگر پروفایل قبلاً تعیین نشده باشد، با {@link #ensureProfile(PacketModel)} آن را تعیین می‌کنیم.
+     * @param packet     پکت موردنظر
+     * @param compatible آیا پورت خروجی سازگار بوده است؟
      */
     public static MotionStrategy create(PacketModel packet, boolean compatible) {
         Objects.requireNonNull(packet, "packet");
 
-        // 1) Ensure profile exists
+        // 1) پروفایل را داشته باشیم
         KinematicsProfile profile = ensureProfile(packet);
-        ProfileParams params = profile.getParams();
+        ProfileParams params      = profile.getParams();
 
-        // 2) Resolve rule by compatibility
+        // 2) انتخاب Rule براساس سازگاری
         MotionRule rule = compatible ? params.compatRule : params.incompatRule;
 
-        // 3) Handle random messenger for protected shadow
+        // 3) اگر پروفایل Protected است و flag تصادفی روشن، یکی از پیام‌رسان‌ها را انتخاب کن
         if (profile == KinematicsProfile.PROTECTED_SHADOW && params.randomMessengerProfile) {
             KinematicsProfile rndProf = KinematicsProfile.randomMessenger(RAND);
             KinematicsRegistry.setProfile(packet, rndProf);
             profile = rndProf;
-            params = profile.getParams();
-            rule = compatible ? params.compatRule : params.incompatRule;
+            params  = rndProf.getParams();
+            rule    = compatible ? params.compatRule : params.incompatRule;
         }
 
-        // 4) Map rule.mode to concrete strategy
+        // 4) ساخت استراتژی براساس mode
         return switch (rule.mode) {
-            case CONST -> new ConstFromRuleStrategy(rule);
-            case ACCEL -> new LinearAccelStrategy(rule, /*positive?*/true);
-            case DECEL -> new LinearAccelStrategy(rule, /*positive?*/false);
-            case CURVE_ACCEL -> new CurveAccelWrapper(rule);
-            case KEEP_DISTANCE -> new KeepDistanceStrategy(rule, params.keepDistancePx);
-            case DRIFT -> new DriftStrategy(rule, params.driftStepDistancePx, params.driftOffsetPx);
-            case RANDOM_OF_MESSENGER -> new ConstFromRuleStrategy(rule); // shouldn't happen post-random, fallback
+            case CONST           -> new ConstFromRuleStrategy(rule);
+            case ACCEL           -> new LinearAccelStrategy(rule);
+            case DECEL           -> new LinearAccelStrategy(rule); // شتاب منفی در خود rule.accel هست
+            case CURVE_ACCEL     -> new CurveAccelWrapper(rule);
+            case KEEP_DISTANCE   -> new KeepDistanceStrategy(rule, params.keepDistancePx);
+            case DRIFT           -> new DriftStrategy(rule, params.driftStepDistancePx, params.driftOffsetPx);
+            case RANDOM_OF_MESSENGER -> new ConstFromRuleStrategy(rule); // نباید بعد از random بماند؛ fallback
         };
     }
 
@@ -70,19 +68,22 @@ public final class MotionStrategyFactory {
         KinematicsProfile existing = KinematicsRegistry.getProfile(p);
         if (existing != null) return existing;
 
-        // infer default by packet characteristics
+        // اگر Protected
         if (p instanceof ProtectedPacket) {
             existing = KinematicsProfile.PROTECTED_SHADOW;
-        } else if (p instanceof ConfidentialPacket) {
-            existing = KinematicsProfile.CONFIDENTIAL; // VPN نوع ۶ را هنوز جدا نکرده‌ایم
+        }
+        // اگر Confidential (دو نوع: عادی و VPN که شاید به‌صورت جداگانه set شوند)
+        else if (p instanceof ConfidentialPacket conf) {
+            // اگر سایز 6 (VPN) یا فلگ خاصی داشتی، می‌توانی تشخیص بدهی؛ فعلاً پیش‌فرض CONFIDENTIAL
+            existing = KinematicsProfile.CONFIDENTIAL;
         } else {
-            // Map by PacketType sizeUnits (1/2/3) – fallback MSG2
+            // براساس اندازه پکت (sizeUnits) از PacketType
             PacketType t = p.getType();
             int su = t.sizeUnits;
-            if (su == 1) existing = KinematicsProfile.MSG1;
+            if (su == 1)      existing = KinematicsProfile.MSG1;
             else if (su == 2) existing = KinematicsProfile.MSG2;
             else if (su == 3) existing = KinematicsProfile.MSG3;
-            else existing = KinematicsProfile.MSG2;
+            else               existing = KinematicsProfile.MSG2; // fallback
         }
         KinematicsRegistry.setProfile(p, existing);
         return existing;
@@ -92,7 +93,7 @@ public final class MotionStrategyFactory {
     /*                   Internal Strategy Classes                     */
     /* =============================================================== */
 
-    /** ثابت با استفاده از speedStart در Rule. */
+    /** سرعت ثابت براساس rule.speedStart. */
     private static final class ConstFromRuleStrategy implements MotionStrategy {
         private final double speed;
         ConstFromRuleStrategy(MotionRule rule) {
@@ -111,17 +112,17 @@ public final class MotionStrategyFactory {
         }
     }
 
-    /** شتاب خطی (مثبت یا منفی) با محدودیت سرعت نسبی. */
+    /** شتاب خطی (rule.accel می‌تواند منفی باشد) با محدودیت ضریب سرعت. */
     private static final class LinearAccelStrategy implements MotionStrategy {
         private final double startSpeed;
-        private final double accel; // can be negative
+        private final double accel;   // منفی یا مثبت
         private final double minMul;
         private final double maxMul;
         private boolean init = false;
 
-        LinearAccelStrategy(MotionRule rule, boolean positiveBranch) {
+        LinearAccelStrategy(MotionRule rule) {
             this.startSpeed = rule.speedStart;
-            this.accel      = rule.accel; // rule.accel already sign-correct for ACCEL/DECEL
+            this.accel      = rule.accel;
             this.minMul     = rule.minMul;
             this.maxMul     = rule.maxMul;
         }
@@ -148,11 +149,10 @@ public final class MotionStrategyFactory {
         }
     }
 
-    /** Wrapper روی AccelOnCurveStrategy موجود، تنظیم پارامترها از Rule/Params. */
+    /** Wrapper روی AccelOnCurveStrategy موجود */
     private static final class CurveAccelWrapper implements MotionStrategy {
         private final AccelOnCurveStrategy delegate;
         CurveAccelWrapper(MotionRule rule) {
-            // rule.accel = factor, rule.maxMul = max multiplier
             this.delegate = new AccelOnCurveStrategy(rule.accel, rule.maxMul);
         }
         @Override public void update(PacketModel packet, double dt) {
@@ -174,21 +174,21 @@ public final class MotionStrategyFactory {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
             double speed = baseSpeed;
-            // Scan neighbours ahead on the same wire to keep distance
             double myProg = packet.getProgress();
             double len = wire.getLength();
+
             for (PacketModel other : wire.getPackets()) {
                 if (other == packet) continue;
                 double dProg = other.getProgress() - myProg;
-                if (dProg > 0) { // ahead
+                if (dProg > 0) { // جلوتر است
                     double pxDist = dProg * len;
                     if (pxDist < minGapPx) {
-                        // slowdown proportionally
-                        speed *= pxDist / minGapPx;
+                        speed *= pxDist / minGapPx; // کاهش سرعت
                     }
                 }
             }
-            if (speed < 10) speed = 10; // clamp
+            if (speed < 10) speed = 10; // حداقل سرعت
+
             double dp = (speed * dt) / len;
             double next = myProg + dp;
             if (next > 1.0) next = 1.0;
@@ -197,7 +197,7 @@ public final class MotionStrategyFactory {
         }
     }
 
-    /** Drift: هر فاصلهٔ معین روی سیم یک offset کوچک از مسیر اعمال می‌کند (فقط بصری). */
+    /** Drift: هر مسافت مشخص، offset کوچکی به موقعیت بصری پکت اعمال می‌کنیم. */
     private static final class DriftStrategy implements MotionStrategy {
         private final double baseSpeed;
         private final double stepDist;
@@ -219,22 +219,21 @@ public final class MotionStrategyFactory {
             double next = packet.getProgress() + dp;
             if (next > 1.0) next = 1.0;
 
-            // track travelled pixels
+            // track travelled distance
             double deltaPx = baseSpeed * dt;
             traveledPx += deltaPx;
             if (traveledPx >= stepDist) {
                 traveledPx = 0;
-                offsetSide = !offsetSide; // flip side
+                offsetSide = !offsetSide; // flip
             }
 
             packet.setSpeed(baseSpeed);
-            packet.setProgress(next);
+            packet.setProgress(next); // این خودش موقعیت را آپدیت می‌کند
 
-            // Apply visual drift by adjusting X/Y after position update
-            // NOTE: PacketModel updates its position in setProgress; we need manual offset:
+            // offset بصری کوچک
             int sign = offsetSide ? 1 : -1;
-            packet.setX(packet.getX() + (int)(sign * offsetPx));
-            packet.setY(packet.getY() + (int)(sign * offsetPx * 0.2)); // tiny vertical tweak
+            packet.setX(packet.getX() + (int) (sign * offsetPx));
+            packet.setY(packet.getY() + (int) (sign * offsetPx * 0.2));
         }
     }
 }

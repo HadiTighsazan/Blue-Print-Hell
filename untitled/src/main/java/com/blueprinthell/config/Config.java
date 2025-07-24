@@ -14,6 +14,8 @@ public final class Config {
 
     //**********************حذف کنش
     public static final PortShape DEFAULT_PORT_SHAPE = PortShape.SQUARE;
+    public static final double MAX_TIME_ON_WIRE_SEC = 8.0;
+
 
     private Config() { /* Prevent instantiation */ }
 
@@ -71,4 +73,53 @@ public final class Config {
 
     public static final int MAX_HEAVY_PASSES_PER_WIRE = 3;
 
+    public static final double TROJAN_PROBABILITY_EASY   = 0.08;
+    public static final double TROJAN_PROBABILITY_NORMAL = 0.15;
+    public static final double TROJAN_PROBABILITY_HARD   = 0.25;
+
+    // یا سوییچ‌پذیر:
+    public static double TROJAN_PROBABILITY = TROJAN_PROBABILITY_NORMAL;
+
+
+
+    /* --------------------- tunable constants ---------------------- */
+    // MSG1 compat accel
+    public static final double MSG1_COMPAT_V0       = 80;
+    public static final double MSG1_COMPAT_A        = 140;
+    public static final double MSG1_COMPAT_MIN_MUL  = 1.0;
+    public static final double MSG1_COMPAT_MAX_MUL  = 1.6;
+    // MSG1 incompat decel
+    public static final double MSG1_INCOMPAT_V0      = 160;
+    public static final double MSG1_INCOMPAT_A       = -120;
+    public static final double MSG1_INCOMPAT_MIN_MUL = 0.4;
+    public static final double MSG1_INCOMPAT_MAX_MUL = 1.0;
+
+    // MSG2 const speeds
+    public static final double MSG2_COMPAT_SPEED   = 110;
+    public static final double MSG2_INCOMPAT_SPEED = 220;
+
+    // MSG3
+    public static final double MSG3_COMPAT_SPEED     = 180;
+    public static final double MSG3_INCOMPAT_V0      = 120;
+    public static final double MSG3_INCOMPAT_A       = 90;
+    public static final double MSG3_INCOMPAT_MIN_MUL = 1.0;
+    public static final double MSG3_INCOMPAT_MAX_MUL = 1.6;
+
+    // Confidential
+    public static final double CONF_SPEED      = 170;
+    public static final double CONF_SLOW_SPEED = 60;
+
+    // Confidential VPN
+    public static final double CONF_VPN_SPEED        = 170;
+    public static final double CONF_VPN_KEEP_DIST_PX = 60;
+
+    // Large 8
+    public static final double L8_BASE_SPEED   = 140;
+    public static final double L8_CURVE_ACCEL  = 100;
+    public static final double L8_MAX_MUL      = 1.8;
+
+    // Large 10
+    public static final double L10_BASE_SPEED      = 160;
+    public static final double L10_DRIFT_STEP_PX   = 200;
+    public static final double L10_DRIFT_OFFSET_PX = 6;
 }

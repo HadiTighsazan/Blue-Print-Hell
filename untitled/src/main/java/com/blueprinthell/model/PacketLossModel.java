@@ -13,6 +13,12 @@ public class PacketLossModel {
         lostCount++;
     }
 
+    // PacketLossModel.java
+    public void incrementBy(int n) {
+        if (n <= 0) return;
+        lostCount += n;         // یا هر فیلدی که داری
+    }
+
     /**
      * Returns the total number of lost packets.
      */

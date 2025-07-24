@@ -5,24 +5,22 @@ import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.TrojanPacket;
 import com.blueprinthell.model.WireModel;
-import com.blueprinthell.model.PacketOps;
+import com.blueprinthell.model.PortModel;
 
 import java.util.*;
 
 /**
- * AntiTrojanBehavior – رفتار سیستم آنتی‌تروجان
- *
+ * <h2>AntiTrojanBehavior – سیستم آنتی‌تروجان</h2>
  * <ul>
- *   <li>در هر به‌روزرسانی، اگر در شعاع مشخصی از مرکز این سیستم، پکت تروجان موجود باشد، آن را به یک پکت پیام‌رسان
- *       (نسخهٔ پاک شده از تروجان) تبدیل می‌کند.</li>
- *   <li>بعد از هر تبدیل موفق، سیستم برای مدت مشخصی غیرفعال (cooldown) می‌شود.</li>
- *   <li>اگر پکت تروجان مستقیماً وارد بافر همین سیستم شود، در {@link #onPacketEnqueued(PacketModel)} همان‌جا پاک‌سازی می‌گردد.</li>
+ *   <li>در هر بروزرسانی، اگر پکت تروجان در شعاع مشخصی از مرکز این باکس روی هر سیمی باشد، آن را به پکت عادی تبدیل می‌کند.</li>
+ *   <li>بعد از هر موفقیت، به مدت مشخصی (cooldown) غیرفعال می‌شود.</li>
+ *   <li>اگر تروجان مستقیماً وارد بافر همین باکس شود، فوراً پاک‌سازی می‌شود.</li>
  * </ul>
  */
 public final class AntiTrojanBehavior implements SystemBehavior {
 
     private final SystemBoxModel box;
-    private final List<WireModel> wires;          // برای اسکن پکت‌ها روی سیم‌ها
+    private final List<WireModel> wires;   // برای اسکن روی سیم‌ها
     private final double radiusPx;
     private final double cooldownSec;
 
@@ -36,12 +34,13 @@ public final class AntiTrojanBehavior implements SystemBehavior {
                               List<WireModel> wires,
                               double radiusPx,
                               double cooldownSec) {
-        this.box = Objects.requireNonNull(box);
-        this.wires = Objects.requireNonNull(wires);
+        this.box = Objects.requireNonNull(box, "box");
+        this.wires = Objects.requireNonNull(wires, "wires");
         this.radiusPx = radiusPx;
         this.cooldownSec = cooldownSec;
     }
 
+    /* --------------------------- Tick --------------------------- */
     @Override
     public void update(double dt) {
         if (cooldownLeft > 0) {
@@ -50,35 +49,39 @@ public final class AntiTrojanBehavior implements SystemBehavior {
             return;
         }
 
-        // 1) اسکن سیم‌ها برای پیداکردن اولین تروجان در شعاع
+        // 1) اسکن سیم‌ها برای اولین تروجان در شعاع
+        double r2 = radiusPx * radiusPx;
         for (WireModel w : wires) {
-            List<PacketModel> list = w.getPackets(); // unmodifiable
-            for (PacketModel pkt : list) {
+            for (PacketModel pkt : w.getPackets()) {
                 if (!(pkt instanceof TrojanPacket)) continue;
-                if (distanceSquared(pkt, box) <= radiusPx * radiusPx) {
-                    // Convert trojan → plain
-                    PacketModel clean = PacketOps.clonePlain(pkt);
+                if (distanceSquared(pkt, box) <= r2) {
+                    // تبدیل تروجان به پکت سالم
+                    PacketModel clean = unTrojan(pkt);
                     double prog = pkt.getProgress();
                     if (w.removePacket(pkt)) {
                         w.attachPacket(clean, prog);
                         startCooldown();
-                        return; // تنها یک تبدیل در هر فعال‌سازی
+                        return; // فقط یکی در هر فعال‌سازی
                     }
                 }
             }
         }
 
-        // 2) اسکن بافر خود سیستم (اگر Trojan وارد بافر شد و هنوز cooldown نیست)
-        //    (در صورتیکه در onPacketEnqueued missed شده باشد)
+        // 2) fallback: بررسی بافر خود باکس (اگر به هر دلیل در onPacketEnqueued جا افتاده باشد)
         replaceFirstTrojanInBuffer();
     }
 
+    /* -------------------- Packet arrival hooks -------------------- */
     @Override
     public void onPacketEnqueued(PacketModel packet) {
-        if (cooldownLeft > 0) return; // غیرفعال
+        onPacketEnqueued(packet, null);
+    }
+
+    @Override
+    public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
+        if (cooldownLeft > 0) return; // غیرفعال است
         if (packet instanceof TrojanPacket) {
-            // تبدیل فوری در بافر
-            PacketModel clean = PacketOps.clonePlain(packet);
+            PacketModel clean = unTrojan(packet);
             if (replaceInBuffer(packet, clean)) {
                 startCooldown();
             }
@@ -87,21 +90,42 @@ public final class AntiTrojanBehavior implements SystemBehavior {
 
     @Override
     public void onEnabledChanged(boolean enabled) {
-        // AntiTrojan فقط با cooldown مدیریت می‌شود؛ این متد لازم نیست فعلاً
+        // کنترل فعال/غیرفعال شدن کلی در این فاز نیاز نیست؛ cooldown مدیریت می‌کند
     }
 
-    /* --------------------------------------------------------------- */
-    /*                          Helpers                                 */
-    /* --------------------------------------------------------------- */
+    /* --------------------------- Helpers --------------------------- */
 
     private void startCooldown() {
         cooldownLeft = cooldownSec;
     }
 
+    /** تبدیل TrojanPacket به نسخهٔ سالم. در حال حاضر از original درون TrojanPacket استفاده می‌کنیم. */
+    private PacketModel unTrojan(PacketModel pkt) {
+        if (pkt instanceof TrojanPacket tp) {
+            PacketModel orig = tp.getOriginal();
+            // اگر original null بود یا نمی‌خواهیم همان را استفاده کنیم، می‌توانیم clone جدید بسازیم
+            return (orig != null) ? orig : clonePlain(tp);
+        }
+        return pkt;
+    }
+
+    /**
+     * یک کپی ساده از PacketModel (بدون Trojan) می‌سازد.
+     * اینجا فقط در شرایط اضطراری استفاده می‌شود.
+     */
+    private PacketModel clonePlain(PacketModel src) {
+        PacketModel c = new PacketModel(src.getType(), src.getBaseSpeed());
+        c.setProgress(src.getProgress());
+        c.setSpeed(src.getSpeed());
+        c.setAcceleration(src.getAcceleration());
+        c.resetNoise();
+        return c;
+    }
+
     private boolean replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
         Deque<PacketModel> temp = new ArrayDeque<>();
-        PacketModel p;
         boolean replaced = false;
+        PacketModel p;
         while ((p = box.pollPacket()) != null) {
             if (!replaced && p == oldPkt) {
                 temp.addLast(newPkt);
@@ -116,12 +140,11 @@ public final class AntiTrojanBehavior implements SystemBehavior {
 
     private void replaceFirstTrojanInBuffer() {
         Deque<PacketModel> temp = new ArrayDeque<>();
-        PacketModel p;
         boolean converted = false;
+        PacketModel p;
         while ((p = box.pollPacket()) != null) {
             if (!converted && p instanceof TrojanPacket) {
-                PacketModel clean = PacketOps.clonePlain(p);
-                temp.addLast(clean);
+                temp.addLast(unTrojan(p));
                 converted = true;
             } else {
                 temp.addLast(p);
@@ -135,5 +158,10 @@ public final class AntiTrojanBehavior implements SystemBehavior {
         int dx = pkt.getCenterX() - box.getCenterX();
         int dy = pkt.getCenterY() - box.getCenterY();
         return (double) dx * dx + (double) dy * dy;
+    }
+
+    /** پاکسازی داخلی هنگام ریست مرحله */
+    public void clear() {
+        cooldownLeft = 0.0;
     }
 }

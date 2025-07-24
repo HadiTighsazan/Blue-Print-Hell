@@ -7,6 +7,11 @@ import com.blueprinthell.controller.SnapshotService;
 
 public class SnapshotCoreController implements NetworkController {
     public final SnapshotManager snapshotMgr = new SnapshotManager();
+
+    public void setSnapshotSvc(SnapshotService snapshotSvc) {
+        this.snapshotSvc = snapshotSvc;
+    }
+
     public SnapshotService snapshotSvc;
 
     public SnapshotCoreController() {

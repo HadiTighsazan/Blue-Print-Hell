@@ -54,6 +54,9 @@ public class SimulationController {
      * @param u the updatable instance
      */
     public void register(Updatable u) {
+        if (u == null) {
+            return;
+        }
         synchronized (updatables) {
             if (!updatables.contains(u)) {
                 updatables.add(u);
@@ -121,6 +124,8 @@ public class SimulationController {
      * @param producer the packet producer controller
      */
     public void setPacketProducerController(PacketProducerController producer) {
+        System.out.println("[DEBUG] PacketProducerController registered: " + producer);
+
         this.packetProducer = producer;
         register(producer);
     }

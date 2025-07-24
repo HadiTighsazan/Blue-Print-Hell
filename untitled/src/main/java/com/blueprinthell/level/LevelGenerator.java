@@ -2,7 +2,6 @@ package com.blueprinthell.level;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PortShape;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -59,20 +58,19 @@ public final class LevelGenerator {
             // Copy all previous boxes; convert old sink to an ordinary box (isSink=false)
             for (LevelDefinition.BoxSpec b : prev.boxes()) {
                 boolean isSource = b.isSource();
-                boolean isSink   = b.isSink();
-                // Old sink will be converted to intermediary-like box (isSink=false)
                 boolean newSinkFlag = false;
-                // Randomize ports for every copied box
                 int inCount  = isSource ? 0 : 1 + RND.nextInt(3);
                 int outCount = 1 + RND.nextInt(3);
                 List<PortShape> inSh  = isSource ? List.of() : randomShapes(inCount);
                 List<PortShape> outSh = randomShapes(outCount);
+                // Use 10‑param constructor to preserve id and kind
                 boxes.add(new LevelDefinition.BoxSpec(
                         b.id(), b.x(), b.y(), b.width(), b.height(),
                         inSh, outSh,
-                        isSource, newSinkFlag));
+                        isSource, newSinkFlag,
+                        b.kind()));
             }
-            // Add intermediary box
+            // Add intermediary box (uses 8‑param helper with random UUID, NORMAL kind)
             int ix = oldSink.x() + 150;
             int iy = oldSink.y() + (RND.nextBoolean() ? 120 : -120);
             List<PortShape> midIns  = randomShapes(1 + RND.nextInt(3));
@@ -81,7 +79,7 @@ public final class LevelGenerator {
                     ix, iy, BOX_W, BOX_H,
                     midIns, midOuts,
                     false, false));
-            // Add new sink box
+            // Add new sink box (8‑param helper)
             int sx = ix + 300;
             int sy = iy;
             List<PortShape> sinkIns = randomShapes(1 + RND.nextInt(3));
@@ -135,7 +133,6 @@ public final class LevelGenerator {
             if (boxes.get(i).isSink())   sink = i;
         }
         if (src < 0 || sink < 0) return false;
-        // BFS
         boolean[] vis = new boolean[n];
         java.util.Queue<Integer> q = new java.util.ArrayDeque<>();
         q.add(src); vis[src] = true;
@@ -155,51 +152,54 @@ public final class LevelGenerator {
         List<LevelDefinition.BoxSpec> res = new ArrayList<>(original.size());
         int i = 0;
         for (LevelDefinition.BoxSpec b : original) {
-            int col = i % 4;           // 4 columns before wrapping
+            int col = i % 4;
             int row = i / 4;
-            int nx = 50 + col * 150;   // 150 px horizontal spacing
-            int ny = 100 + row * 150;  // 150 px vertical spacing
+            int nx = 50 + col * 150;
+            int ny = 100 + row * 150;
+            // Use 10‑param constructor to preserve id and kind
             res.add(new LevelDefinition.BoxSpec(
                     b.id(), nx, ny, BOX_W, BOX_H,
                     b.inShapes(), b.outShapes(),
-                    b.isSource(), b.isSink()));
+                    b.isSource(), b.isSink(),
+                    b.kind()));
             i++;
         }
         return res;
     }
+
     /**
      * Ensures مجموع پورت‌های ورودی و خروجی در کل شبکه برابر باشد.
-     * اگر عدم تعادل باقی بماند و همهٔ جعبه‌ها به سقف ۳ برسند، یک جعبهٔ کوچک مکمل اضافه می‌کند.
      */
     private static List<LevelDefinition.BoxSpec> balancePortCounts(List<LevelDefinition.BoxSpec> orig) {
         List<LevelDefinition.BoxSpec> boxes = new ArrayList<>(orig);
         while (true) {
             int inTotal = boxes.stream().mapToInt(b -> b.inShapes().size()).sum();
             int outTotal = boxes.stream().mapToInt(b -> b.outShapes().size()).sum();
-            int delta = inTotal - outTotal; // >0: need outputs, <0: need inputs
+            int delta = inTotal - outTotal;
             if (delta == 0) return boxes;
             if (delta > 0) {
-                // Need extra outputs
                 boolean added = false;
                 for (int i = 0; i < boxes.size() && delta > 0; i++) {
                     LevelDefinition.BoxSpec b = boxes.get(i);
                     if (b.outShapes().size() < 3) {
                         List<PortShape> newOut = new ArrayList<>(b.outShapes());
                         newOut.add(randomShape());
+                        // Preserve id and kind
                         boxes.set(i, new LevelDefinition.BoxSpec(
                                 b.id(), b.x(), b.y(), b.width(), b.height(),
                                 b.inShapes(), newOut,
-                                b.isSource(), b.isSink()));
+                                b.isSource(), b.isSink(),
+                                b.kind()));
                         delta--; added = true;
                     }
                 }
                 if (!added) {
-                    // همه پر هستند؛ جعبهٔ مکمل جدید
-                    boxes.add(new LevelDefinition.BoxSpec(50, 50, BOX_W, BOX_H,
+                    boxes.add(new LevelDefinition.BoxSpec(
+                            50, 50, BOX_W, BOX_H,
                             List.of(), randomShapes(Math.min(3, delta)),
                             false, false));
                 }
-            } else { // delta<0 need inputs
+            } else {
                 delta = -delta;
                 boolean added = false;
                 for (int i = 0; i < boxes.size() && delta > 0; i++) {
@@ -210,15 +210,15 @@ public final class LevelGenerator {
                         boxes.set(i, new LevelDefinition.BoxSpec(
                                 b.id(), b.x(), b.y(), b.width(), b.height(),
                                 newIn, b.outShapes(),
-                                b.isSource(), b.isSink()));
+                                b.isSource(), b.isSink(),
+                                b.kind()));
                         delta--; added = true;
                     }
                 }
-                if (!added) {
-                    // همه پر؛ جعبهٔ جدید با ورودی مکمل
-                    boxes.add(new LevelDefinition.BoxSpec(50, 50, BOX_W, BOX_H,
-                            randomShapes(Math.min(3, delta)), List.of(),
-                            false, true));
+                if (!added) {                    boxes.add(new LevelDefinition.BoxSpec(
+                        50, 50, BOX_W, BOX_H,
+                        randomShapes(Math.min(3, delta)), List.of(),
+                        false, true));
                 }
             }
         }

@@ -2,38 +2,32 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.controller.systems.BehaviorRegistry;
 import com.blueprinthell.controller.systems.SystemBehavior;
-import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
 import com.blueprinthell.level.LevelManager;
+import com.blueprinthell.model.*;
 import com.blueprinthell.view.HudView;
-
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
 import com.blueprinthell.config.Config;
 
+import java.util.*;
+
 /**
- * G0 – SimulationRegistrar (finalize):
- * <ul>
- *   <li>همان مسئولیت قبلی: ثبت همهٔ Updatable ها در لوپ شبیه‌سازی بدون تغییر رفتار موجود.</li>
- *   <li>اگر {@link BehaviorRegistry} داده شود، تمامی Behaviourها نیز به‌صورت Updatable ثبت می‌شوند
- *       (قبل از Router) تا در هر tick متد update آنها صدا زده شود.</li>
- *   <li>امضا و ترتیب اصلی حفظ شده؛ یک اورلود جدید با BehaviorRegistry اضافه شد تا کد قدیمی نشکند.</li>
- * </ul>
+ * <h2>SimulationRegistrar</h2>
+ * مسئول ثبت همهٔ موجودیت‌های {@link Updatable} در حلقهٔ شبیه‌سازی به ترتیب صحیح.
+ * نسخهٔ فعلی علاوه بر اجزای اصلی، Behaviourها، کنترلر دوام سیم، تایم‌اوت پکت روی سیم و throttle محرمانه را نیز ثبت می‌کند.
  */
 public class SimulationRegistrar {
 
-    private final SimulationController simulation;
-    private final ScreenController     screenController;
-    private final CollisionController  collisionController;
-    private final PacketRenderController packetRenderer;
-    private final ScoreModel           scoreModel;
-    private final CoinModel            coinModel;
-    private final PacketLossModel      lossModel;
-    private final WireUsageModel       usageModel;
-    private final SnapshotManager      snapshotManager;
-    private final HudView              hudView;
-    private final LevelManager         levelManager;
+    private final SimulationController    simulation;
+    private final ScreenController        screenController;
+    private final CollisionController     collisionController;
+    private final PacketRenderController  packetRenderer;
+    private final ScoreModel              scoreModel;
+    private final CoinModel               coinModel;
+    private final PacketLossModel         lossModel;
+    private final WireUsageModel          usageModel;
+    private final SnapshotManager         snapshotManager;
+    private final HudView                 hudView;
+    private final LevelManager            levelManager;
 
     public SimulationRegistrar(SimulationController simulation,
                                ScreenController screenController,
@@ -46,20 +40,20 @@ public class SimulationRegistrar {
                                SnapshotManager snapshotManager,
                                HudView hudView,
                                LevelManager levelManager) {
-        this.simulation = simulation;
-        this.screenController = screenController;
+        this.simulation        = simulation;
+        this.screenController  = screenController;
         this.collisionController = collisionController;
-        this.packetRenderer = packetRenderer;
-        this.scoreModel = scoreModel;
-        this.coinModel = coinModel;
-        this.lossModel = lossModel;
-        this.usageModel = usageModel;
-        this.snapshotManager = snapshotManager;
-        this.hudView = hudView;
-        this.levelManager = levelManager;
+        this.packetRenderer    = packetRenderer;
+        this.scoreModel        = scoreModel;
+        this.coinModel         = coinModel;
+        this.lossModel         = lossModel;
+        this.usageModel        = usageModel;
+        this.snapshotManager   = snapshotManager;
+        this.hudView           = hudView;
+        this.levelManager      = levelManager;
     }
 
-    /** نسخهٔ قدیمی برای سازگاری – BehaviourRegistry ندارد. */
+    /** نسخهٔ قدیمی بدون BehaviourRegistry */
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
                             Map<WireModel, SystemBoxModel> destMap,
@@ -71,7 +65,7 @@ public class SimulationRegistrar {
         registerAll(boxes, wires, destMap, producer, dispatcher, consumer, router, lossMonitor, null);
     }
 
-    /** نسخهٔ جدید با BehaviorRegistry. اگر null باشد، مثل نسخهٔ قدیم عمل می‌کند. */
+    /** نسخهٔ جدید با BehaviourRegistry (nullable). */
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
                             Map<WireModel, SystemBoxModel> destMap,
@@ -82,47 +76,50 @@ public class SimulationRegistrar {
                             LossMonitorController lossMonitor,
                             BehaviorRegistry behaviorRegistry) {
 
-        // 1) Core packet flow – ترتیب اصلی حفظ می‌شود
+        // 1) Core flow: تولید → ارسال روی سیم → (کنترل دوام/تایم‌اوت) → رفتارها → روت → throttle → مصرف
         simulation.register(producer);
         simulation.register(dispatcher);
 
-        // 1.3) Wire durability: شمارش عبور پکت‌های حجیم و تخریب سیم‌ها
+        // 1.3) دوام سیم‌ها (Heavy packets count & auto-destroy)
         WireDurabilityController durability = new WireDurabilityController(wires, lossModel, Config.MAX_HEAVY_PASSES_PER_WIRE);
         dispatcher.setDurabilityController(durability);
         simulation.register(durability);
 
-        // 1.5) Register behaviours (if any) BEFORE router so they can transform packets in buffers
+        // 1.4) تایم‌اوت پکت روی سیم
+        WireTimeoutController timeoutCtrl = new WireTimeoutController(wires, lossModel, Config.MAX_TIME_ON_WIRE_SEC);
+        simulation.register(timeoutCtrl);
+
+        // 1.5) Behaviourها – قبل از Router تا روی بافرها اثر بگذارند
         if (behaviorRegistry != null) {
-            for (java.util.List<SystemBehavior> list : behaviorRegistry.view().values()) {
+            for (List<SystemBehavior> list : behaviorRegistry.view().values()) {
                 for (SystemBehavior b : list) {
                     simulation.register(dt -> b.update(dt));
                 }
             }
         }
 
-
+        // 1.6) Router
         simulation.register(router);
 
-        // 1.7) Confidential throttle: کند کردن پکت‌های محرمانه قبل از باکسِ شلوغ
+        // 1.7) Confidential throttle
         ConfidentialThrottleController confThrottle = new ConfidentialThrottleController(wires, destMap);
         simulation.register(confThrottle);
+
+        // 1.8) Consumer
         simulation.register(consumer);
 
         // 2) Rendering
         simulation.register(packetRenderer);
 
-        // 3) Collision & loss
-        // Inject port->box map for bounce logic (MSG1) into CollisionController
+        // 3) Collision & loss monitor
         collisionController.setPortToBoxMap(buildPortToBoxMap(boxes));
         simulation.register(collisionController);
         simulation.register(lossMonitor);
 
-        // 4) Level completion detector (منطق اصلی بدون تغییر)
+        // 4) Level completion detector
         int plannedTotal = 0;
         for (SystemBoxModel b : boxes) {
-            if (!b.getInPorts().isEmpty()) {
-                plannedTotal += b.getInPorts().size();
-            }
+            if (!b.getInPorts().isEmpty()) plannedTotal += b.getInPorts().size();
         }
         simulation.register(new LevelCompletionDetector(
                 wires, lossModel, producer,
@@ -134,12 +131,11 @@ public class SimulationRegistrar {
                 scoreModel, coinModel, usageModel, lossModel, snapshotManager));
 
         simulation.register(new HudController(
-                usageModel, lossModel, coinModel, levelManager, hudView
-        ));
-
+                usageModel, lossModel, coinModel, levelManager, hudView));
     }
+
     /**
-     * Builds a Port -> Box map so CollisionController can bounce MSG1 packets back to their source box.
+     * پورت → باکس برای منطق bounce در CollisionController
      */
     private Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {
         Map<PortModel, SystemBoxModel> map = new HashMap<>();

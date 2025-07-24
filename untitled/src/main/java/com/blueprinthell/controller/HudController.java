@@ -62,4 +62,10 @@ public class HudController implements Updatable {
     public void setActiveFeatures(List<String> names, List<Integer> remainingSeconds) {
         hudView.setActiveFeatures(names, remainingSeconds);
     }
+
+       public void setStartEnabled(boolean enabled) {
+               // مستقیماً از getter دکمه استفاده می‌کنیم
+                       hudView.getStartButton().setEnabled(enabled);
+    }
+
 }

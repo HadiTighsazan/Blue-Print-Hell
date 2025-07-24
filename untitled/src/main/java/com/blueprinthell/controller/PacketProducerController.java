@@ -45,7 +45,10 @@ public class PacketProducerController implements Updatable {
     }
 
     /* ---------------- Public API ---------------- */
-    public void startProduction() { running = true; }
+    public void startProduction() {
+        running = true;
+        System.out.println("[DEBUG] startProduction on " + this);
+    }
     public void stopProduction()  { running = false; }
 
     /**
@@ -77,6 +80,9 @@ public class PacketProducerController implements Updatable {
 
     @Override
     public void update(double dt) {
+        System.out.println("[DEBUG] Producer.update called, dt=" + dt);
+        System.out.println("[DEBUG] update on " + this + ", dt=" + dt);
+
         if (!running || isFinished()) return;
         acc += dt;
         while (acc >= INTERVAL_SEC && !isFinished()) {

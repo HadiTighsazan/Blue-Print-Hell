@@ -13,119 +13,140 @@ import java.util.*;
 
 /**
  * <h2>MergerBehavior</h2>
- * رفتار سیستم Merger:
- * <ul>
- *   <li>بیت‌پکت‌های یک گروه را جمع‌آوری می‌کند (registerArrival در {@link LargeGroupRegistry}).</li>
- *   <li>وقتی همهٔ بیت‌ها رسیدند، آن‌ها را از بافر حذف کرده و یک {@link LargePacket} جدید می‌سازد و enqueue می‌کند.</li>
- *   <li>در صورت بسته بودن گروه یا دریافت دوبارهٔ یک بیت ثبت‌شده، بیت نادیده گرفته یا Drop می‌شود (PacketLoss++)</li>
- *   <li>اگر بافر جا نداشته باشد، LargePacket یا بیت‌های اضافه Drop شده و به Loss اضافه می‌شود.</li>
- * </ul>
+ * <p>به محض ورود هر <i>BitPacket</i> به بافر این Merger، آن را در {@link LargeGroupRegistry}
+ * ثبت می‌کنیم. وقتی تمام بیت‌های یک گروه رسیدند، به {@link #mergeGroup(GroupState)} می‌رویم تا یک
+ * {@link LargePacket} بسازیم. اگر گروه هرگز تکمیل نشود ولی بسته شود (مثلاً زمان تمام یا
+ * بسته‌شدن دستی)، Loss بر اساس فرمول فاز حساب می‌شود.</p>
  */
 public final class MergerBehavior implements SystemBehavior {
 
-    private final SystemBoxModel box;
-    private final LargeGroupRegistry registry;
-    private final PacketLossModel lossModel;
+    private final SystemBoxModel      box;
+    private final LargeGroupRegistry  registry;
+    private final PacketLossModel     lossModel;
 
     public MergerBehavior(SystemBoxModel box,
                           LargeGroupRegistry registry,
                           PacketLossModel lossModel) {
-        this.box = Objects.requireNonNull(box, "box");
-        this.registry = Objects.requireNonNull(registry, "registry");
+        this.box       = Objects.requireNonNull(box, "box");
+        this.registry  = Objects.requireNonNull(registry, "registry");
         this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
     }
 
-    @Override
-    public void update(double dt) {
-        // No periodic logic needed currently
-    }
+    /* --------------------------------------------------------------- */
+    /*                        Frame update (noop)                       */
+    /* --------------------------------------------------------------- */
+    @Override public void update(double dt) { /* no periodic logic */ }
+
+    /* --------------------------------------------------------------- */
+    /*                   Packet arrival into buffer                     */
+    /* --------------------------------------------------------------- */
 
     @Override
     public void onPacketEnqueued(PacketModel packet) {
-        if (!(packet instanceof BitPacket bp)) return; // فقط بیت‌پکت‌ها برای مرج اهمیت دارند
+        onPacketEnqueued(packet, null);
+    }
+
+    @Override
+    public void onPacketEnqueued(PacketModel packet, com.blueprinthell.model.PortModel enteredPort) {
+        if (!(packet instanceof BitPacket bp)) return;
 
         GroupState st = registry.get(bp.getGroupId());
-        if (st == null || st.isClosed()) {
-            // گروه ناشناخته یا بسته شده → بیت بی‌اثر/گمشده
+        if (st == null) {
+            // بیت بدون گروه معتبر → Loss و drop از بافر
+            removePacketFromBuffer(bp);
+            lossModel.increment();
+            return;
+        }
+        if (st.isClosed()) {
+            // گروه بسته شده ولی بیت جدید رسید → Loss
+            removePacketFromBuffer(bp);
             lossModel.increment();
             return;
         }
 
-        // جلوگیری از ثبت دوباره
-        if (!bp.isRegisteredAtMerger()) {
-            registry.registerArrival(bp.getGroupId(), bp);
-            bp.markRegisteredAtMerger();
+        // ثبت بیت – متد registerArrival اگر true برگرداند یعنی اولین بار ثبت می‌شود
+        boolean first = registry.registerArrival(bp.getGroupId(), bp);
+        if (!first) {
+            // Duplicate bit arrival – Drop duplicate
+            removePacketFromBuffer(bp);
+            return;
         }
 
-        // اگر کامل شد، ترکیب کن
+        // علامت بزن که کاملاً در Merger است (برای جلوگیری از شمارش دوباره هنگام پردازش بافر)
+        bp.markRegisteredAtMerger();
+
+        // وقتی جمع کامل شد → Merge
         if (st.isComplete()) {
             mergeGroup(st);
         }
     }
 
-    @Override
-    public void onEnabledChanged(boolean enabled) {
-        // Merger رفتار مخصوص enable/disable ندارد فعلاً
-    }
+    @Override public void onEnabledChanged(boolean enabled) { /* nothing */ }
 
     /* --------------------------------------------------------------- */
-    /*                             Helpers                              */
+    /*                          Merge logic                             */
     /* --------------------------------------------------------------- */
 
-    /**
-     * تمام بیت‌پکت‌های این گروه را از بافر خارج می‌کند، LargePacket می‌سازد و دوباره enqueue می‌کند.
-     */
     private void mergeGroup(GroupState st) {
-        int groupId = st.groupId;
-        // 1) بیرون کشیدن همه بیت‌های این گروه از بافر
-        List<BitPacket> bits = extractBitsFromBuffer(groupId);
+        int gid = st.groupId;
 
-        // ممکن است بعضی بیت‌ها در بافر نبودند (مثلاً روی سیم هستند)؛ collectedPackets در GroupState آن‌ها را دارد
-        // برای ساخت LargePacket کافی است یک نمونه داشته باشیم تا state را کپی کنیم
-        PacketModel sample = bits.isEmpty() ? (st.getCollectedPackets().isEmpty() ? null : st.getCollectedPackets().get(0)) : bits.get(0);
-        if (sample == null) {
-            // هیچ نمونه‌ای در دسترس نیست → نمی‌توان LargePacket ساخت، گروه را ببندیم و Loss حساب کنیم
-            registry.closeGroup(groupId);
+        // 1) بیرون کشیدن بیت‌ها از بافر
+        List<BitPacket> bits = extractBitsFromBuffer(gid);
+        // اطمینان از تعداد درست (در برخی edge ها ممکن است کمتر باشد) – واقعاً باید expectedBits باشد
+        int collected = bits.size();
+        if (collected < st.expectedBits) {
+            // هنوز کامل نیست (ممکن است برخی بیت‌ها روی سیم باشند) – منتظر شو
             return;
         }
 
-        // 2) ساخت پکت حجیم
+        PacketModel sample = bits.get(0);
         LargePacket large = LargePacket.fromSample(sample,
                 st.originalSizeUnits,
-                groupId,
+                gid,
                 st.expectedBits,
                 st.colorId,
                 true);
-        // پروفایل حرکتی را از بیت نمونه کپی می‌کنیم تا قوانین سرعت حفظ شود
         KinematicsRegistry.copyProfile(sample, large);
 
-        // 3) تلاش برای enqueue LargePacket
+        // 2) تلاش برای enqueue در باکس
         if (!box.enqueue(large)) {
-            // جا نشد → Loss
-            lossModel.increment();
-            // بیت‌ها همین الان حذف شده‌اند؛ به عنوان از دست رفتن داده حساب می‌شود
+            // جا نشد → از دست رفتن Large و بیت‌ها
+            lossModel.incrementBy(st.originalSizeUnits);
         }
 
-        // 4) بستن و پاکسازی گروه
-        registry.closeGroup(groupId);
-        registry.removeGroup(groupId);
+        // 3) گروه را ببند و حذف کن
+        registry.closeGroup(gid);
+        registry.removeGroup(gid);
     }
 
-    /**
-     * همهٔ بیت‌های گروه مشخص را از بافر SystemBox حذف و برمی‌گرداند.
-     */
+    /* --------------------------------------------------------------- */
+    /*                       Helper functions                           */
+    /* --------------------------------------------------------------- */
+
+    /** حذف یک پکت از بافر بدون به‌هم‌زدن ترتیب سایرین */
+    private void removePacketFromBuffer(PacketModel pkt) {
+        Deque<PacketModel> tmp = new ArrayDeque<>();
+        PacketModel p;
+        while ((p = box.pollPacket()) != null) {
+            if (p == pkt) continue; // skip
+            tmp.addLast(p);
+        }
+        for (PacketModel q : tmp) box.enqueue(q);
+    }
+
+    /** همهٔ بیت‌های یک گروه را از بافر خارج می‌کند و برمی‌گرداند. */
     private List<BitPacket> extractBitsFromBuffer(int groupId) {
-        Deque<PacketModel> temp = new ArrayDeque<>();
-        List<BitPacket> result = new ArrayList<>();
+        Deque<PacketModel> tmp = new ArrayDeque<>();
+        List<BitPacket> out = new ArrayList<>();
         PacketModel p;
         while ((p = box.pollPacket()) != null) {
             if (p instanceof BitPacket bp && bp.getGroupId() == groupId) {
-                result.add(bp);
+                out.add(bp);
             } else {
-                temp.addLast(p);
+                tmp.addLast(p);
             }
         }
-        for (PacketModel q : temp) box.enqueue(q);
-        return result;
+        for (PacketModel q : tmp) box.enqueue(q);
+        return out;
     }
 }

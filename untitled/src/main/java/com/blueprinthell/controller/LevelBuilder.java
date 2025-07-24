@@ -16,32 +16,35 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
-
 /**
- * LevelBuilder
- *  - ساخت باکس‌ها از LevelDefinition
- *  - ثبت رفتارها در BehaviorRegistry با توجه به kind هر باکس
- *  - اتصال کنترلر درگ
+ * <h2>LevelBuilder</h2>
+ * <ul>
+ *   <li>ساخت {@link SystemBoxModel} ها از روی {@link LevelDefinition}.</li>
+ *   <li>ثبت رفتارها در {@link BehaviorRegistry} بر اساس {@link SystemKind} هر باکس.</li>
+ *   <li>اتصال کنترلر Drag برای جابجایی باکس‌ها.</li>
+ * </ul>
  */
 public final class LevelBuilder {
 
-    private final GameScreenView gameView;
-    private final List<WireModel> wires;
-    private final WireUsageModel usageModel;
-    private final BehaviorRegistry behaviorRegistry;   // nullable
-    private final LargeGroupRegistry largeRegistry;     // nullable
-    private final PacketLossModel    lossModel;         // nullable
+    private final GameScreenView     gameView;
+    private final List<WireModel>    wires;
+    private final WireUsageModel     usageModel;
+    private final BehaviorRegistry   behaviorRegistry;   // nullable
+    private final LargeGroupRegistry largeRegistry;      // nullable
+    private final PacketLossModel    lossModel;          // nullable
 
-    /* ---------------- Constructors ---------------- */
+    /* ------------------------------------------------------ */
+    /*                     Constructors                       */
+    /* ------------------------------------------------------ */
 
-    // قدیمی
+    /** نسخهٔ قدیمی بدون رجیستری‌ها */
     public LevelBuilder(GameScreenView gameView,
                         List<WireModel> wires,
                         WireUsageModel usageModel) {
         this(gameView, wires, usageModel, null, null, null);
     }
 
-    // میانی
+    /** نسخهٔ میانی فقط با BehaviorRegistry */
     public LevelBuilder(GameScreenView gameView,
                         List<WireModel> wires,
                         WireUsageModel usageModel,
@@ -49,22 +52,24 @@ public final class LevelBuilder {
         this(gameView, wires, usageModel, behaviorRegistry, null, null);
     }
 
-    // کامل
+    /** نسخهٔ کامل با تمام وابستگی‌ها */
     public LevelBuilder(GameScreenView gameView,
                         List<WireModel> wires,
                         WireUsageModel usageModel,
                         BehaviorRegistry behaviorRegistry,
                         LargeGroupRegistry largeRegistry,
                         PacketLossModel lossModel) {
-        this.gameView = gameView;
-        this.wires = wires;
-        this.usageModel = usageModel;
+        this.gameView       = gameView;
+        this.wires          = wires;
+        this.usageModel     = usageModel;
         this.behaviorRegistry = behaviorRegistry;
-        this.largeRegistry = largeRegistry;
-        this.lossModel = lossModel;
+        this.largeRegistry  = largeRegistry;
+        this.lossModel      = lossModel;
     }
 
-    /* ---------------- Build API ---------------- */
+    /* ------------------------------------------------------ */
+    /*                        Build API                       */
+    /* ------------------------------------------------------ */
 
     public List<SystemBoxModel> build(LevelDefinition def) {
         List<SystemBoxModel> boxes = new ArrayList<>();
@@ -101,7 +106,6 @@ public final class LevelBuilder {
                     spec.x(), spec.y(), spec.width(), spec.height(),
                     spec.inShapes(), spec.outShapes());
             newBoxes.add(box);
-
             if (behaviorRegistry != null) {
                 registerBehaviors(box, spec);
             }
@@ -121,7 +125,9 @@ public final class LevelBuilder {
         return all;
     }
 
-    /* ---------------- Helpers ---------------- */
+    /* ------------------------------------------------------ */
+    /*                          Helpers                       */
+    /* ------------------------------------------------------ */
 
     private void attachDragControllers() {
         for (Component c : gameView.getGameArea().getComponents()) {
@@ -131,6 +137,9 @@ public final class LevelBuilder {
         }
     }
 
+    /**
+     * ثبت رفتار مناسب بر اساس kind.
+     */
     private void registerBehaviors(SystemBoxModel box, LevelDefinition.BoxSpec spec) {
         SystemKind kind = spec.kind();
         if (kind == null) kind = SystemKind.NORMAL;
@@ -139,21 +148,39 @@ public final class LevelBuilder {
             case DISTRIBUTOR -> {
                 behaviorRegistry.register(box, new NormalBehavior(box));
                 if (largeRegistry != null && lossModel != null) {
-                    behaviorRegistry.register(box,
-                            new DistributorBehavior(box, largeRegistry, lossModel));
+                    behaviorRegistry.register(box, new DistributorBehavior(box, largeRegistry, lossModel));
                 }
                 behaviorRegistry.register(box, new PortRandomizerBehavior(box));
             }
             case MERGER -> {
                 behaviorRegistry.register(box, new NormalBehavior(box));
                 if (largeRegistry != null && lossModel != null) {
-                    behaviorRegistry.register(box,
-                            new MergerBehavior(box, largeRegistry, lossModel));
+                    behaviorRegistry.register(box, new MergerBehavior(box, largeRegistry, lossModel));
                 }
                 behaviorRegistry.register(box, new PortRandomizerBehavior(box));
             }
+            case SPY -> {
+                behaviorRegistry.register(box, new NormalBehavior(box));
+                if (lossModel != null) {
+                    behaviorRegistry.register(box, new SpyBehavior(box, behaviorRegistry, lossModel));
+                }
+            }
+            case MALICIOUS -> {
+                behaviorRegistry.register(box, new NormalBehavior(box));
+                behaviorRegistry.register(box, new MaliciousBehavior(box, Config.TROJAN_PROBABILITY));
+            }
+            case VPN -> {
+                behaviorRegistry.register(box, new NormalBehavior(box));
+                behaviorRegistry.register(box, new VpnBehavior(box, Config.DEFAULT_SHIELD_CAPACITY));
+            }
+            case ANTI_TROJAN -> {
+                behaviorRegistry.register(box, new NormalBehavior(box));
+                // AntiTrojan به لیست wires نیاز دارد
+                behaviorRegistry.register(box, new AntiTrojanBehavior(box, wires, Config.ANTI_TROJAN_RADIUS_PX, Config.ANTI_TROJAN_COOLDOWN_S));
+            }
             default -> {
                 behaviorRegistry.register(box, new NormalBehavior(box));
+                // PortRandomizer برای همه مفید است چون ممکن است LargePacket وارد شود
                 behaviorRegistry.register(box, new PortRandomizerBehavior(box));
             }
         }

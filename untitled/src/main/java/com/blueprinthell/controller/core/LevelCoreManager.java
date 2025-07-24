@@ -2,145 +2,156 @@ package com.blueprinthell.controller.core;
 
 import com.blueprinthell.controller.*;
 import com.blueprinthell.controller.systems.BehaviorRegistry;
-import com.blueprinthell.level.LevelDefinition;
-import com.blueprinthell.level.LevelManager;
-import com.blueprinthell.model.SystemBoxModel;
-import com.blueprinthell.model.WireModel;
-import com.blueprinthell.model.WireUsageModel;
-import com.blueprinthell.model.PortModel;
-import com.blueprinthell.model.large.LargeGroupRegistry;
-import com.blueprinthell.controller.WireDurabilityController;
 import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.controller.systems.VpnRevertHints;
+import com.blueprinthell.level.LevelDefinition;
+import com.blueprinthell.level.LevelGenerator;
+import com.blueprinthell.level.LevelManager;
+import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.LargeGroupRegistry;
+import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
 
 /**
- * G0 – FIXED VERSION
- * -------------------
- * این نسخه بر اساس کد موجود در زیپ بازنویسی شد تا:
- *  1) به متدها/فیلدهای واقعی پروژه ارجاع دهد (دیگر ارور «Cannot resolve method» ندهد).
- *  2) BehaviorRegistry تزریق شود (زیرساخت گام صفر).
- *  3) Stage حذف شد و متد extendWithSpecs جایگزین گردید.
+ * Facade that owns everything related to a single **level** lifecycle:
+ * <ul>
+ *     <li>building & extending boxes,</li>
+ *     <li>wiring controllers,</li>
+ *     <li>resetting transient registries between retries,</li>
+ *     <li>co‑ordinating start / stop of the simulation loop.</li>
+ * </ul>
  */
 public class LevelCoreManager {
 
-    /* ============================ خارجی ============================ */
-    private final GameController   gameController;
-    public final LevelManager     levelManager;
-    public LevelBuilder     levelBuilder;
-    private final WireUsageModel   usageModel;          // موجود در پروژه
-    private final BehaviorRegistry behaviorRegistry;    // ممکن است null باشد در گام صفر
-    // --- افزوده برای گام ۲: پاکسازی بین ریست‌ها ---
-    private LargeGroupRegistry       largeRegistry;           // nullable – تزریق بعدی
-    private WireDurabilityController durabilityController;    // nullable – تزریق بعدی
+    /* ───────────────────────── External dependencies ───────────────────────── */
+    private final GameController     gameController;
+    private final LevelManager       levelManager;
+    private       LevelBuilder       levelBuilder;   // late‑bound
+    private final WireUsageModel     usageModel;
+    private final BehaviorRegistry behaviorRegistry;   // may be null
+    private final LargeGroupRegistry largeRegistry;      // may be null
 
-    /* ============================ وضعیت مرحله ============================ */
-    private LevelDefinition              currentDef;
-    private final List<SystemBoxModel>  boxes   = new ArrayList<>();
-    private final List<WireModel>       wires   = new ArrayList<>();
-    private final Map<WireModel, SystemBoxModel> destMap = new HashMap<>();
+    /* ───────────────────────── Runtime controllers ─────────────────────────── */
+    private WireDurabilityController     durabilityController;   // optional
+    private WireTimeoutController        timeoutController;      // optional
+    private ConfidentialThrottleController confThrottleController; // optional
 
-    // Map پورت → باکس برای Bounce در CollisionController
-    private final Map<PortModel, SystemBoxModel> portToBox = new HashMap<>();
-
-    // کنترلرهای وابسته به سیم‌کشی
     private WireCreationController wireCreator;
     private WireRemovalController  wireRemover;
 
-    /* ---------------------------- سازنده‌ها ---------------------------- */
+    /* ───────────────────────── Level state ─────────────────────────────────── */
+    private LevelDefinition                 currentDef;
+    private final List<SystemBoxModel>      boxes    = new ArrayList<>();
+    private final List<WireModel>           wires    = new ArrayList<>();
+    private final Map<WireModel,SystemBoxModel> destMap    = new HashMap<>();
+    private final Map<PortModel,SystemBoxModel>  portToBox = new HashMap<>();
+
+    /* ───────────────────────── Constructors ────────────────────────────────── */
+    /**
+     * Minimal constructor kept for legacy tests – behaviourRegistry & largeRegistry may be {@code null}.
+     */
     public LevelCoreManager(GameController gc,
-                            LevelManager lm,
-                            LevelBuilder lb,
+                            LevelManager   lm,
+                            LevelBuilder   lb,
                             WireUsageModel usageModel) {
-        this(gc, lm, lb, usageModel, null);
+        this(gc, lm, lb, usageModel, null, null);
     }
 
     public LevelCoreManager(GameController gc,
-                            LevelManager lm,
-                            LevelBuilder lb,
+                            LevelManager   lm,
+                            LevelBuilder   lb,
                             WireUsageModel usageModel,
-                            BehaviorRegistry registry) {
+                            BehaviorRegistry behaviorRegistry) {
+        this(gc, lm, lb, usageModel, behaviorRegistry, null);
+    }
+
+    /**
+     * <b>Preferred</b> constructor – all dependencies injected up‑front.
+     */
+    public LevelCoreManager(GameController gc,
+                            LevelManager   lm,
+                            LevelBuilder   lb,
+                            WireUsageModel usageModel,
+                            BehaviorRegistry behaviorRegistry,
+                            LargeGroupRegistry largeRegistry) {
         this.gameController   = gc;
         this.levelManager     = lm;
-        this.levelBuilder     = lb;
+        this.levelBuilder     = lb;  // may be null → setter later
         this.usageModel       = usageModel;
-        this.behaviorRegistry = registry;
+        this.behaviorRegistry = behaviorRegistry;
+        this.largeRegistry    = largeRegistry;
     }
 
-    /* ===================== چرخهٔ حیات مرحله ===================== */
+    /* ───────────────────────── Public API ──────────────────────────────────── */
+
+    /** Inject a {@link LevelBuilder} after construction (needed because builder
+     *  depends on SimulationCoreManager which itself needs this LevelCoreManager). */
+    public void setLevelBuilder(LevelBuilder builder) {
+        this.levelBuilder = builder;
+    }
+
+    /** Main entry – load level by index (1‑based). */
     public void startLevel(int idx) {
-        // Build the definition manually using LevelGenerator (no getDefinition in LevelManager)
-        LevelDefinition def = com.blueprinthell.level.LevelGenerator.firstLevel();
-        for (int i = 1; i < idx; i++) {
-            def = com.blueprinthell.level.LevelGenerator.nextLevel(def);
-        }
+        // TODO replace temp generator call with levelManager.get(idx) once implemented
+        LevelDefinition def = LevelGenerator.firstLevel();
+        for (int i = 1; i < idx; i++) def = LevelGenerator.nextLevel(def);
         startLevel(def);
     }
 
+    /** Load a concrete {@link LevelDefinition}. */
     public void startLevel(LevelDefinition def) {
         this.currentDef = def;
 
-        // 1) توقف شبیه‌سازی هنگام بازسازی
+        /* 1) Stop simulation & wipe transient data */
         gameController.getSimulation().stop();
-        // پاکسازی وضعیت موقتی قبل از شروع دوباره مرحله
         clearTransientState();
 
-        // 2) پاکسازی وضعیت قدیمی
-        boxes.clear();
-        destMap.clear();
-        wires.clear();
+        /* 2) Reset wire quota */
         usageModel.reset(def.totalWireLength());
 
-        // 3) ساخت Box ها (LevelBuilder در صورت داشتن registry برای هر Box رفتار Normal ثبت می‌کند)
+        /* 3) (Re)build boxes & maps */
+        boxes.clear(); wires.clear(); destMap.clear();
+        if (levelBuilder == null)
+            throw new IllegalStateException("LevelBuilder not set before startLevel()");
         boxes.addAll(levelBuilder.build(def));
-        // بازسازی نگاشت پورت→باکس برای برخوردها
         rebuildPortToBoxMap();
 
-        // 4) ساخت کنترلرهای سیم‌کشی
+        /* 4) Wire controllers */
         buildWireControllers();
 
-        // 5) HUD یکبار رفرش شود (HudController#refreshOnce موجود است)
+        /* 5) Refresh UI */
         gameController.getHudController().refreshOnce();
 
-        // 6) شروع مجدد شبیه‌سازی
+        /* 6) Seek timeline to zero and run */
         gameController.getTimeline().scrubTo(0);
         gameController.getSimulation().start();
     }
 
-    /** سیم‌های مرحله فعلی را پاک می‌کند (برای Retry). */
+    /** Remove *runtime* wires only (keeps LevelDefinition intact). */
     public void purgeCurrentLevelWires() {
-        // فعلاً تمام سیم‌های غیر دائمی پاک می‌شوند (در آینده Flag بگذاریم)
-        for (WireModel w : new ArrayList<>(wires)) {
-            removeWire(w);
-        }
+        for (WireModel w : new ArrayList<>(wires)) removeWire(w);
         usageModel.reset(currentDef.totalWireLength());
         gameController.getGameView().repaint();
     }
 
-    /** افزودن جعبه‌های جدید بدون Stage (لیست BoxSpec می‌گیرد). */
+    /** Extend an ongoing multi‑stage level with new specs (e.g. progressive waves). */
     public void extendWithSpecs(List<LevelDefinition.BoxSpec> specs) {
-        List<SystemBoxModel> all = levelBuilder.extend(boxes, specs);
         boxes.clear();
-        boxes.addAll(all);
+        boxes.addAll(levelBuilder.extend(boxes, specs));
         rebuildPortToBoxMap();
-        // چون لیست boxes در WireCreationController به صورت reference پاس شده، اگر عوض شد باید کنترلر را دوباره بسازیم
         buildWireControllers();
     }
 
-    /* ===================== کنترلرهای سیم‌کشی ===================== */
+    /* ────────────── Wiring controllers ────────────── */
     public void buildWireControllers() {
-        // سازنده‌ها خودشون به view گوش می‌دن؛ کافیست نمونه‌ها را بسازیم و به GC بدهیم
         wireCreator = new WireCreationController(
                 gameController.getGameView(),
                 gameController.getSimulation(),
-                boxes,
-                wires,
-                destMap,
+                boxes, wires, destMap,
                 usageModel,
                 gameController.getCoinModel(),
-                // هنگام تغییر شبکه HUD را به‌روزرسانی کن
-                (Runnable) () -> gameController.getHudController().refreshOnce()
+                () -> gameController.getHudController().refreshOnce()
         );
         gameController.setWireCreator(wireCreator);
 
@@ -148,14 +159,18 @@ public class LevelCoreManager {
                 gameController.getGameView(),
                 wires,
                 destMap,
-                wireCreator,              // <-- matches constructor signature
+                wireCreator,
                 usageModel,
-                (Runnable) () -> gameController.getHudController().refreshOnce()
+                () -> gameController.getHudController().refreshOnce()
         );
     }
 
-    /* ============================ کمکی‌ها ============================ */
+    /* ────────────── Wire operations ────────────── */
     public void removeWire(WireModel wire) {
+        if (wireRemover != null) {
+            wireRemover.removeWire(wire);
+            return;
+        }
         if (wires.remove(wire)) {
             destMap.remove(wire);
             usageModel.freeWire(wire.getLength());
@@ -168,60 +183,26 @@ public class LevelCoreManager {
         usageModel.useWire(wire.getLength());
     }
 
-    /* ============================ Getter ها ============================ */
-    public LevelDefinition getCurrentDef() { return currentDef; }
-    public List<SystemBoxModel> getBoxes() { return boxes; }
-    public List<WireModel> getWires() { return wires; }
-    public Map<WireModel, SystemBoxModel> getDestMap() { return destMap; }
-    public WireCreationController getWireCreator() { return wireCreator; }
-    public WireRemovalController  getWireRemover() { return wireRemover; }
-    public WireUsageModel         getUsageModel()  { return usageModel; }
-    public BehaviorRegistry       getBehaviorRegistry() { return behaviorRegistry; }
-    public Map<PortModel, SystemBoxModel> getPortToBoxMap() { return portToBox; }
-
-    /** بازسازی Map پورت→باکس بر اساس لیست فعلی باکس‌ها */
-    private void rebuildPortToBoxMap() {
-        portToBox.clear();
-        for (SystemBoxModel b : boxes) {
-            for (PortModel p : b.getInPorts())  portToBox.put(p, b);
-            for (PortModel p : b.getOutPorts()) portToBox.put(p, b);
-        }
-    }
-
-    /* ============================ Helpers: Clear ============================ */
-    /** پاکسازی رجیستری‌ها و هینت‌ها هنگام ریست مرحله */
-    private void clearTransientState() {
-        if (largeRegistry != null) {
-            largeRegistry.clear();
-        }
-        if (durabilityController != null) {
-            durabilityController.clear();
-        }
-        // هینت‌های استاتیک (اگر وجود دارند)
-        try { RouteHints.clear(); } catch (Throwable ignored) {}
-        try { VpnRevertHints.clear(); } catch (Throwable ignored) {}
-    }
-
-    /* ============================ UI Sync ============================ */
-    /**
-     * Keeps compatibility with older code that expected this method here.
-     * Currently it just delegates to GameController's implementation.
-     */
+    /* ────────────── UI sync helpers ────────────── */
     public void updateStartEnabled() {
         boolean allConnected = boxes.stream().allMatch(b ->
                 b.getInPorts().stream().allMatch(gameController::isPortConnected) &&
                         b.getOutPorts().stream().allMatch(gameController::isPortConnected));
-        gameController.getHudCoord().setStartEnabled(allConnected);
+        try {
+            gameController.getHudController().setStartEnabled(allConnected);
+        } catch (Throwable ignored) {
+            gameController.getHudController().refreshOnce();
+        }
     }
 
-    /* ============================ Retry ============================ */
+    /* ────────────── Retry helpers ────────────── */
     public void retryStage() {
         gameController.getSimulation().stop();
         purgeCurrentLevelWires();
         startLevel(currentDef);
     }
 
-    /** @deprecated از {@link #retryStage()} استفاده کنید. */
+    /** @deprecated – use {@link #retryStage()}. */
     @Deprecated
     public void retryLevel(LevelDefinition def) {
         gameController.getSimulation().stop();
@@ -229,17 +210,49 @@ public class LevelCoreManager {
         startLevel(def);
     }
 
-    public LevelManager getLevelManager() {
-        return levelManager;
+    /* ────────────── Internal helpers ────────────── */
+    private void rebuildPortToBoxMap() {
+        portToBox.clear();
+        boxes.forEach(b -> {
+            b.getInPorts().forEach(p -> portToBox.put(p, b));
+            b.getOutPorts().forEach(p -> portToBox.put(p, b));
+        });
     }
+
+    private void clearTransientState() {
+        Optional.ofNullable(largeRegistry).ifPresent(LargeGroupRegistry::clear);
+        Optional.ofNullable(durabilityController).ifPresent(WireDurabilityController::clear);
+        Optional.ofNullable(timeoutController).ifPresent(WireTimeoutController::clear);
+        // confThrottleController currently has no clear(); add if/when implemented
+        RouteHints.clear();
+        VpnRevertHints.clear();
+        KinematicsRegistry.clear();
+    }
+
+    /* ────────────── Getters / Setters ────────────── */
+    public LevelDefinition getCurrentDef()                 { return currentDef; }
+    public List<SystemBoxModel> getBoxes()                 { return boxes; }
+    public List<WireModel> getWires()                      { return wires; }
+    public Map<WireModel,SystemBoxModel> getDestMap()      { return destMap; }
+    public Map<PortModel,SystemBoxModel> getPortToBoxMap() { return portToBox; }
+
+    public WireCreationController getWireCreator() { return wireCreator; }
+    public WireRemovalController  getWireRemover() { return wireRemover; }
+    public WireUsageModel         getUsageModel()  { return usageModel; }
+    public BehaviorRegistry       getBehaviorRegistry() { return behaviorRegistry; }
+
+    public LargeGroupRegistry getLargeRegistry() { return largeRegistry; }
+
+    public WireDurabilityController getDurabilityController() { return durabilityController; }
+    public void setDurabilityController(WireDurabilityController ctrl) { this.durabilityController = ctrl; }
+
+    public WireTimeoutController getTimeoutController() { return timeoutController; }
+    public void setTimeoutController(WireTimeoutController ctrl) { this.timeoutController = ctrl; }
+
+    public ConfidentialThrottleController getConfThrottleController() { return confThrottleController; }
+    public void setConfThrottleController(ConfidentialThrottleController ctrl) { this.confThrottleController = ctrl; }
 
     public LevelBuilder getLevelBuilder() { return levelBuilder; }
 
-    /** تزریق بعدی رجیستری پکت‌های حجیم */
-    public void setLargeRegistry(LargeGroupRegistry reg) { this.largeRegistry = reg; }
-    public LargeGroupRegistry getLargeRegistry() { return largeRegistry; }
-
-    /** تزریق بعدی کنترلر دوام سیم */
-    public void setDurabilityController(WireDurabilityController ctrl) { this.durabilityController = ctrl; }
-    public WireDurabilityController getDurabilityController() { return durabilityController; }
+    public LevelManager getLevelManager() { return levelManager; }
 }
