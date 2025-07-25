@@ -117,10 +117,11 @@ public class SimulationRegistrar {
         simulation.register(lossMonitor);
 
         // 4) Level completion detector
-        int plannedTotal = 0;
-        for (SystemBoxModel b : boxes) {
-            if (!b.getInPorts().isEmpty()) plannedTotal += b.getInPorts().size();
-        }
+         int plannedTotal = Config.PACKETS_PER_PORT
+                     * boxes.stream()
+                            .mapToInt(b -> b.getOutPorts().size())
+                           .sum();
+
         simulation.register(new LevelCompletionDetector(
                 wires, lossModel, producer,
                 levelManager, 0.5, plannedTotal));

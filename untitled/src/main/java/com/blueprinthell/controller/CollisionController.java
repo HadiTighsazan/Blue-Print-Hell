@@ -26,8 +26,13 @@ public class CollisionController implements Updatable {
     /* ---- Tunables ---- */
     private static final int    CELL_SIZE        = 50;
     private static final double COLLISION_RADIUS = 18.0;
-    private static final double NOISE_INCREMENT  = 0.5;
-    private static final double MAX_NOISE        = 5.0;
+
+
+
+       private static final double NOISE_INCREMENT = 0.5;
+    private static final double MAX_NOISE       = 5.0;
+
+
     private static final double IMPACT_RADIUS    = 100.0;
     private static final double IMPACT_STRENGTH  = 1.0;
 

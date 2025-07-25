@@ -12,6 +12,8 @@ import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Facade that owns everything related to a single **level** lifecycle:
@@ -145,25 +147,39 @@ public class LevelCoreManager {
 
     /* ────────────── Wiring controllers ────────────── */
     public void buildWireControllers() {
-        wireCreator = new WireCreationController(
+        Runnable networkChanged = () -> {
+            gameController.getHudController().refreshOnce();
+            updateStartEnabled();
+        };
+
+        // اول WireCreationController می‌سازیم
+        WireCreationController wireCreator = new WireCreationController(
                 gameController.getGameView(),
-                gameController.getSimulation(),
-                boxes, wires, destMap,
+                gameController.getSimulation(),    // یا getSimulationCoreManager() اگر نامش همینه
+                boxes,
+                wires,
+                destMap,
                 usageModel,
                 gameController.getCoinModel(),
-                () -> gameController.getHudController().refreshOnce()
+                networkChanged
         );
-        gameController.setWireCreator(wireCreator);
+        this.wireCreator = wireCreator;
 
-        wireRemover = new WireRemovalController(
+        // حالا WireRemovalController رو با پارامترهای صحیح بساز
+        WireRemovalController wireRemover = new WireRemovalController(
                 gameController.getGameView(),
                 wires,
                 destMap,
-                wireCreator,
+                wireCreator,       // همین ابجکتِ wireCreator
                 usageModel,
-                () -> gameController.getHudController().refreshOnce()
+                networkChanged
         );
+        this.wireRemover = wireRemover;
     }
+
+
+
+
 
     /* ────────────── Wire operations ────────────── */
     public void removeWire(WireModel wire) {
@@ -185,15 +201,37 @@ public class LevelCoreManager {
 
     /* ────────────── UI sync helpers ────────────── */
     public void updateStartEnabled() {
-        boolean allConnected = boxes.stream().allMatch(b ->
-                b.getInPorts().stream().allMatch(gameController::isPortConnected) &&
-                        b.getOutPorts().stream().allMatch(gameController::isPortConnected));
+        // 1) پیدا کردن و جمع‌آوری پورت‌های وصل‌نشده
+        List<PortModel> unconnected = boxes.stream()
+                .flatMap(b -> Stream.concat(b.getInPorts().stream(), b.getOutPorts().stream()))
+                .filter(p -> !gameController.isPortConnected(p))
+                .collect(Collectors.toList());
+
+        // 2) لاگ‌شدن تعداد و نام پورت‌های وصل‌نشده
+        System.out.println("[DEBUG] updateStartEnabled(): unconnected ports count = " + unconnected.size());
+        if (!unconnected.isEmpty()) {
+            // می‌توانی اینجا نام یا آدرس پورت‌ها را هم چاپ کنی
+            unconnected.forEach(p ->
+                    System.out.println("  - Unconnected Port: " + p + " (box=" + portToBox.get(p) + ")")
+            );
+        }
+
+        // 3) محاسبه‌ی وضعیت دکمه
+        boolean allConnected = unconnected.isEmpty();
+
+        // 4) لاگ وضعیت نهایی
+        System.out.println("[DEBUG] updateStartEnabled(): allConnected = " + allConnected);
+
+        // 5) غیر/فعال‌سازی دکمه
         try {
             gameController.getHudController().setStartEnabled(allConnected);
         } catch (Throwable ignored) {
+            // اگر استارت‌انبل خطا داد، شبیه‌سازی رفرش می‌کنیم
+            System.out.println("[DEBUG] updateStartEnabled(): exception in setStartEnabled(), refreshing HUD");
             gameController.getHudController().refreshOnce();
         }
     }
+
 
     /* ────────────── Retry helpers ────────────── */
     public void retryStage() {

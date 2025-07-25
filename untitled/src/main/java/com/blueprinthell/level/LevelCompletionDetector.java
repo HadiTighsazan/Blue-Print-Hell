@@ -48,8 +48,9 @@ public class LevelCompletionDetector implements Updatable {
         // Condition 1: no packets on any wire
         boolean empty = wires.stream().allMatch(w -> w.getPackets().isEmpty());
         // Condition 2: loss ratio based on total planned packets
-        double ratio = plannedPackets > 0 ? lossModel.getLostCount() / plannedPackets : 0.0;
-        boolean okLoss = ratio < lossThreshold;
+         double ratio = plannedPackets > 0
+                     ? (double) lossModel.getLostCount() / plannedPackets
+                     : 0.0;        boolean okLoss = ratio < lossThreshold;
         if (empty && okLoss) {
             reported = true;
             SwingUtilities.invokeLater(levelManager::reportLevelCompleted);

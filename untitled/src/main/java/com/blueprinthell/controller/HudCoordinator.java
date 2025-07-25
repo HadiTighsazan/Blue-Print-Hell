@@ -47,6 +47,8 @@ public final class HudCoordinator {
         this.producer = producer;
         clearButtonListeners();
 
+        System.out.println("Wiring StartListener to HUD");
+
         hud.addStartListener(startListener);
         hud.addToggleListener(toggleListener);
         hud.getStartButton().setEnabled(false); // گیم کنترلر بعداً فعال می‌کند

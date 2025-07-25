@@ -83,12 +83,14 @@ public class GameController implements NetworkController {
         this.simulationCoreManager = new SimulationCoreManager(this, largeRegistry);
 
         /* Optional: override collision controller immediately */
-        simulationCoreManager.setCollisionCtrl(
-                new CollisionController(
+            CollisionController collisionCtrl = new CollisionController(
                         simulationCoreManager.getWires(),
                         simulationCoreManager.getLossModel()
-                )
-        );
+                            );
+            /* 2) نگهداری در SimulationCoreManager */
+                    simulationCoreManager.setCollisionCtrl(collisionCtrl);
+            /* 3) ثبت در حلقه‌ی شبیه‌سازی تا update(dt) صدا زده شود */
+                    simulationCoreManager.getSimulation().register(collisionCtrl);
 
         /* 5) Level‑oriented manager (builder injected later) */
         this.levelCoreManager = new LevelCoreManager(
@@ -112,14 +114,70 @@ public class GameController implements NetworkController {
         levelCoreManager.setLevelBuilder(levelBuilder);
 
         /* ★ 6‑bis) Packet‑producer controller */
+        // ─── Packet Producer ─────────────────────────────────────────────────────────
         PacketProducerController producerCtrl = new PacketProducerController(
                 levelCoreManager.getBoxes(),
-                simulationCoreManager.getWires(),
+                levelCoreManager.getWires(),
                 levelCoreManager.getDestMap(),
                 Config.DEFAULT_PACKET_SPEED,
                 Config.PACKETS_PER_PORT
         );
         simulationCoreManager.setProducerController(producerCtrl);
+        simulationCoreManager.getSimulation().register(producerCtrl);
+
+// ─── Packet Dispatcher ──────────────────────────────────────────────────────
+        PacketDispatcherController dispatcherCtrl = new PacketDispatcherController(
+                levelCoreManager.getWires(),
+                levelCoreManager.getDestMap(),
+                simulationCoreManager.getCoinModel(),
+                simulationCoreManager.getLossModel()
+        );
+        simulationCoreManager.getSimulation().register(dispatcherCtrl);
+
+// ─── Packet Router ──────────────────────────────────────────────────────────
+        for (SystemBoxModel box : levelCoreManager.getBoxes()) {
+            PacketRouterController routerCtrl = new PacketRouterController(
+                    box,
+                    levelCoreManager.getWires(),
+                    levelCoreManager.getDestMap(),
+                    simulationCoreManager.getLossModel()
+            );
+            simulationCoreManager.getSimulation().register(routerCtrl);
+        }
+
+// ─── Packet Consumer ────────────────────────────────────────────────────────
+        for (SystemBoxModel box : levelCoreManager.getBoxes()) {
+            PacketConsumerController consumerCtrl = new PacketConsumerController(
+                    box,
+                    simulationCoreManager.getScoreModel(),
+                    simulationCoreManager.getCoinModel()
+            );
+            simulationCoreManager.getSimulation().register(consumerCtrl);
+        }
+
+// ─── Packet Render ──────────────────────────────────────────────────────────
+        PacketRenderController packetRenderer = new PacketRenderController(
+                getGameView().getGameArea(),
+                levelCoreManager.getWires()
+        );
+        simulationCoreManager.setPacketRenderer(packetRenderer);
+        simulationCoreManager.getSimulation().register(packetRenderer);
+
+// ─── Loss Monitor ───────────────────────────────────────────────────────────
+        int totalPlanned = Config.PACKETS_PER_PORT
+                * levelCoreManager.getBoxes().stream().mapToInt(b -> b.getOutPorts().size()).sum();
+        LossMonitorController lossMonitor = new LossMonitorController(
+                simulationCoreManager.getLossModel(),
+                totalPlanned,
+                0.5,                                     // threshold ratio
+                simulationCoreManager.getSimulation(),
+                screenController,
+                levelCoreManager::retryStage
+        );
+        simulationCoreManager.getSimulation().register(lossMonitor);
+
+
+
 
         /* 7) HUD coordination */
         this.hudCoord = new HudCoordinator(
@@ -182,8 +240,10 @@ public class GameController implements NetworkController {
     /* ================================================================ */
     /*               Public API to load a level by index                */
     /* ================================================================ */
-    public void startLevel(int idx) { levelCoreManager.startLevel(idx); }
-    public void startLevel(LevelDefinition def) { levelCoreManager.startLevel(def); }
+    public void startLevel(int idx) {
+        levelCoreManager.startLevel(idx); }
+    public void startLevel(LevelDefinition def) {
+        levelCoreManager.startLevel(def); }
 
     /* Build controllers for wire creation/removal */
     private void buildWireControllers() { levelCoreManager.buildWireControllers(); }
@@ -191,7 +251,13 @@ public class GameController implements NetworkController {
     /* Enable / disable “Start” button */
     public void updateStartEnabled() { levelCoreManager.updateStartEnabled(); }
 
-    public boolean isPortConnected(PortModel p) { return simulationCoreManager.isPortConnected(p); }
+
+    public boolean isPortConnected(PortModel p) {
+        // به جای سیم‌های شبیه‌ساز، از سیم‌های واقعی LevelCoreManager استفاده کن
+        return levelCoreManager.getWires().stream()
+                .anyMatch(w -> w.getSrcPort() == p || w.getDstPort() == p);
+    }
+
 
     /* ---------------- retry helpers ---------------- */
     private void purgeCurrentLevelWires() { levelCoreManager.purgeCurrentLevelWires(); }

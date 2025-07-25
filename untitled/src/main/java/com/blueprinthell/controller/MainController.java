@@ -9,6 +9,7 @@ import com.blueprinthell.model.WireModel;
 /**
  * Entry‑point class that wires together the high‑level controllers and shows the main window.
  */
+
 public class MainController {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {

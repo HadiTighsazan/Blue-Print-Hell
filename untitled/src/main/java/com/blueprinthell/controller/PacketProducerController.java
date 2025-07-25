@@ -22,7 +22,7 @@ public class PacketProducerController implements Updatable {
     private final Map<WireModel, SystemBoxModel> destMap;
     private final double baseSpeed;
     private final int packetsPerPort;
-    private final int totalToProduce;
+    private  int totalToProduce;
 
     /* -------- runtime state -------- */
     private double acc = 0.0;
@@ -46,9 +46,14 @@ public class PacketProducerController implements Updatable {
 
     /* ---------------- Public API ---------------- */
     public void startProduction() {
-        running = true;
-        System.out.println("[DEBUG] startProduction on " + this);
+        // بازمحاسبه بر اساس لیست فعلی sourceBoxes
+        int outs = sourceBoxes.stream().mapToInt(b -> b.getOutPorts().size()).sum();
+        this.totalToProduce = outs * packetsPerPort;
+        this.producedCount = 0;
+        this.returnedCredits = 0;
+        this.running = true;
     }
+
     public void stopProduction()  { running = false; }
 
     /**
@@ -80,8 +85,6 @@ public class PacketProducerController implements Updatable {
 
     @Override
     public void update(double dt) {
-        System.out.println("[DEBUG] Producer.update called, dt=" + dt);
-        System.out.println("[DEBUG] update on " + this + ", dt=" + dt);
 
         if (!running || isFinished()) return;
         acc += dt;
@@ -94,6 +97,8 @@ public class PacketProducerController implements Updatable {
 
     /* ---------------- Internal helpers ---------------- */
     private void emitOnce() {
+        System.out.println("Emitting packet #" + producedCount);
+
         for (SystemBoxModel box : sourceBoxes) {
             if (!box.getInPorts().isEmpty()) continue;
             box.getOutPorts().forEach(port -> wires.stream()
