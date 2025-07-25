@@ -1,33 +1,37 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.controller.systems.BehaviorRegistry;
-import com.blueprinthell.controller.systems.SystemBehavior;
+import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
 import com.blueprinthell.level.LevelManager;
-import com.blueprinthell.model.*;
 import com.blueprinthell.view.HudView;
-import com.blueprinthell.config.Config;
+import com.blueprinthell.view.screens.GameScreenView;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * <h2>SimulationRegistrar</h2>
- * مسئول ثبت همهٔ موجودیت‌های {@link Updatable} در حلقهٔ شبیه‌سازی به ترتیب صحیح.
- * نسخهٔ فعلی علاوه بر اجزای اصلی، Behaviourها، کنترلر دوام سیم، تایم‌اوت پکت روی سیم و throttle محرمانه را نیز ثبت می‌کند.
+ * Wires every runtime Updatable required for a level into the SimulationController.
+ * Responsibilities:
+ *  - Register core packet flow controllers
+ *  - Register game-over / retry logic
+ *  - Register snapshot & HUD controllers
+ *  - Register any system-specific controllers (VPN, Spy, etc.)
  */
-public class SimulationRegistrar {
+public final class SimulationRegistrar {
 
-    private final SimulationController    simulation;
-    private final ScreenController        screenController;
-    private final CollisionController     collisionController;
-    private final PacketRenderController  packetRenderer;
-    private final ScoreModel              scoreModel;
-    private final CoinModel               coinModel;
-    private final PacketLossModel         lossModel;
-    private final WireUsageModel          usageModel;
-    private final SnapshotManager         snapshotManager;
-    private final HudView                 hudView;
-    private final LevelManager            levelManager;
+    private final SimulationController simulation;
+    private final ScreenController screenController;
+    private final CollisionController collisionController;
+    private final PacketRenderController packetRenderer;
+
+    private final ScoreModel    scoreModel;
+    private final CoinModel     coinModel;
+    private final PacketLossModel lossModel;
+    private final WireUsageModel  usageModel;
+    private final SnapshotManager snapshotManager;
+    private final HudView         hudView;
+    private final LevelManager    levelManager;
 
     public SimulationRegistrar(SimulationController simulation,
                                ScreenController screenController,
@@ -40,110 +44,86 @@ public class SimulationRegistrar {
                                SnapshotManager snapshotManager,
                                HudView hudView,
                                LevelManager levelManager) {
-        this.simulation        = simulation;
-        this.screenController  = screenController;
-        this.collisionController = collisionController;
-        this.packetRenderer    = packetRenderer;
-        this.scoreModel        = scoreModel;
-        this.coinModel         = coinModel;
-        this.lossModel         = lossModel;
-        this.usageModel        = usageModel;
-        this.snapshotManager   = snapshotManager;
-        this.hudView           = hudView;
-        this.levelManager      = levelManager;
+        this.simulation         = simulation;
+        this.screenController   = screenController;
+        this.collisionController= collisionController;
+        this.packetRenderer     = packetRenderer;
+        this.scoreModel         = scoreModel;
+        this.coinModel          = coinModel;
+        this.lossModel          = lossModel;
+        this.usageModel         = usageModel;
+        this.snapshotManager    = snapshotManager;
+        this.hudView            = hudView;
+        this.levelManager       = levelManager;
     }
 
-    /** نسخهٔ قدیمی بدون BehaviourRegistry */
+    /**
+     * Registers every Updatable for a new level.
+     * @param boxes   all SystemBoxModels in play
+     * @param wires   list of all wires connecting boxes
+     * @param destMap mapping each wire to its destination box
+     * @param sources source boxes producing packets
+     * @param sink    the sink box consuming packets (may be null)
+     * @param producer PacketProducerController pre-configured for this level
+     * @param systems  List of custom system controllers (VPNSystem, SpySystem, ...)
+     */
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
                             Map<WireModel, SystemBoxModel> destMap,
+                            List<SystemBoxModel> sources,
+                            SystemBoxModel sink,
                             PacketProducerController producer,
-                            PacketDispatcherController dispatcher,
-                            PacketConsumerController consumer,
-                            PacketRouterController router,
-                            LossMonitorController lossMonitor) {
-        registerAll(boxes, wires, destMap, producer, dispatcher, consumer, router, lossMonitor, null);
-    }
+                            List<Updatable> systems) {
 
-    /** نسخهٔ جدید با BehaviourRegistry (nullable). */
-    public void registerAll(List<SystemBoxModel> boxes,
-                            List<WireModel> wires,
-                            Map<WireModel, SystemBoxModel> destMap,
-                            PacketProducerController producer,
-                            PacketDispatcherController dispatcher,
-                            PacketConsumerController consumer,
-                            PacketRouterController router,
-                            LossMonitorController lossMonitor,
-                            BehaviorRegistry behaviorRegistry) {
-
-        // 1) Core flow: تولید → ارسال روی سیم → (کنترل دوام/تایم‌اوت) → رفتارها → روت → throttle → مصرف
-        simulation.register(producer);
-        simulation.register(dispatcher);
-
-        // 1.3) دوام سیم‌ها (Heavy packets count & auto-destroy)
-        WireDurabilityController durability = new WireDurabilityController(wires, lossModel, Config.MAX_HEAVY_PASSES_PER_WIRE);
-        dispatcher.setDurabilityController(durability);
-        simulation.register(durability);
-
-        // 1.4) تایم‌اوت پکت روی سیم
-        WireTimeoutController timeoutCtrl = new WireTimeoutController(wires, lossModel, Config.MAX_TIME_ON_WIRE_SEC);
-        simulation.register(timeoutCtrl);
-
-        // 1.5) Behaviourها – قبل از Router تا روی بافرها اثر بگذارند
-        if (behaviorRegistry != null) {
-            for (List<SystemBehavior> list : behaviorRegistry.view().values()) {
-                for (SystemBehavior b : list) {
-                    simulation.register(dt -> b.update(dt));
-                }
-            }
+        // Register custom systems (VPN, Spy, etc.) first
+        if (systems != null) {
+            systems.forEach(simulation::register);
         }
 
-        // 1.6) Router
-        simulation.register(router);
+        // Packet flow: production, dispatch, routing, consumption
+        simulation.register(producer);
+        simulation.register(new PacketDispatcherController(wires, destMap, coinModel, lossModel));
+        if (sink != null) {
+            simulation.register(new PacketConsumerController(sink, scoreModel, coinModel));
+        }
 
-        // 1.7) Confidential throttle
-        ConfidentialThrottleController confThrottle = new ConfidentialThrottleController(wires, destMap);
-        simulation.register(confThrottle);
+        boxes.stream()
+                .filter(b -> !b.getInPorts().isEmpty() && !b.getOutPorts().isEmpty())
+                .forEach(b -> simulation.register(
+                        new PacketRouterController(b, wires, destMap, lossModel)
+                ));
 
-        // 1.8) Consumer
-        simulation.register(consumer);
-
-        // 2) Rendering
+        // Rendering & collision
         simulation.register(packetRenderer);
-
-        // 3) Collision & loss monitor
-        collisionController.setPortToBoxMap(buildPortToBoxMap(boxes));
         simulation.register(collisionController);
-        simulation.register(lossMonitor);
 
-        // 4) Level completion detector
-         int plannedTotal = Config.PACKETS_PER_PORT
-                     * boxes.stream()
-                            .mapToInt(b -> b.getOutPorts().size())
-                           .sum();
+        // Loss / completion
 
+        // Loss / completion: only if a ScreenController is available
+        int plannedTotal = sources.stream()
+                .mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort())
+                .sum();
+        if (screenController != null) {
+            simulation.register(new LossMonitorController(
+                    lossModel,
+                    plannedTotal,
+                    0.5,
+                    simulation,
+                    screenController,
+                    () -> levelManager.startGame()
+            ));
+        }
         simulation.register(new LevelCompletionDetector(
                 wires, lossModel, producer,
                 levelManager, 0.5, plannedTotal));
 
-        // 5) Snapshots & HUD
+        // Snapshots & HUD
         simulation.register(new SnapshotController(
                 boxes, wires,
                 scoreModel, coinModel, usageModel, lossModel, snapshotManager));
-
+        // HUD sync (wire, loss, coins, level)
         simulation.register(new HudController(
-                usageModel, lossModel, coinModel, levelManager, hudView));
-    }
-
-    /**
-     * پورت → باکس برای منطق bounce در CollisionController
-     */
-    private Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {
-        Map<PortModel, SystemBoxModel> map = new HashMap<>();
-        for (SystemBoxModel b : boxes) {
-            for (PortModel p : b.getInPorts())  map.put(p, b);
-            for (PortModel p : b.getOutPorts()) map.put(p, b);
-        }
-        return map;
+                usageModel, lossModel, coinModel, levelManager, hudView
+        ));
     }
 }

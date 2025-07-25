@@ -1,296 +1,276 @@
 package com.blueprinthell.controller.core;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.*;
-import com.blueprinthell.controller.systems.BehaviorRegistry;
-import com.blueprinthell.controller.systems.RouteHints;
-import com.blueprinthell.controller.systems.VpnRevertHints;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelGenerator;
 import com.blueprinthell.level.LevelManager;
-import com.blueprinthell.model.*;
-import com.blueprinthell.model.large.LargeGroupRegistry;
-import com.blueprinthell.motion.KinematicsRegistry;
+import com.blueprinthell.model.SystemBoxModel;
+import com.blueprinthell.model.Updatable;
+import com.blueprinthell.model.WireModel;
+import com.blueprinthell.model.WireUsageModel;
+import com.blueprinthell.view.WireView;
 
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import javax.swing.*;
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-/**
- * Facade that owns everything related to a single **level** lifecycle:
- * <ul>
- *     <li>building & extending boxes,</li>
- *     <li>wiring controllers,</li>
- *     <li>resetting transient registries between retries,</li>
- *     <li>co‑ordinating start / stop of the simulation loop.</li>
- * </ul>
- */
 public class LevelCoreManager {
-
-    /* ───────────────────────── External dependencies ───────────────────────── */
-    private final GameController     gameController;
-    private final LevelManager       levelManager;
-    private       LevelBuilder       levelBuilder;   // late‑bound
-    private final WireUsageModel     usageModel;
-    private final BehaviorRegistry behaviorRegistry;   // may be null
-    private final LargeGroupRegistry largeRegistry;      // may be null
-
-    /* ───────────────────────── Runtime controllers ─────────────────────────── */
-    private WireDurabilityController     durabilityController;   // optional
-    private WireTimeoutController        timeoutController;      // optional
-    private ConfidentialThrottleController confThrottleController; // optional
-
-    private WireCreationController wireCreator;
-    private WireRemovalController  wireRemover;
-
-    /* ───────────────────────── Level state ─────────────────────────────────── */
-    private LevelDefinition                 currentDef;
-    private final List<SystemBoxModel>      boxes    = new ArrayList<>();
-    private final List<WireModel>           wires    = new ArrayList<>();
-    private final Map<WireModel,SystemBoxModel> destMap    = new HashMap<>();
-    private final Map<PortModel,SystemBoxModel>  portToBox = new HashMap<>();
-
-    /* ───────────────────────── Constructors ────────────────────────────────── */
+    private final GameController gameController;
+    public final WireUsageModel usageModel = new WireUsageModel(1000.0);
+    public final Map<WireModel, SystemBoxModel> destMap = new HashMap<WireModel, SystemBoxModel>();
+    public LevelBuilder levelBuilder;
+    /* ================================================================ */
+    /*                Per‑level transient state & controllers           */
+    /* ================================================================ */
+    public List<SystemBoxModel> boxes = new ArrayList<SystemBoxModel>();
+    public LevelManager levelManager;
     /**
-     * Minimal constructor kept for legacy tests – behaviourRegistry & largeRegistry may be {@code null}.
+     * Stores the definition of the level currently running so that we can restart (retry)
+     * the exact same stage later without relying on external callers to re‑pass it.
      */
-    public LevelCoreManager(GameController gc,
-                            LevelManager   lm,
-                            LevelBuilder   lb,
-                            WireUsageModel usageModel) {
-        this(gc, lm, lb, usageModel, null, null);
+    public LevelDefinition currentDef;
+
+    public LevelCoreManager(GameController gameController) {
+        this.gameController = gameController;
     }
 
-    public LevelCoreManager(GameController gc,
-                            LevelManager   lm,
-                            LevelBuilder   lb,
-                            WireUsageModel usageModel,
-                            BehaviorRegistry behaviorRegistry) {
-        this(gc, lm, lb, usageModel, behaviorRegistry, null);
+    public WireUsageModel getUsageModel() {
+        return usageModel;
     }
 
-    /**
-     * <b>Preferred</b> constructor – all dependencies injected up‑front.
-     */
-    public LevelCoreManager(GameController gc,
-                            LevelManager   lm,
-                            LevelBuilder   lb,
-                            WireUsageModel usageModel,
-                            BehaviorRegistry behaviorRegistry,
-                            LargeGroupRegistry largeRegistry) {
-        this.gameController   = gc;
-        this.levelManager     = lm;
-        this.levelBuilder     = lb;  // may be null → setter later
-        this.usageModel       = usageModel;
-        this.behaviorRegistry = behaviorRegistry;
-        this.largeRegistry    = largeRegistry;
+    public Map<WireModel, SystemBoxModel> getDestMap() {
+        return destMap;
     }
 
-    /* ───────────────────────── Public API ──────────────────────────────────── */
-
-    /** Inject a {@link LevelBuilder} after construction (needed because builder
-     *  depends on SimulationCoreManager which itself needs this LevelCoreManager). */
-    public void setLevelBuilder(LevelBuilder builder) {
-        this.levelBuilder = builder;
+    public LevelBuilder getLevelBuilder() {
+        return levelBuilder;
     }
 
-    /** Main entry – load level by index (1‑based). */
+    public List<SystemBoxModel> getBoxes() {
+        return boxes;
+    }
+
+    public LevelManager getLevelManager() {
+        return levelManager;
+    }
+
+    public LevelDefinition getCurrentDef() {
+        return currentDef;
+    }/* --------------------------------------------------------------- */
+
+    /*               Public API to load a level by index               */
+    /* --------------------------------------------------------------- */
     public void startLevel(int idx) {
-        // TODO replace temp generator call with levelManager.get(idx) once implemented
         LevelDefinition def = LevelGenerator.firstLevel();
-        for (int i = 1; i < idx; i++) def = LevelGenerator.nextLevel(def);
+        for (int i = 1; i < idx; i++) {
+            def = LevelGenerator.nextLevel(def);
+        }
         startLevel(def);
-    }
+    }/* --------------------------------------------------------------- */
 
-    /** Load a concrete {@link LevelDefinition}. */
+    /*                Core level bootstrap (fresh start)               */
+    /* --------------------------------------------------------------- */
     public void startLevel(LevelDefinition def) {
+        // ① remember the definition we are about to run
         this.currentDef = def;
 
-        /* 1) Stop simulation & wipe transient data */
-        gameController.getSimulation().stop();
-        clearTransientState();
+        if (levelManager == null) {
+            throw new IllegalStateException("LevelManager must be set before starting level");
+        }
 
-        /* 2) Reset wire quota */
+        /* ------------------------------------------------------------------ */
+        /*  Fresh game (index 0) ⇒ full reset of boxes & wires collections   */
+        /* ------------------------------------------------------------------ */
+        if (levelManager.getLevelIndex() == 0) {
+            boxes.clear();
+            gameController.getWires().clear();
+            destMap.clear();
+        }
+
+        /* More defensively, ensure boxes list never exceeds definition size  */
+        if (boxes.size() > def.boxes().size()) {
+            boxes = new ArrayList<SystemBoxModel>(boxes.subList(0, def.boxes().size()));
+        }
+
+        /* ----- hard reset sim & HUD for new stage ----- */
+        gameController.getSimulation().stop();
+        gameController.getSimulation().clearUpdatables();
+
+        gameController.getScoreModel().reset();
+        gameController.getCoinModel().reset();
+        gameController.getLossModel().reset();
+        gameController.getSnapshotMgr().clear();
+        gameController.getTimeline().resume();
+
         usageModel.reset(def.totalWireLength());
 
-        /* 3) (Re)build boxes & maps */
-        boxes.clear(); wires.clear(); destMap.clear();
-        if (levelBuilder == null)
-            throw new IllegalStateException("LevelBuilder not set before startLevel()");
-        boxes.addAll(levelBuilder.build(def));
-        rebuildPortToBoxMap();
+        /* ----- build / reuse system boxes ----- */
+        boxes = levelBuilder.build(def, boxes);
 
-        /* 4) Wire controllers */
+        /* ----- mark existing wires as immutable (carry‑over) ----- */
+        for (WireModel w : gameController.getWires()) {
+            w.setForPreviousLevels(true);
+        }
+
+        /* ----- controllers that depend on boxes/wires ----- */
         buildWireControllers();
 
-        /* 5) Refresh UI */
-        gameController.getHudController().refreshOnce();
+        /* ----- discover sources & sink ----- */
+        List<SystemBoxModel> sources = new ArrayList<SystemBoxModel>();
+        SystemBoxModel sink = null;
+        for (int i = 0; i < boxes.size(); i++) {
+            LevelDefinition.BoxSpec spec = def.boxes().get(i);
+            SystemBoxModel box = boxes.get(i);
+            if (spec.isSource()) {
+                sources.add(box);
+            }
+            if (spec.isSink()) {
+                sink = box;
+            }
+        }
 
-        /* 6) Seek timeline to zero and run */
-        gameController.getTimeline().scrubTo(0);
-        gameController.getSimulation().start();
-    }
+        WireModel.setSourceInputPorts(sources);
+        WireModel.setSimulationController(gameController.getSimulation());
 
-    /** Remove *runtime* wires only (keeps LevelDefinition intact). */
-    public void purgeCurrentLevelWires() {
-        for (WireModel w : new ArrayList<>(wires)) removeWire(w);
-        usageModel.reset(currentDef.totalWireLength());
-        gameController.getGameView().repaint();
-    }
+        /* ----- packet planning for HUD & loss monitor ----- */
+        int stageIndex = levelManager.getLevelIndex() + 1;
+        int perPortCount = Config.PACKETS_PER_PORT * stageIndex;
+        int totalOutPorts = sources.stream().mapToInt(b -> b.getOutPorts().size()).sum();
+        int plannedPackets = perPortCount * totalOutPorts;
 
-    /** Extend an ongoing multi‑stage level with new specs (e.g. progressive waves). */
-    public void extendWithSpecs(List<LevelDefinition.BoxSpec> specs) {
-        boxes.clear();
-        boxes.addAll(levelBuilder.extend(boxes, specs));
-        rebuildPortToBoxMap();
-        buildWireControllers();
-    }
+        gameController.setProducerController(new PacketProducerController(
+                sources, gameController.getWires(), destMap,
+                Config.DEFAULT_PACKET_SPEED,
+                perPortCount));
+        gameController.getHudCoord().wireLevel(gameController.getProducerController());
+        gameController.getSimulation().setPacketProducerController(gameController.getProducerController());
 
-    /* ────────────── Wiring controllers ────────────── */
+        /* ----- loss monitor that can restart stage on failure ----- */
+        LossMonitorController lossCtrl = new LossMonitorController(
+                gameController.getLossModel(),
+                plannedPackets,
+                0.5,
+                gameController.getSimulation(),
+                gameController.getScreenController(),
+                gameController::retryStage              // 🎯 use new retry method
+        );
+        gameController.getSimulation().register(lossCtrl);
+
+        /* ----- view & HUD plumbing ----- */
+        gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires()));
+
+        gameController.setHudController(new HudController(usageModel, gameController.getLossModel(), gameController.getCoinModel(), levelManager, gameController.getHudView()));
+        gameController.setShopController(new ShopController(
+                gameController.getMainFrame(), gameController.getSimulation(), gameController.getCoinModel(), gameController.getCollisionCtrl(), gameController.getLossModel(), gameController.getWires(), gameController.getHudController()));
+        gameController.getHudView().getStoreButton().addActionListener(e -> gameController.getShopController().openShop());
+
+        /* ----- snapshot service ----- */
+        gameController.setSnapshotSvc(new SnapshotService(
+                boxes, gameController.getWires(), gameController.getScoreModel(), gameController.getCoinModel(), gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(),
+                gameController.getHudView(), gameController.getGameView(), gameController.getPacketRenderer(), List.of(gameController.getProducerController())));
+
+        gameController.setRegistrar(new SimulationRegistrar(
+                gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
+                gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));
+
+        /* ----- register everything ----- */
+        List<Updatable> systemControllers = new ArrayList<Updatable>();
+        systemControllers.add(gameController.getHudController());
+        gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
+
+        updateStartEnabled();
+    }/* --------------------------------------------------------------- */
+
+    /*              Build controllers for wire creation/removal        */
+    /* --------------------------------------------------------------- */
     public void buildWireControllers() {
-        Runnable networkChanged = () -> {
-            gameController.getHudController().refreshOnce();
-            updateStartEnabled();
-        };
+        WireCreationController creator = new WireCreationController(
+                gameController.getGameView(), gameController.getSimulation(), boxes, gameController.getWires(), destMap, usageModel, gameController.getCoinModel(), gameController::updateStartEnabled);
+        // keep reference for port‑freeing on purge
+        gameController.setWireCreator(creator);
 
-        // اول WireCreationController می‌سازیم
-        WireCreationController wireCreator = new WireCreationController(
-                gameController.getGameView(),
-                gameController.getSimulation(),    // یا getSimulationCoreManager() اگر نامش همینه
-                boxes,
-                wires,
-                destMap,
-                usageModel,
-                gameController.getCoinModel(),
-                networkChanged
-        );
-        this.wireCreator = wireCreator;
+        new WireRemovalController(
+                gameController.getGameView(), gameController.getWires(), destMap, creator, usageModel, gameController::updateStartEnabled);
+    }/* --------------------------------------------------------------- */
 
-        // حالا WireRemovalController رو با پارامترهای صحیح بساز
-        WireRemovalController wireRemover = new WireRemovalController(
-                gameController.getGameView(),
-                wires,
-                destMap,
-                wireCreator,       // همین ابجکتِ wireCreator
-                usageModel,
-                networkChanged
-        );
-        this.wireRemover = wireRemover;
-    }
-
-
-
-
-
-    /* ────────────── Wire operations ────────────── */
-    public void removeWire(WireModel wire) {
-        if (wireRemover != null) {
-            wireRemover.removeWire(wire);
-            return;
-        }
-        if (wires.remove(wire)) {
-            destMap.remove(wire);
-            usageModel.freeWire(wire.getLength());
-        }
-    }
-
-    public void addWire(WireModel wire, SystemBoxModel dest) {
-        wires.add(wire);
-        destMap.put(wire, dest);
-        usageModel.useWire(wire.getLength());
-    }
-
-    /* ────────────── UI sync helpers ────────────── */
+    /*                  Enable / disable “Start” button                */
+    /* --------------------------------------------------------------- */
     public void updateStartEnabled() {
-        // 1) پیدا کردن و جمع‌آوری پورت‌های وصل‌نشده
-        List<PortModel> unconnected = boxes.stream()
-                .flatMap(b -> Stream.concat(b.getInPorts().stream(), b.getOutPorts().stream()))
-                .filter(p -> !gameController.isPortConnected(p))
-                .collect(Collectors.toList());
-
-        // 2) لاگ‌شدن تعداد و نام پورت‌های وصل‌نشده
-        System.out.println("[DEBUG] updateStartEnabled(): unconnected ports count = " + unconnected.size());
-        if (!unconnected.isEmpty()) {
-            // می‌توانی اینجا نام یا آدرس پورت‌ها را هم چاپ کنی
-            unconnected.forEach(p ->
-                    System.out.println("  - Unconnected Port: " + p + " (box=" + portToBox.get(p) + ")")
-            );
-        }
-
-        // 3) محاسبه‌ی وضعیت دکمه
-        boolean allConnected = unconnected.isEmpty();
-
-        // 4) لاگ وضعیت نهایی
-        System.out.println("[DEBUG] updateStartEnabled(): allConnected = " + allConnected);
-
-        // 5) غیر/فعال‌سازی دکمه
-        try {
-            gameController.getHudController().setStartEnabled(allConnected);
-        } catch (Throwable ignored) {
-            // اگر استارت‌انبل خطا داد، شبیه‌سازی رفرش می‌کنیم
-            System.out.println("[DEBUG] updateStartEnabled(): exception in setStartEnabled(), refreshing HUD");
-            gameController.getHudController().refreshOnce();
-        }
+        boolean allConnected = boxes.stream().allMatch(b ->
+                b.getInPorts().stream().allMatch(gameController::isPortConnected) &&
+                        b.getOutPorts().stream().allMatch(gameController::isPortConnected));
+        gameController.getHudCoord().setStartEnabled(allConnected);
     }
 
+    /**
+     * Remove only the wires drawn in the *current* level (those not yet
+     * tagged as {@code forPreviousLevels}), free their port capacity and
+     * wire‑length quota, then refresh HUD.
+     */
+    public void purgeCurrentLevelWires() {
+        JPanel area = gameController.getGameView().getGameArea();
 
-    /* ────────────── Retry helpers ────────────── */
+        // Collect wires that belong to the current level
+        List<WireModel> toRemove = new ArrayList<WireModel>();
+        for (WireModel w : gameController.getWires()) {
+            if (!w.isForPreviousLevels()) {
+                if (gameController.getWireCreator() != null) {
+                    gameController.getWireCreator().freePortsForWire(w);
+                }
+                usageModel.freeWire(w.getLength());
+                destMap.remove(w);
+                toRemove.add(w);
+            }
+        }
+
+        if (toRemove.isEmpty()) return; // nothing to do
+
+        /* ----- detach visuals from Swing hierarchy ----- */
+        Component[] comps = area.getComponents();
+        for (Component c : comps) {
+            if (c instanceof WireView wv) {
+                if (toRemove.contains(wv.getModel())) {
+                    area.remove(c);
+                }
+            }
+        }
+
+        // Remove models after visuals to avoid sync issues
+        gameController.getWires().removeAll(toRemove);
+
+        /* ----- refresh UI ----- */
+        area.revalidate();
+        area.repaint();
+        if (gameController.getHudController() != null) gameController.getHudController().refreshOnce();
+    }
+
+    /**
+     * Public helper to retry the current stage, preserving carry‑over circuits.
+     * Stops simulation, purges current‑level wires, then restarts using the
+     * {@code currentDef} stored when the level was first launched.
+     */
     public void retryStage() {
+        if (currentDef == null) {
+            throw new IllegalStateException("Cannot retry before a level has been started");
+        }
         gameController.getSimulation().stop();
         purgeCurrentLevelWires();
         startLevel(currentDef);
     }
 
-    /** @deprecated – use {@link #retryStage()}. */
+    /**
+     * @deprecated Use {@link #retryStage()} instead. This variant keeps the
+     * previous signature for callers that still pass the
+     * definition explicitly.
+     */
     @Deprecated
     public void retryLevel(LevelDefinition def) {
         gameController.getSimulation().stop();
         purgeCurrentLevelWires();
         startLevel(def);
     }
-
-    /* ────────────── Internal helpers ────────────── */
-    private void rebuildPortToBoxMap() {
-        portToBox.clear();
-        boxes.forEach(b -> {
-            b.getInPorts().forEach(p -> portToBox.put(p, b));
-            b.getOutPorts().forEach(p -> portToBox.put(p, b));
-        });
-    }
-
-    private void clearTransientState() {
-        Optional.ofNullable(largeRegistry).ifPresent(LargeGroupRegistry::clear);
-        Optional.ofNullable(durabilityController).ifPresent(WireDurabilityController::clear);
-        Optional.ofNullable(timeoutController).ifPresent(WireTimeoutController::clear);
-        // confThrottleController currently has no clear(); add if/when implemented
-        RouteHints.clear();
-        VpnRevertHints.clear();
-        KinematicsRegistry.clear();
-    }
-
-    /* ────────────── Getters / Setters ────────────── */
-    public LevelDefinition getCurrentDef()                 { return currentDef; }
-    public List<SystemBoxModel> getBoxes()                 { return boxes; }
-    public List<WireModel> getWires()                      { return wires; }
-    public Map<WireModel,SystemBoxModel> getDestMap()      { return destMap; }
-    public Map<PortModel,SystemBoxModel> getPortToBoxMap() { return portToBox; }
-
-    public WireCreationController getWireCreator() { return wireCreator; }
-    public WireRemovalController  getWireRemover() { return wireRemover; }
-    public WireUsageModel         getUsageModel()  { return usageModel; }
-    public BehaviorRegistry       getBehaviorRegistry() { return behaviorRegistry; }
-
-    public LargeGroupRegistry getLargeRegistry() { return largeRegistry; }
-
-    public WireDurabilityController getDurabilityController() { return durabilityController; }
-    public void setDurabilityController(WireDurabilityController ctrl) { this.durabilityController = ctrl; }
-
-    public WireTimeoutController getTimeoutController() { return timeoutController; }
-    public void setTimeoutController(WireTimeoutController ctrl) { this.timeoutController = ctrl; }
-
-    public ConfidentialThrottleController getConfThrottleController() { return confThrottleController; }
-    public void setConfThrottleController(ConfidentialThrottleController ctrl) { this.confThrottleController = ctrl; }
-
-    public LevelBuilder getLevelBuilder() { return levelBuilder; }
-
-    public LevelManager getLevelManager() { return levelManager; }
 }

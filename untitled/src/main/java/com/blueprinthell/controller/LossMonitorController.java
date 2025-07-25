@@ -49,7 +49,7 @@ public class LossMonitorController implements Updatable {
             return;
         }
 
-        double ratio = (double) lossModel.getLostCount() / plannedPackets;
+        double ratio = lossModel.getLostCount() / plannedPackets;
         if (ratio >= thresholdRatio) {
             triggered = true;
             simulation.stop();

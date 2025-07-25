@@ -1,15 +1,11 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.core.LevelCoreManager;
 import com.blueprinthell.controller.core.SimulationCoreManager;
 import com.blueprinthell.controller.core.SnapshotCoreController;
-import com.blueprinthell.controller.systems.BehaviorRegistry;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.*;
-
-import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.view.HudView;
 import com.blueprinthell.view.screens.GameScreenView;
 
@@ -17,300 +13,258 @@ import javax.swing.*;
 import java.util.*;
 import java.util.List;
 
-/**
- * The central façade that wires **Model–View–Controller** layers together.
- * <p>
- *  ‑ All heavy‑duty managers (Level, Simulation, Snapshot) are injected here.<br>
- *  ‑ Registries (<code>BehaviorRegistry</code>, <code>LargeGroupRegistry</code>) are global singletons for phase‑2 mechanics.<br>
- *  ‑ Construction order matters: <em>registries → levelManager → simulation → levelCore</em>.
- */
 public class GameController implements NetworkController {
 
-    /* ================================================================ */
-    /*                     Core UI & immutable roots                    */
-    /* ================================================================ */
-    private final JFrame            mainFrame;
-    private final ScreenController  screenController;
-    private final HudView           hudView;
-    private final GameScreenView    gameView;
 
-    /* ================================================================ */
-    /*                         Global registries                        */
-    /* ================================================================ */
-    private final BehaviorRegistry behaviorRegistry;
-    private final LargeGroupRegistry largeRegistry;
 
-    public void setLevelManager(LevelManager levelManager) {
-        this.levelManager = levelManager;
+    private final LevelCoreManager levelCoreManager = new LevelCoreManager(this);
+    private final SimulationCoreManager simulationCoreManager = new SimulationCoreManager(this);
+    private final SnapshotCoreController snapshotCoreController = new SnapshotCoreController();
+    /* ================================================================ */
+    /*                      Core UI & controllers                       */
+    /* ================================================================ */
+    private ScreenController              screenController;
+
+    public LevelCoreManager getLevelSessionManager() {
+        return levelCoreManager;
     }
 
     /* ================================================================ */
-    /*                    Managers (instantiated in‑order)              */
+    /*                    Swing views (immutable roots)                 */
     /* ================================================================ */
-    private  LevelManager          levelManager;
-    private final SimulationCoreManager simulationCoreManager;
-    private final LevelCoreManager      levelCoreManager;
-    private final SnapshotCoreController snapshotCoreController = new SnapshotCoreController();
+    private final JFrame                  mainFrame;
+    private final HudView                 hudView;
+    private final GameScreenView          gameView;
 
     /* ================================================================ */
-    /*                    HUD / game‑state coordination                 */
+    /*                 HUD / game‑state coordination helpers            */
     /* ================================================================ */
-    private final HudCoordinator   hudCoord;
-    private HudController          hudController;
-    private ShopController         shopController;
+    private HudController                 hudController;
 
-    /* ================================================================ */
-    /*                    Helpers retained for cleanup                  */
-    /* ================================================================ */
-    private WireCreationController wireCreator;
+    public ScreenController getScreenController() {
+        return screenController;
+    }
 
-    /* ────────────────────────── ctor ─────────────────────────────── */
+    public TimelineController getTimeline() {
+        return simulationCoreManager.getTimeline();
+    }
+
+    public WireUsageModel getUsageModel() {
+        return levelCoreManager.getUsageModel();
+    }
+
+    public SnapshotManager getSnapshotMgr() {
+        return snapshotCoreController.getSnapshotMgr();
+    }
+
+    public HudView getHudView() {
+        return hudView;
+    }
+
+    public HudCoordinator getHudCoord() {
+        return hudCoord;
+    }
+
+    public ShopController getShopController() {
+        return shopController;
+    }
+
+    public Map<WireModel, SystemBoxModel> getDestMap() {
+        return levelCoreManager.getDestMap();
+    }
+
+    public CollisionController getCollisionCtrl() {
+        return simulationCoreManager.getCollisionCtrl();
+    }
+
+    public LevelBuilder getLevelBuilder() {
+        return levelCoreManager.getLevelBuilder();
+    }
+
+    public SnapshotService getSnapshotSvc() {
+        return snapshotCoreController.getSnapshotSvc();
+    }
+
+    public SimulationRegistrar getRegistrar() {
+        return simulationCoreManager.getRegistrar();
+    }
+
+    public List<SystemBoxModel> getBoxes() {
+        return levelCoreManager.getBoxes();
+    }
+
+    public PacketRenderController getPacketRenderer() {
+        return simulationCoreManager.getPacketRenderer();
+    }
+
+    public LevelManager getLevelManager() {
+        return levelCoreManager.getLevelManager();
+    }
+
+    public WireCreationController getWireCreator() {
+        return wireCreator;
+    }
+
+    public LevelDefinition getCurrentDef() {
+        return levelCoreManager.getCurrentDef();
+    }
+
+    public JFrame getMainFrame() {
+        return mainFrame;
+    }
+
+    private final HudCoordinator          hudCoord;
+    private ShopController                shopController;
+
+
+    // *** NEW: keep reference to creator to free ports when purging ***
+    private WireCreationController        wireCreator;
+
+
     public GameController(JFrame mainFrame) {
-        /* 1) Immutable UI roots */
-        this.mainFrame        = mainFrame;
-        this.screenController = new ScreenController(mainFrame);
-        this.hudView          = new HudView(0, 0, 800, 50);
-        this.gameView         = new GameScreenView(hudView);
+        this.mainFrame = mainFrame;
+        this.hudView   = new HudView(0, 0, 800, 50);
+        this.gameView  = new GameScreenView(hudView);
 
-        /* 2) Global registries */
-        this.behaviorRegistry = new BehaviorRegistry();
-        this.largeRegistry    = new LargeGroupRegistry();
+        this.simulationCoreManager.collisionCtrl = new CollisionController(simulationCoreManager.getWires(), simulationCoreManager.getLossModel());
+        this.levelCoreManager.levelBuilder = new LevelBuilder(gameView, simulationCoreManager.getWires(), levelCoreManager.getUsageModel());
 
-        /* 3) Level source */
-        this.levelManager = new LevelManager(this, screenController);
+        this.hudCoord = new HudCoordinator(hudView, simulationCoreManager.getScoreModel(), simulationCoreManager.getCoinModel(), simulationCoreManager.getLossModel(), simulationCoreManager.getSimulation(), simulationCoreManager.getTimeline());
 
-        /* 4) Simulation */
-        this.simulationCoreManager = new SimulationCoreManager(this, largeRegistry);
+        simulationCoreManager.getSimulation().setTimelineController(simulationCoreManager.getTimeline());
 
-        /* Optional: override collision controller immediately */
-            CollisionController collisionCtrl = new CollisionController(
-                        simulationCoreManager.getWires(),
-                        simulationCoreManager.getLossModel()
-                            );
-            /* 2) نگهداری در SimulationCoreManager */
-                    simulationCoreManager.setCollisionCtrl(collisionCtrl);
-            /* 3) ثبت در حلقه‌ی شبیه‌سازی تا update(dt) صدا زده شود */
-                    simulationCoreManager.getSimulation().register(collisionCtrl);
-
-        /* 5) Level‑oriented manager (builder injected later) */
-        this.levelCoreManager = new LevelCoreManager(
-                this,
-                levelManager,
-                /* levelBuilder */ null,
-                simulationCoreManager.getUsageModel(),
-                behaviorRegistry,
-                largeRegistry
-        );
-
-        /* 6) LevelBuilder now has all dependencies */
-        LevelBuilder levelBuilder = new LevelBuilder(
-                gameView,
-                simulationCoreManager.getWires(),
-                levelCoreManager.getUsageModel(),
-                behaviorRegistry,
-                largeRegistry,
-                simulationCoreManager.getLossModel()
-        );
-        levelCoreManager.setLevelBuilder(levelBuilder);
-
-        /* ★ 6‑bis) Packet‑producer controller */
-        // ─── Packet Producer ─────────────────────────────────────────────────────────
-        PacketProducerController producerCtrl = new PacketProducerController(
-                levelCoreManager.getBoxes(),
-                levelCoreManager.getWires(),
-                levelCoreManager.getDestMap(),
-                Config.DEFAULT_PACKET_SPEED,
-                Config.PACKETS_PER_PORT
-        );
-        simulationCoreManager.setProducerController(producerCtrl);
-        simulationCoreManager.getSimulation().register(producerCtrl);
-
-// ─── Packet Dispatcher ──────────────────────────────────────────────────────
-        PacketDispatcherController dispatcherCtrl = new PacketDispatcherController(
-                levelCoreManager.getWires(),
-                levelCoreManager.getDestMap(),
-                simulationCoreManager.getCoinModel(),
-                simulationCoreManager.getLossModel()
-        );
-        simulationCoreManager.getSimulation().register(dispatcherCtrl);
-
-// ─── Packet Router ──────────────────────────────────────────────────────────
-        for (SystemBoxModel box : levelCoreManager.getBoxes()) {
-            PacketRouterController routerCtrl = new PacketRouterController(
-                    box,
-                    levelCoreManager.getWires(),
-                    levelCoreManager.getDestMap(),
-                    simulationCoreManager.getLossModel()
-            );
-            simulationCoreManager.getSimulation().register(routerCtrl);
-        }
-
-// ─── Packet Consumer ────────────────────────────────────────────────────────
-        for (SystemBoxModel box : levelCoreManager.getBoxes()) {
-            PacketConsumerController consumerCtrl = new PacketConsumerController(
-                    box,
-                    simulationCoreManager.getScoreModel(),
-                    simulationCoreManager.getCoinModel()
-            );
-            simulationCoreManager.getSimulation().register(consumerCtrl);
-        }
-
-// ─── Packet Render ──────────────────────────────────────────────────────────
-        PacketRenderController packetRenderer = new PacketRenderController(
-                getGameView().getGameArea(),
-                levelCoreManager.getWires()
-        );
-        simulationCoreManager.setPacketRenderer(packetRenderer);
-        simulationCoreManager.getSimulation().register(packetRenderer);
-
-// ─── Loss Monitor ───────────────────────────────────────────────────────────
-        int totalPlanned = Config.PACKETS_PER_PORT
-                * levelCoreManager.getBoxes().stream().mapToInt(b -> b.getOutPorts().size()).sum();
-        LossMonitorController lossMonitor = new LossMonitorController(
-                simulationCoreManager.getLossModel(),
-                totalPlanned,
-                0.5,                                     // threshold ratio
-                simulationCoreManager.getSimulation(),
-                screenController,
-                levelCoreManager::retryStage
-        );
-        simulationCoreManager.getSimulation().register(lossMonitor);
-
-
-
-
-        /* 7) HUD coordination */
-        this.hudCoord = new HudCoordinator(
-                hudView,
-                simulationCoreManager.getScoreModel(),
-                simulationCoreManager.getCoinModel(),
-                simulationCoreManager.getLossModel(),
-                simulationCoreManager.getSimulation(),
-                simulationCoreManager.getTimeline()
-        );
-
-        /* Instantiate HUD controller before wiring buttons */
-        this.hudController = new HudController(
-                simulationCoreManager.getUsageModel(),
-                simulationCoreManager.getLossModel(),
-                simulationCoreManager.getCoinModel(),
-                this.levelManager,
-                this.hudView
-        );
-
-        /* Now wire start button and enable it */
-        hudCoord.wireLevel(producerCtrl);
-        levelCoreManager.updateStartEnabled();
-
-        /* ★ 7‑bis) SnapshotService – producerCtrl is non-null */
-        SnapshotService snapSvc = new SnapshotService(
-                levelCoreManager.getBoxes(),
-                simulationCoreManager.getWires(),
-                simulationCoreManager.getScoreModel(),
-                simulationCoreManager.getCoinModel(),
-                simulationCoreManager.getLossModel(),
-                simulationCoreManager.getUsageModel(),
-                getSnapshotMgr(),
-                getHudView(),
-                getGameView(),
-                simulationCoreManager.getPacketRenderer(),
-                List.of(producerCtrl)
-        );
-        setSnapshotSvc(snapSvc);
-
-        /* 8) Wire game‑time navigation */
-        simulationCoreManager.getSimulation()
-                .setTimelineController(simulationCoreManager.getTimeline());
         gameView.setTemporalNavigationListener(this::onNavigateTime);
     }
 
-
-
-
-
-
-
-    /* ================================================================ */
-    /*                  Timeline scrubbing with keyboard                */
-    /* ================================================================ */
+    /* --------------------------------------------------------------- */
+    /*                 Timeline scrubbing with keyboard                */
+    /* --------------------------------------------------------------- */
     private void onNavigateTime(int dir) {
         simulationCoreManager.onNavigateTime(dir);
     }
 
-    /* ================================================================ */
-    /*               Public API to load a level by index                */
-    /* ================================================================ */
+    /* --------------------------------------------------------------- */
+    /*                    External setter (DI‑style)                   */
+    /* --------------------------------------------------------------- */
+    public void setLevelManager(LevelManager mgr) {
+        this.levelCoreManager.levelManager = mgr;
+    }
+
+    /* --------------------------------------------------------------- */
+    /*               Public API to load a level by index               */
+    /* --------------------------------------------------------------- */
     public void startLevel(int idx) {
-        levelCoreManager.startLevel(idx); }
+        levelCoreManager.startLevel(idx);
+    }
+
+    /* --------------------------------------------------------------- */
+    /*                Core level bootstrap (fresh start)               */
+    /* --------------------------------------------------------------- */
     public void startLevel(LevelDefinition def) {
-        levelCoreManager.startLevel(def); }
 
-    /* Build controllers for wire creation/removal */
-    private void buildWireControllers() { levelCoreManager.buildWireControllers(); }
+        levelCoreManager.startLevel(def);
+    }
 
-    /* Enable / disable “Start” button */
-    public void updateStartEnabled() { levelCoreManager.updateStartEnabled(); }
+    /* --------------------------------------------------------------- */
+    /*              Build controllers for wire creation/removal        */
+    /* --------------------------------------------------------------- */
+    private void buildWireControllers() {
+        // keep reference for port‑freeing on purge
 
+        levelCoreManager.buildWireControllers();
+    }
+
+    /* --------------------------------------------------------------- */
+    /*                  Enable / disable “Start” button                */
+    /* --------------------------------------------------------------- */
+    public void updateStartEnabled() {
+        levelCoreManager.updateStartEnabled();
+    }
 
     public boolean isPortConnected(PortModel p) {
-        // به جای سیم‌های شبیه‌ساز، از سیم‌های واقعی LevelCoreManager استفاده کن
-        return levelCoreManager.getWires().stream()
-                .anyMatch(w -> w.getSrcPort() == p || w.getDstPort() == p);
+        return simulationCoreManager.isPortConnected(p);
     }
 
 
-    /* ---------------- retry helpers ---------------- */
-    private void purgeCurrentLevelWires() { levelCoreManager.purgeCurrentLevelWires(); }
-    public void retryStage() { levelCoreManager.retryStage(); }
-    @Deprecated private void retryLevel(LevelDefinition def) { levelCoreManager.retryLevel(def); }
+    private void purgeCurrentLevelWires() {
 
-    /* ================================================================ */
-    /*                       Snapshot interface                         */
-    /* ================================================================ */
-    @Override public NetworkSnapshot captureSnapshot() { return snapshotCoreController.captureSnapshot(); }
-    @Override public void restoreState(NetworkSnapshot snap) { snapshotCoreController.restoreState(snap); }
+        levelCoreManager.purgeCurrentLevelWires();
+    }
 
-    /* ================================================================ */
-    /*                           Getters                                */
-    /* ================================================================ */
-    public JFrame getMainFrame()                 { return mainFrame; }
-    public ScreenController getScreenController(){ return screenController; }
-    public GameScreenView getGameView()          { return gameView; }
 
-    public LevelCoreManager getLevelSessionManager() { return levelCoreManager; }
-    public TimelineController getTimeline()          { return simulationCoreManager.getTimeline(); }
-    public WireUsageModel getUsageModel()            { return levelCoreManager.getUsageModel(); }
-    public SnapshotManager getSnapshotMgr()          { return snapshotCoreController.getSnapshotMgr(); }
-    public HudView getHudView()                      { return hudView; }
-    public HudCoordinator getHudCoord()              { return hudCoord; }
-    public ShopController getShopController()        { return shopController; }
-    public Map<WireModel, SystemBoxModel> getDestMap(){ return levelCoreManager.getDestMap(); }
-    public CollisionController getCollisionCtrl()    { return simulationCoreManager.getCollisionCtrl(); }
-    public LevelBuilder getLevelBuilder()            { return levelCoreManager.getLevelBuilder(); }
-    public SnapshotService getSnapshotSvc()          { return snapshotCoreController.getSnapshotSvc(); }
-    public SimulationRegistrar getRegistrar()        { return simulationCoreManager.getRegistrar(); }
-    public List<SystemBoxModel> getBoxes()           { return levelCoreManager.getBoxes(); }
-    public PacketRenderController getPacketRenderer(){ return simulationCoreManager.getPacketRenderer(); }
-    public LevelManager getLevelManager()            { return levelManager; }
-    public WireCreationController getWireCreator()   { return wireCreator; }
-    public LevelDefinition getCurrentDef()           { return levelCoreManager.getCurrentDef(); }
+    public void retryStage() {
+        levelCoreManager.retryStage();
+    }
 
-    public List<WireModel> getWires()                { return simulationCoreManager.getWires(); }
-    public SimulationController getSimulation()      { return simulationCoreManager.getSimulation(); }
-    public CoinModel getCoinModel()                  { return simulationCoreManager.getCoinModel(); }
-    public PacketLossModel getLossModel()            { return simulationCoreManager.getLossModel(); }
-    public ScoreModel getScoreModel()                { return simulationCoreManager.getScoreModel(); }
-    public HudController getHudController()          { return hudController; }
-    public PacketProducerController getProducerController() { return simulationCoreManager.getProducerController(); }
 
-    /* ================================================================ */
-    /*                      Dependency injection                        */
-    /* ================================================================ */
-    public void setHudController(HudController hudController)                 { this.hudController = hudController; }
-    public void setShopController(ShopController shopController)             { this.shopController = shopController; }
-    public void setSnapshotSvc(SnapshotService snapshotSvc)                  { this.snapshotCoreController.setSnapshotSvc(snapshotSvc); }
-    public void setRegistrar(SimulationRegistrar registrar)                  { simulationCoreManager.setRegistrar(registrar); }
-    public void setPacketRenderer(PacketRenderController packetRenderer)     { simulationCoreManager.setPacketRenderer(packetRenderer); }
-    public void setProducerController(PacketProducerController producerCtrl) { simulationCoreManager.setProducerController(producerCtrl); }
-    public void setWireCreator(WireCreationController wireCreator)           { this.wireCreator = wireCreator; }
+    @Deprecated
+    private void retryLevel(LevelDefinition def) {
+        levelCoreManager.retryLevel(def);
+    }
+
+
+    @Override
+    public NetworkSnapshot captureSnapshot() {
+        return snapshotCoreController.captureSnapshot();
+    }
+
+    @Override
+    public void restoreState(NetworkSnapshot snap) {
+        snapshotCoreController.restoreState(snap);
+    }
+
+
+    public GameScreenView getGameView() { return gameView; }
+    public List<WireModel> getWires()  {
+        return simulationCoreManager.getWires();
+    }
+    public SimulationController getSimulation() {
+        return simulationCoreManager.getSimulation();
+    }
+    public CoinModel getCoinModel() {
+        return simulationCoreManager.getCoinModel();
+    }
+    public CollisionController getCollisionController() {
+        return simulationCoreManager.getCollisionController();
+    }
+    public PacketLossModel getLossModel() {
+        return simulationCoreManager.getLossModel();
+    }
+    public ScoreModel getScoreModel() {
+        return simulationCoreManager.getScoreModel();
+    }
+    public HudController getHudController() { return hudController; }
+    public PacketProducerController getProducerController() {
+        return simulationCoreManager.getProducerController();
+    }
+
+    public void setHudController(HudController hudController) {
+        this.hudController = hudController;
+    }
+
+    public void setShopController(ShopController shopController) {
+        this.shopController = shopController;
+    }
+
+    public void setSnapshotSvc(SnapshotService snapshotSvc) {
+        this.snapshotCoreController.snapshotSvc = snapshotSvc;
+    }
+
+    public void setRegistrar(SimulationRegistrar registrar) {
+        simulationCoreManager.setRegistrar(registrar);
+    }
+
+    public void setPacketRenderer(PacketRenderController packetRenderer) {
+        simulationCoreManager.setPacketRenderer(packetRenderer);
+    }
+
+    public void setProducerController(PacketProducerController producerController) {
+        simulationCoreManager.setProducerController(producerController);
+    }
+
+    public void setWireCreator(WireCreationController wireCreator) {
+        this.wireCreator = wireCreator;
+    }
+
+    public void setScreenController(ScreenController sc) { this.screenController = sc; }
 }

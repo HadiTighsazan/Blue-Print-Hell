@@ -21,17 +21,14 @@ public class CollisionController implements Updatable {
     private final PacketLossModel lossModel;
 
     /** Map پورت → باکس برای بازگرداندن پکت‌ها */
-    private Map<PortModel, SystemBoxModel> portToBox = Collections.emptyMap();
+    private Map<PortModel, SystemBoxModel> portToBox = null;
 
     /* ---- Tunables ---- */
     private static final int    CELL_SIZE        = 50;
     private static final double COLLISION_RADIUS = 18.0;
 
-
-
-       private static final double NOISE_INCREMENT = 0.5;
+    private static final double NOISE_INCREMENT = 0.5;
     private static final double MAX_NOISE       = 5.0;
-
 
     private static final double IMPACT_RADIUS    = 100.0;
     private static final double IMPACT_STRENGTH  = 1.0;
@@ -42,7 +39,7 @@ public class CollisionController implements Updatable {
 
     /* ------------------------- Ctors ------------------------- */
     public CollisionController(List<WireModel> wires, PacketLossModel lossModel) {
-        this(wires, lossModel, Collections.emptyMap());
+        this(wires, lossModel, null);
     }
 
     public CollisionController(List<WireModel> wires,
@@ -51,7 +48,9 @@ public class CollisionController implements Updatable {
         this.wires     = wires;
         this.lossModel = lossModel;
         this.grid      = new SpatialHashGrid<>(CELL_SIZE);
-        if (portToBox != null) this.portToBox = portToBox;
+        if (portToBox != null) {
+            this.portToBox = portToBox;
+        }
     }
 
     /** تزریق/به‌روزرسانی نقشهٔ پورت→باکس در زمان اجرا (مثلاً پس از rebuild). */
@@ -107,9 +106,11 @@ public class CollisionController implements Updatable {
                         int iy = (pPos.y + oPos.y) / 2;
                         impactPoints.add(new Point(ix, iy));
 
-                        // Bounce logic for MSG1 profile
-                        if (isMsg1(p))     bounceToSource(p, w);
-                        if (isMsg1(other)) bounceToSource(other, other.getCurrentWire());
+                        // Bounce logic for MSG1 profile (commented out to match legacy behavior)
+                        // if (isMsg1(p))
+                        //     bounceToSource(p, w);
+                        // if (isMsg1(other))
+                        //     bounceToSource(other, other.getCurrentWire());
                     }
                 }
             }
@@ -184,6 +185,6 @@ public class CollisionController implements Updatable {
 
     /* ------------------------ Controls ------------------------ */
     public void pauseCollisions()  { this.collisionsEnabled = false; }
-    public void resumeCollisions() { this.collisionsEnabled = true; }
+    public void resumeCollisions() { this.collisionsEnabled = true;  }
     public void setImpactWaveEnabled(boolean enabled) { this.impactWaveEnabled = enabled; }
 }

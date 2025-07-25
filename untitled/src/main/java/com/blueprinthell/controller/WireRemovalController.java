@@ -80,8 +80,14 @@ public class WireRemovalController {
                                 break;
                             }
                             // Proceed with removal for current-level wires
-                            performRemoval(wm);
-
+                            wires.remove(wm);
+                            destMap.remove(wm);
+                            creator.freePortsForWire(wm);
+                            usageModel.freeWire(wm.getLength());
+                            area.remove(wv);
+                            area.revalidate();
+                            area.repaint();
+                            if (networkChanged != null) networkChanged.run();
                             removalMode = false;
                             area.setCursor(Cursor.getDefaultCursor());
                             JComponent glass2 = (JComponent) root.getGlassPane();
@@ -101,7 +107,7 @@ public class WireRemovalController {
 
         area.setFocusable(true);
     }
-    /** حذف برنامه‌محور یک سیم (برای WireDurabilityController و ...). */
+
     public void removeWire(WireModel wm) {
         if (wm == null) return;
         if (wm.isForPreviousLevels()) {
@@ -111,7 +117,6 @@ public class WireRemovalController {
         SwingUtilities.invokeLater(() -> performRemoval(wm));
     }
 
-    /** منطق مشترک حذف سیم از مدل و UI. */
     private void performRemoval(WireModel wm) {
         JPanel area = gameView.getGameArea();
         JRootPane root = SwingUtilities.getRootPane(area);
@@ -134,5 +139,4 @@ public class WireRemovalController {
         area.repaint();
         if (networkChanged != null) networkChanged.run();
     }
-
 }

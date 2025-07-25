@@ -1,15 +1,18 @@
 package com.blueprinthell.controller;
 
 import javax.swing.*;
-import java.awt.*;
-
 import com.blueprinthell.view.HudView;
+
+import java.awt.*;
+import java.util.List;
+import com.blueprinthell.controller.SimulationController;
+import com.blueprinthell.controller.PacketProducerController;
 import com.blueprinthell.model.WireModel;
 
-/**
- * Entry‑point class that wires together the high‑level controllers and shows the main window.
- */
 
+/**
+ * Entry-point class that wires together the high-level controllers and shows the main window.
+ */
 public class MainController {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -18,42 +21,51 @@ public class MainController {
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setResizable(false);
             Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-            frame.setSize(screenSize.width, screenSize.height);    // تمام‌صفحه
+// (۱) تنظیم اندازهٔ پنجره برابر اندازهٔ صفحه
+            frame.setSize(screenSize.width, screenSize.height);
+// (۲) قرار دادن پنجره در حالت بزرگنمایی‌شده (maximized)
             frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+// اگر می‌خواهید نوار عنوان و حاشیه‌ها هم حذف شوند، قبل از setVisible:
             frame.setUndecorated(true);
+            /* --------
+            -------- Controllers wiring ---------------- */
+            // 1. Screen manager (CardLayout)
+            ScreenController screenController = new ScreenController(frame);
 
-            /* -------- Controllers wiring ---------------- */
-            // 1. هستهٔ منطق بازی
+            // 2. Core game logic controller
             GameController gameController = new GameController(frame);
-            ScreenController screenController = gameController.getScreenController();
+            // provide ScreenController for game-over and other screen flows
+            gameController.setScreenController(screenController);
 
-            // 2. اتصال Simulation به مدل‌های استاتیک
+            // جدید: لینک دادن Simulation و PacketProducer
             SimulationController simController = gameController.getSimulation();
+            PacketProducerController producerController = gameController.getProducerController();
+            // ثبت کنترلر شبیه‌سازی در WireModel برای دریافت اعلان بازگشت پکت
             WireModel.setSimulationController(simController);
+            // ثبت تولیدکننده پکت در SimulationController
+            simController.setPacketProducerController(producerController);
 
-            // ★ دیگر نیازی به setPacketProducerController نیست؛
-            // ★ GameController خودش PacketProducerController را تزریق کرده است.
-
-            // 3. ثبت صفحهٔ دینامیک بازی
+            // Register the dynamic game screen so it can be displayed
             screenController.registerGameScreen(gameController.getGameView());
 
-            // 4. کنترل منو
+            // 3. Menu navigation controller
             new MenuController(screenController, gameController);
 
-            // 5. UIController (فروشگاه + صدا)
+            // 4. UI controller (Store + Audio)
             UIController ui = new UIController(
                     frame,
                     (HudView) gameController.getGameView().getHudView(),
                     simController,
                     gameController.getCoinModel(),
-                    gameController.getCollisionCtrl(),
+                    gameController.getCollisionController(),
                     gameController.getLossModel(),
                     gameController.getWires(),
                     gameController.getHudController()
             );
 
-            // پخش موسیقی پس‌زمینه
+            // Inject AudioController into ScreenController (music keeps looping across screens)
             screenController.setAudioController(ui.getAudioController());
+            // Start background loop immediately at app launch
             ui.getAudioController().playBackgroundLoop();
 
             /* ---------------- Show initial screen ---------------- */
