@@ -127,13 +127,17 @@ public final class LargeGroupRegistry {
     }
 
     /** فرمول عمومی پروژه: originalParts - ⌊k·√[k](Πni)⌋ */
-    public static int computePartialLoss(int originalSum, List<Integer> parts) {
+    public static int computePartialLoss(int N, List<Integer> parts) {
         int k = parts.size();
-        if (k == 0) return originalSum;
-        double prod = 1.0;
-        for (int n : parts) prod *= n;
-        double geo = Math.pow(prod, 1.0 / k);
-        int loss = (int) Math.round(originalSum - Math.floor(k * geo));
-        return Math.max(0, loss);
+        // ۱) محاسبه‌ی حاصل‌ضرب
+        double product = 1.0;
+        for (int p : parts) {
+            product *= p;
+        }
+        // ۲) محاسبه‌ی جذر k
+        double kthRoot = Math.pow(product, 1.0 / k);
+        int restored = (int) Math.floor(kthRoot);
+        // ۳) محاسبه‌ی Loss
+        return N - restored;
     }
 }

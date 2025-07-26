@@ -1,9 +1,11 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.model.*;
-import com.blueprinthell.motion.KinematicsProfile;
-import com.blueprinthell.motion.KinematicsRegistry;
-import com.blueprinthell.motion.ProfileParams;
+import com.blueprinthell.config.Config;
+import com.blueprinthell.model.ConfidentialPacket;
+import com.blueprinthell.model.PacketModel;
+import com.blueprinthell.model.SystemBoxModel;
+import com.blueprinthell.model.Updatable;
+import com.blueprinthell.model.WireModel;
 
 import java.util.List;
 import java.util.Map;
@@ -11,16 +13,8 @@ import java.util.Objects;
 
 /**
  * <h2>ConfidentialThrottleController</h2>
- * کنترلری که سرعت پکت‌های «محرمانه» را وقتی مقصدشان (SystemBox) در حال حاضر پکتی در بافر دارد،
+ * کنترلری که سرعت پکت‌های «محرمانه» را وقتی مقصدشان (SystemBox) پکتی در بافر دارد،
  * به مقدار مشخصی کاهش می‌دهد تا هم‌زمان داخل باکس نباشند.
- *
- * <ul>
- *   <li>به هر تیک روی تمام سیم‌ها نگاه می‌کند.</li>
- *   <li>اگر پکت {@link ConfidentialPacket} باشد یا پروفایلش {@link KinematicsProfile#CONFIDENTIAL} باشد
- *       و پارامتر {@link ProfileParams#slowDownBeforeBusyBox} فعال باشد، بررسی می‌کند.</li>
- *   <li>در صورت پر بودن بافر مقصد، سرعت جاری پکت تا {@link ProfileParams#slowDownSpeed} کلمپ می‌شود.</li>
- *   <li>در غیر این صورت کنترلی انجام نمی‌شود و استراتژی حرکتی آزاد است سرعت را تعیین کند.</li>
- * </ul>
  */
 public class ConfidentialThrottleController implements Updatable {
 
@@ -46,34 +40,22 @@ public class ConfidentialThrottleController implements Updatable {
     @Override
     public void update(double dt) {
         if (!enabled) return;
+
         for (WireModel w : wires) {
             SystemBoxModel dest = destMap.get(w);
             if (dest == null) continue;
-            boolean busy = !dest.getBuffer().isEmpty();
-            if (!busy) continue; // نیازی به کند کردن نیست
 
-            for (PacketModel p : w.getPackets()) {
-                if (!isConfidentialAndNeedsThrottle(p)) continue;
-                ProfileParams params = KinematicsRegistry.getProfile(p).getParams();
-                double slow = params.slowDownSpeed;
-                if (p.getSpeed() > slow) {
-                    p.setSpeed(slow);
+            // اگر بافر مقصد خالی نیست (busy)، سرعت پکت‌های محرمانه را کاهش بده
+            if (!dest.getBuffer().isEmpty()) {
+                for (PacketModel p : w.getPackets()) {
+                    if (p instanceof ConfidentialPacket) {
+                        double slow = Config.CONF_SLOW_SPEED;
+                        if (p.getSpeed() > slow) {
+                            p.setSpeed(slow);
+                        }
+                    }
                 }
             }
         }
-    }
-
-    /* --------------------------------------------------------------- */
-    /*                          helpers                                 */
-    /* --------------------------------------------------------------- */
-    private boolean isConfidentialAndNeedsThrottle(PacketModel p) {
-        // 1) instance check
-        if (p instanceof ConfidentialPacket) {
-            KinematicsProfile prof = KinematicsRegistry.getProfile(p);
-            return prof != null && prof.getParams().slowDownBeforeBusyBox;
-        }
-        // 2) profile check (maybe packet decorated differently but profile set) \
-        KinematicsProfile prof = KinematicsRegistry.getProfile(p);
-        return prof == KinematicsProfile.CONFIDENTIAL && prof.getParams().slowDownBeforeBusyBox;
     }
 }

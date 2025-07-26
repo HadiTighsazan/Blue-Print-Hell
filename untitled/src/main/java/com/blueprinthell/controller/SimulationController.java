@@ -1,15 +1,19 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.Updatable;
+import com.blueprinthell.model.PortModel;
+import com.blueprinthell.model.SystemBoxModel;
 
 import javax.swing.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Main simulation controller that triggers update(dt) on all registered Updatable models
  * and optionally records snapshots each second via a TimelineController.
- * همچنین وظیفه‌ی مدیریت بازتولید پکت‌های بازگشتی را به عهده دارد.
+ * همچنین وظیفه‌ی مدیریت بازتولید پکت‌های بازگشتی و نگاشت پورت‌به‌سیستم را بر عهده دارد.
  */
 public class SimulationController {
     private final List<Updatable> updatables = new ArrayList<>(); // guarded by itself
@@ -19,6 +23,9 @@ public class SimulationController {
 
     // برای نگهداری مرجع به PacketProducerController جهت بازتولید پکت‌های بازگشتی
     private PacketProducerController packetProducer;
+
+    // نگاشت پورت‌های ورودی به سیستم مقصد مربوطه
+    private final Map<PortModel, SystemBoxModel> portToSystem = new HashMap<>();
 
     /**
      * Constructs a simulation controller with the given frame rate.
@@ -123,6 +130,25 @@ public class SimulationController {
     public void setPacketProducerController(PacketProducerController producer) {
         this.packetProducer = producer;
         register(producer);
+    }
+
+    /**
+     * Registers a SystemBoxModel and its input port for status queries.
+     * @param system the system box model
+     * @param inPort the input port of the system
+     */
+    public void registerSystemPort(SystemBoxModel system, PortModel inPort) {
+        portToSystem.put(inPort, system);
+    }
+
+    /**
+     * Checks whether the system connected to the given input port is enabled.
+     * @param inPort the input port of a system
+     * @return true if the system is enabled or not registered
+     */
+    public boolean isSystemEnabled(PortModel inPort) {
+        SystemBoxModel sys = portToSystem.get(inPort);
+        return sys == null || sys.isEnabled();
     }
 
     /**

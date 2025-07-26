@@ -18,11 +18,22 @@
     </properties>
 
     <dependencies>
+        <!-- Gson -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.10.1</version>
         </dependency>
+
+        <!-- JUnit (locally added JAR) -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>system</scope>
+            <systemPath>C:/Users/hadit/Desktop/AP-DA/Blue_Print_Hell/untitled/src/main/java/com/libs/junit-4.13.2.jar</systemPath>
+        </dependency>
+
     </dependencies>
 
     <build>

@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
  *   <li>در صورت عدم امکان، تلاش برای بازگرداندن به بافر یا شمارش Packet Loss</li>
  * </ul>
  * Kinematics now driven by MotionStrategy instead of direct speed/acc.
+ * Also filters out ports leading to disabled systems.
  */
 public class PacketRouterController implements Updatable {
     private final SystemBoxModel box;
@@ -43,13 +44,20 @@ public class PacketRouterController implements Updatable {
 
         // 2) Route each
         for (PacketModel packet : toRoute) {
-            List<PortModel> outs = box.getOutPorts();
+            // 2a) Filter out ports whose destination systems are disabled
+            List<PortModel> outs = box.getOutPorts().stream()
+                    .filter(port -> {
+                        WireModel w = findWire(port);
+                        return w != null && destMap.get(w).isEnabled();
+                    })
+                    .collect(Collectors.toList());
+
             if (outs.isEmpty()) {
                 drop(packet);
                 continue;
             }
 
-            // 3) select candidate port
+            // 3) Select candidate port
             List<PortModel> compat = outs.stream()
                     .filter(port -> port.isCompatible(packet))
                     .collect(Collectors.toList());
@@ -76,13 +84,13 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
-            // 4) assign motion strategy based on compatibility
+            // 4) Assign motion strategy based on compatibility
             boolean comp = chosen.isCompatible(packet);
             double base = packet.getBaseSpeed();
             MotionStrategy ms = new ConstantSpeedStrategy(comp ? base / 2 : base);
             packet.setMotionStrategy(ms);
 
-            // 5) attach to wire
+            // 5) Attach to wire
             wire.attachPacket(packet, 0.0);
         }
     }

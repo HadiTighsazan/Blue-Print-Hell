@@ -11,12 +11,16 @@ import java.util.stream.Collectors;
 /**
  * Domain model for a system box, holding input/output ports and packet buffer.
  */
-public class SystemBoxModel extends GameObjectModel implements Serializable {
+public class SystemBoxModel extends GameObjectModel implements Serializable, Updatable {
     private static final long serialVersionUID = 5L;
 
     private final List<PortModel> inPorts = new ArrayList<>();
     private final List<PortModel> outPorts = new ArrayList<>();
     private final Queue<PacketModel> buffer;
+
+    // Enabled/disabled state and timer for disable duration
+    private boolean enabled = true;
+    private double disableTimer = 0.0;
 
     /**
      * Constructs a SystemBoxModel with specified position, size, and port shapes.
@@ -132,13 +136,41 @@ public class SystemBoxModel extends GameObjectModel implements Serializable {
                 ? (Queue<PacketModel>) java.util.Collections.unmodifiableCollection(buffer)
                 : new ArrayDeque<>(buffer);
     }
+
+    /**
+     * Disables the system for the configured duration.
+     */
+    public void disable() {
+        this.enabled = false;
+        this.disableTimer = Config.SYSTEM_DISABLE_DURATION;
+    }
+
+    /**
+     * Checks if the system is enabled (active).
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * Update method for Updatable: handles re-enabling after disable duration.
+     */
+    @Override
+    public void update(double dt) {
+        if (!enabled) {
+            disableTimer -= dt;
+            if (disableTimer <= 0) {
+                enabled = true;
+            }
+        }
+    }
+
     /**
      * Adds one output port if total does not exceed a maximum (e.g., 3).
      */
     public void addOutputPort(PortShape shape) {
         if (outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
         int portSize = Config.PORT_SIZE;
-        // Add new port at end of outPorts
         outPorts.add(new PortModel(getX() + getWidth() - portSize,
                 getY(), shape, false));
         updatePortsPosition();

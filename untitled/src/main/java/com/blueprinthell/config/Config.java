@@ -15,6 +15,8 @@ public final class Config {
     //**********************حذف کنش
     public static final PortShape DEFAULT_PORT_SHAPE = PortShape.SQUARE;
     public static final double MAX_TIME_ON_WIRE_SEC = 8.0;
+    public static final double SYSTEM_DISABLE_DURATION =3.0 ;
+    public static final double MAX_ALLOWED_SPEED = 180.0;
 
 
     private Config() { /* Prevent instantiation */ }

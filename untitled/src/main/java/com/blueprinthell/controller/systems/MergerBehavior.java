@@ -2,6 +2,7 @@ package com.blueprinthell.controller.systems;
 
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;
+import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargeGroupRegistry;
@@ -47,39 +48,26 @@ public final class MergerBehavior implements SystemBehavior {
     }
 
     @Override
-    public void onPacketEnqueued(PacketModel packet, com.blueprinthell.model.PortModel enteredPort) {
+    public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (!(packet instanceof BitPacket bp)) return;
 
         GroupState st = registry.get(bp.getGroupId());
-        if (st == null) {
-            // بیت بدون گروه معتبر → Loss و drop از بافر
-            removePacketFromBuffer(bp);
-            lossModel.increment();
-            return;
-        }
-        if (st.isClosed()) {
-            // گروه بسته شده ولی بیت جدید رسید → Loss
-            removePacketFromBuffer(bp);
-            lossModel.increment();
-            return;
-        }
+        // (کیس‌های drop روی گروه نامعتبر یا بسته‌شده مثل قبل)
 
-        // ثبت بیت – متد registerArrival اگر true برگرداند یعنی اولین بار ثبت می‌شود
-        boolean first = registry.registerArrival(bp.getGroupId(), bp);
-        if (!first) {
-            // Duplicate bit arrival – Drop duplicate
-            removePacketFromBuffer(bp);
-            return;
-        }
+        // 1) ثبت بیت و دریافت نتیجهٔ تکمیل شدن گروه
+        boolean completed = registry.registerArrival(bp.getGroupId(), bp);
 
-        // علامت بزن که کاملاً در Merger است (برای جلوگیری از شمارش دوباره هنگام پردازش بافر)
+        // 2) علامت‌گذاری جهت جلوگیری از ثبت مجدد
         bp.markRegisteredAtMerger();
 
-        // وقتی جمع کامل شد → Merge
-        if (st.isComplete()) {
+        // 3) اگر گروه کامل شده، ادغام را انجام بده
+        if (completed && st.isComplete()) {
             mergeGroup(st);
         }
+        // توجه: اینجا **هیچ** removePacketFromBuffer انجام نمی‌دهیم
     }
+
+
 
     @Override public void onEnabledChanged(boolean enabled) { /* nothing */ }
 

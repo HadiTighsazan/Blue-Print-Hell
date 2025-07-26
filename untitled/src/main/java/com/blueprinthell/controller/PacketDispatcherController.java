@@ -1,5 +1,6 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.CoinModel;
 import com.blueprinthell.model.SystemBoxModel;
@@ -13,6 +14,7 @@ import java.util.Map;
  * Dispatches packets that reach the end of a wire into the destination SystemBox.
  * Adds coin rewards on successful enqueue. If the destination buffer is full,
  * the packet is dropped and PacketLossModel is incremented.
+ * Also disables the destination if a packet enters at excessive speed.
  */
 public class PacketDispatcherController implements Updatable {
 
@@ -37,6 +39,10 @@ public class PacketDispatcherController implements Updatable {
             List<PacketModel> arrived = wire.update(dt);
             SystemBoxModel dest = destinationMap.get(wire);
             for (PacketModel packet : arrived) {
+                // Disable system if packet speed exceeds threshold and system is still enabled
+                if (packet.getSpeed() > Config.MAX_ALLOWED_SPEED && dest.isEnabled()) {
+                    dest.disable();
+                }
                 boolean accepted = dest.enqueue(packet);
                 if (accepted) {
                     // Reward coins only if packet successfully enters the system

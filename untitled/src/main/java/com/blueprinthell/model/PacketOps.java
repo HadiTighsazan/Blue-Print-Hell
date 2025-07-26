@@ -39,10 +39,51 @@ public final class PacketOps {
 
     /** If packet is a TrojanPacket, returns its original; otherwise returns the packet itself. */
     public static PacketModel unwrapTrojan(PacketModel packet) {
+        Objects.requireNonNull(packet, "packet");
         if (packet instanceof TrojanPacket tp) {
-            return tp.getOriginal();
+            // 1) بازکردن بازگشتی
+            PacketModel inner = unwrapTrojan(tp.getOriginal());
+            // 2) بازسازی نسخهٔ Plain با حفظ state
+            return clonePlain(inner);
         }
         return packet;
+    }
+
+    /**
+     * یک PacketModel ساده می‌سازد (بدون هیچ decorator)
+     * و وضعیت runtime (progress, speed, acceleration, noise) و پروفایل جنبشی را از src کپی می‌کند.
+     */
+    public static PacketModel clonePlain(PacketModel src) {
+        Objects.requireNonNull(src, "src");
+        // ۱) ساخت نمونهٔ جدید با نوع و سرعت پایهٔ src
+        PacketModel dst = new PacketModel(src.getType(), src.getBaseSpeed());
+        // ۲) حفظ موقعیت روی سیم یا progress
+        if (src.getCurrentWire() != null) {
+            dst.attachToWire(src.getCurrentWire(), src.getProgress());
+        } else {
+            dst.setProgress(src.getProgress());
+        }
+        // ۳) حفظ سرعت، شتاب و نویز
+        dst.setSpeed(src.getSpeed());
+        dst.setAcceleration(src.getAcceleration());
+        dst.setNoise(src.getNoise());
+        // ۴) حفظ پروفایل جنبشی (compatible/incompatible settings)
+        KinematicsRegistry.copyProfile(src, dst);
+        return dst;
+    }
+
+    /** Copies progress/speed/noise/acceleration/wire-binding. */
+    private static void copyRuntimeState(PacketModel src, PacketModel dst) {
+        if (src.getCurrentWire() != null) {
+            dst.attachToWire(src.getCurrentWire(), src.getProgress());
+        } else {
+            dst.setProgress(src.getProgress());
+        }
+        dst.setSpeed(src.getSpeed());
+        dst.setAcceleration(src.getAcceleration());
+        if (src.getNoise() > 0) {
+            dst.increaseNoise(src.getNoise());
+        }
     }
 
     /* --------------------------------------------------------------- */
@@ -76,31 +117,6 @@ public final class PacketOps {
     /*                         Generic clone                            */
     /* --------------------------------------------------------------- */
 
-    /** Creates a fresh plain {@link PacketModel} (no decorators) with the same runtime state. */
-    public static PacketModel clonePlain(PacketModel src) {
-        Objects.requireNonNull(src, "src");
-        PacketModel dst = new PacketModel(src.getType(), src.getBaseSpeed());
-        copyRuntimeState(src, dst);
-        // کپی پروفایل تا رفتار حرکتی حفظ شود
-        KinematicsRegistry.copyProfile(src, dst);
-        return dst;
-    }
 
-    /* --------------------------------------------------------------- */
-    /*                         Internal utils                           */
-    /* --------------------------------------------------------------- */
 
-    /** Copies progress/speed/noise/acceleration/wire-binding. */
-    private static void copyRuntimeState(PacketModel src, PacketModel dst) {
-        if (src.getCurrentWire() != null) {
-            dst.attachToWire(src.getCurrentWire(), src.getProgress());
-        } else {
-            dst.setProgress(src.getProgress());
-        }
-        dst.setSpeed(src.getSpeed());
-        dst.setAcceleration(src.getAcceleration());
-        if (src.getNoise() > 0) {
-            dst.increaseNoise(src.getNoise());
-        }
-    }
 }

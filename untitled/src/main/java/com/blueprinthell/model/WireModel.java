@@ -103,10 +103,27 @@ public class WireModel implements Serializable {
         Iterator<PacketModel> it = packets.iterator();
         while (it.hasNext()) {
             PacketModel p = it.next();
-            p.advance(dt);
+            // Advance or fallback based on destination status
+            if (simulationController != null && !simulationController.isSystemEnabled(dst)) {
+                // Destination disabled: move packet backward along wire
+                // compute backward progress delta based on packet speed and wire length
+                double length = getLength();
+                if (length > 0) {
+                    double deltaProg = p.getSpeed() * dt / length;
+                    double newProg = p.getProgress() - deltaProg;
+                    p.setProgress(Math.max(0.0, newProg));
+                }
+                // continue on wire
+                continue;
+            } else {
+                // Normal forward movement
+                p.advance(dt);
+            }
+            // After moving forward, check arrival
             if (p.getProgress() >= 1.0) {
                 it.remove();
                 arrived.add(p);
+                // Notify return to source if needed
                 if (simulationController != null && sourceInputPorts.contains(dst)) {
                     simulationController.onPacketReturned();
                 }

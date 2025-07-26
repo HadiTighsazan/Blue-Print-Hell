@@ -88,4 +88,7 @@ public class PacketModel extends GameObjectModel implements Serializable {
         this.acceleration = acceleration;
     }
 
+    public void setNoise(double v) {
+        this.noise=v;
+    }
 }
