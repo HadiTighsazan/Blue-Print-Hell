@@ -6,12 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-/**
- * Generates LevelDefinition instances following the progressive ruleset:
- *  - Level 0: single Source ➜ single Sink
- *  - Each next level adds two new systems (an intermediary and a new sink),
- *    and scales wire budget by 50%, ensuring connectivity via BFS check.
- */
+
 public final class LevelGenerator {
 
     private static final int BOX_W = Config.SYSTEM_WIDTH;
@@ -20,42 +15,35 @@ public final class LevelGenerator {
 
     private LevelGenerator() {}
 
-    /** Produces the first level (index 0). */
     public static LevelDefinition firstLevel() {
         List<LevelDefinition.BoxSpec> boxes;
         do {
             boxes = new ArrayList<>();
-            int portCount = 1 + RND.nextInt(3); // max 3
+            int portCount = 1 + RND.nextInt(3);
             List<PortShape> shapes = randomShapes(portCount);
-            // Source
             boxes.add(new LevelDefinition.BoxSpec(
                     50, 100, BOX_W, BOX_H,
                     List.of(), shapes,
                     true, false));
-            // Sink
             boxes.add(new LevelDefinition.BoxSpec(
                     350, 100, BOX_W, BOX_H,
                     shapes, List.of(),
                     false, true));
         } while (!isConnected(boxes));
 
-        // Re‑layout boxes on a visible grid
         boxes = layoutBoxes(boxes);
 
         double budget = 500;
         return new LevelDefinition(boxes, budget);
     }
 
-    /** Generates the next level based on the previous definition. */
     public static LevelDefinition nextLevel(LevelDefinition prev) {
         List<LevelDefinition.BoxSpec> boxes;
         do {
             boxes = new ArrayList<>();
-            // Find old sink for positioning
             LevelDefinition.BoxSpec oldSink = prev.boxes().stream()
                     .filter(LevelDefinition.BoxSpec::isSink)
                     .findFirst().orElseThrow();
-            // Copy all previous boxes; convert old sink to an ordinary box (isSink=false)
             for (LevelDefinition.BoxSpec b : prev.boxes()) {
                 boolean isSource = b.isSource();
                 boolean newSinkFlag = false;
@@ -63,14 +51,12 @@ public final class LevelGenerator {
                 int outCount = 1 + RND.nextInt(3);
                 List<PortShape> inSh  = isSource ? List.of() : randomShapes(inCount);
                 List<PortShape> outSh = randomShapes(outCount);
-                // Use 10‑param constructor to preserve id and kind
                 boxes.add(new LevelDefinition.BoxSpec(
                         b.id(), b.x(), b.y(), b.width(), b.height(),
                         inSh, outSh,
                         isSource, newSinkFlag,
                         b.kind()));
             }
-            // Add intermediary box (uses 8‑param helper with random UUID, NORMAL kind)
             int ix = oldSink.x() + 150;
             int iy = oldSink.y() + (RND.nextBoolean() ? 120 : -120);
             List<PortShape> midIns  = randomShapes(1 + RND.nextInt(3));
@@ -79,7 +65,6 @@ public final class LevelGenerator {
                     ix, iy, BOX_W, BOX_H,
                     midIns, midOuts,
                     false, false));
-            // Add new sink box (8‑param helper)
             int sx = ix + 300;
             int sy = iy;
             List<PortShape> sinkIns = randomShapes(1 + RND.nextInt(3));
@@ -89,21 +74,17 @@ public final class LevelGenerator {
                     false, true));
         } while (!isConnected(boxes));
 
-        // Balance total number of input & output ports across all boxes
         boxes = balancePortCounts(boxes);
-        // Re‑layout boxes so that all are visible and non‑overlapping
         boxes = layoutBoxes(boxes);
 
         double budget = prev.totalWireLength() * 1.5;
         return new LevelDefinition(boxes, budget);
     }
 
-    // Helper: single random shape
     private static PortShape randomShape() {
         return RND.nextBoolean() ? PortShape.SQUARE : PortShape.TRIANGLE;
     }
 
-    // Helper: generate list of random shapes
     private static List<PortShape> randomShapes(int count) {
         if (count > 3) count = 3;
         List<PortShape> list = new ArrayList<>(count);
@@ -111,9 +92,7 @@ public final class LevelGenerator {
         return list;
     }
 
-    /**
-     * Connectivity check: ensures a multi-step path from source to sink via compatible ports.
-     */
+
     private static boolean isConnected(List<LevelDefinition.BoxSpec> boxes) {
         int n = boxes.size();
         List<List<Integer>> adj = new ArrayList<>(n);
@@ -145,9 +124,7 @@ public final class LevelGenerator {
         }
         return false;
     }
-    /**
-     * Arrange boxes in a left‑to‑right, top‑to‑bottom grid so they stay visible.
-     */
+
     private static List<LevelDefinition.BoxSpec> layoutBoxes(List<LevelDefinition.BoxSpec> original) {
         List<LevelDefinition.BoxSpec> res = new ArrayList<>(original.size());
         int i = 0;
@@ -156,7 +133,6 @@ public final class LevelGenerator {
             int row = i / 4;
             int nx = 50 + col * 150;
             int ny = 100 + row * 150;
-            // Use 10‑param constructor to preserve id and kind
             res.add(new LevelDefinition.BoxSpec(
                     b.id(), nx, ny, BOX_W, BOX_H,
                     b.inShapes(), b.outShapes(),
@@ -167,9 +143,7 @@ public final class LevelGenerator {
         return res;
     }
 
-    /**
-     * Ensures مجموع پورت‌های ورودی و خروجی در کل شبکه برابر باشد.
-     */
+
     private static List<LevelDefinition.BoxSpec> balancePortCounts(List<LevelDefinition.BoxSpec> orig) {
         List<LevelDefinition.BoxSpec> boxes = new ArrayList<>(orig);
         while (true) {
@@ -184,7 +158,6 @@ public final class LevelGenerator {
                     if (b.outShapes().size() < 3) {
                         List<PortShape> newOut = new ArrayList<>(b.outShapes());
                         newOut.add(randomShape());
-                        // Preserve id and kind
                         boxes.set(i, new LevelDefinition.BoxSpec(
                                 b.id(), b.x(), b.y(), b.width(), b.height(),
                                 b.inShapes(), newOut,

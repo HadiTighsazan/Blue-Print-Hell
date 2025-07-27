@@ -8,15 +8,12 @@ import com.blueprinthell.controller.ScreenController;
 
 import javax.swing.*;
 
-/**
- * Monitors packet loss each tick; when loss exceeds threshold on total planned packets,
- * stops simulation and shows Game‑Over screen.
- */
+
 public class LossMonitorController implements Updatable {
 
     private final PacketLossModel lossModel;
-    private final double plannedPackets;   // total packets planned for level
-    private final double thresholdRatio;   // e.g. 0.5 for 50%
+    private final double plannedPackets;
+    private final double thresholdRatio;
     private final SimulationController simulation;
     private final ScreenController screenCtrl;
     private final Runnable resetLevel;

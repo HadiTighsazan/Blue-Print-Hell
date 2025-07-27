@@ -10,14 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Wires every runtime Updatable required for a level into the SimulationController.
- * Responsibilities:
- *  - Register core packet flow controllers
- *  - Register game-over / retry logic
- *  - Register snapshot & HUD controllers
- *  - Register any system-specific controllers (VPN, Spy, etc.)
- */
+
 public final class SimulationRegistrar {
 
     private final SimulationController simulation;
@@ -57,16 +50,7 @@ public final class SimulationRegistrar {
         this.levelManager       = levelManager;
     }
 
-    /**
-     * Registers every Updatable for a new level.
-     * @param boxes   all SystemBoxModels in play
-     * @param wires   list of all wires connecting boxes
-     * @param destMap mapping each wire to its destination box
-     * @param sources source boxes producing packets
-     * @param sink    the sink box consuming packets (may be null)
-     * @param producer PacketProducerController pre-configured for this level
-     * @param systems  List of custom system controllers (VPNSystem, SpySystem, ...)
-     */
+
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
                             Map<WireModel, SystemBoxModel> destMap,
@@ -75,12 +59,10 @@ public final class SimulationRegistrar {
                             PacketProducerController producer,
                             List<Updatable> systems) {
 
-        // Register custom systems (VPN, Spy, etc.) first
         if (systems != null) {
             systems.forEach(simulation::register);
         }
 
-        // Packet flow: production, dispatch, routing, consumption
         simulation.register(producer);
         simulation.register(new PacketDispatcherController(wires, destMap, coinModel, lossModel));
         if (sink != null) {
@@ -93,13 +75,10 @@ public final class SimulationRegistrar {
                         new PacketRouterController(b, wires, destMap, lossModel)
                 ));
 
-        // Rendering & collision
         simulation.register(packetRenderer);
         simulation.register(collisionController);
 
-        // Loss / completion
 
-        // Loss / completion: only if a ScreenController is available
         int plannedTotal = sources.stream()
                 .mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort())
                 .sum();
@@ -117,11 +96,9 @@ public final class SimulationRegistrar {
                 wires, lossModel, producer,
                 levelManager, 0.5, plannedTotal));
 
-        // Snapshots & HUD
         simulation.register(new SnapshotController(
                 boxes, wires,
                 scoreModel, coinModel, usageModel, lossModel, snapshotManager));
-        // HUD sync (wire, loss, coins, level)
         simulation.register(new HudController(
                 usageModel, lossModel, coinModel, levelManager, hudView
         ));

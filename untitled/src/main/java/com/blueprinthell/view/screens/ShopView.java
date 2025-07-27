@@ -4,9 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionListener;
 
-/**
- * Shop view for purchasing power-ups during the game.
- */
+
 public class ShopView extends JPanel {
     public final JButton buyOAtarButton = new JButton("O’Atar - 3 coins");
     public final JButton buyOAiryamanButton = new JButton("O’Airyaman - 4 coins");
@@ -54,16 +52,12 @@ public class ShopView extends JPanel {
         return panel;
     }
 
-    /**
-     * Shows a message (e.g., error or confirmation) in the shop.
-     */
+
     public void setMessage(String msg) {
         messageLabel.setText(msg);
     }
 
-    /**
-     * Listener registration methods
-     */
+
     public void addBuyOAtarListener(ActionListener l) { buyOAtarButton.addActionListener(l); }
     public void addBuyOAiryamanListener(ActionListener l) { buyOAiryamanButton.addActionListener(l); }
     public void addBuyOAnahitaListener(ActionListener l) { buyOAnahitaButton.addActionListener(l); }

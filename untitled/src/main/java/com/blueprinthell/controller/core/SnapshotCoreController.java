@@ -18,10 +18,7 @@ public class SnapshotCoreController implements NetworkController {
 
     public SnapshotService getSnapshotSvc() {
         return snapshotSvc;
-    }/* ================================================================ */
-
-    /*                NetworkController interface methods               */
-    /* ================================================================ */
+    }
     @Override
     public NetworkSnapshot captureSnapshot() {
         return snapshotSvc.buildSnapshot();

@@ -4,17 +4,11 @@ import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.WireModel;
 import java.awt.Point;
 
-/**
- * MotionStrategy that applies curvature-based acceleration on a wire path.
- */
+
 public class AccelOnCurveStrategy implements MotionStrategy {
     private final double curvatureAcceleration;
     private final double maxSpeedMultiplier;
 
-    /**
-     * @param curvatureAcceleration acceleration factor proportional to curvature
-     * @param maxSpeedMultiplier    maximum speed relative to baseSpeed
-     */
     public AccelOnCurveStrategy(double curvatureAcceleration, double maxSpeedMultiplier) {
         this.curvatureAcceleration = curvatureAcceleration;
         this.maxSpeedMultiplier = maxSpeedMultiplier;
@@ -24,24 +18,18 @@ public class AccelOnCurveStrategy implements MotionStrategy {
     public void update(PacketModel packet, double dt) {
         WireModel wire = packet.getCurrentWire();
         if (wire == null) return;
-        // Estimate curvature at current progress
         double curvature = estimateCurvature(wire, packet.getProgress());
-        // Compute acceleration based on curvature
         double accel = curvatureAcceleration * curvature;
-        // Update speed with acceleration, clamped
         double newSpeed = packet.getSpeed() + accel * dt;
         double maxSpeed = packet.getBaseSpeed() * maxSpeedMultiplier;
         newSpeed = Math.min(Math.max(newSpeed, packet.getBaseSpeed()), maxSpeed);
         packet.setSpeed(newSpeed);
-        // Advance along the wire
         double distance = packet.getSpeed() * dt;
         double deltaProg = distance / wire.getLength();
         packet.setProgress(packet.getProgress() + deltaProg);
     }
 
-    /**
-     * Simple curvature estimate using finite differences around the packet's position.
-     */
+
     private double estimateCurvature(WireModel wire, double progress) {
         double t0 = Math.max(0.0, progress - 0.01);
         double t2 = Math.min(1.0, progress + 0.01);
@@ -55,6 +43,6 @@ public class AccelOnCurveStrategy implements MotionStrategy {
         double mag2 = Math.hypot(dx2, dy2);
         if (mag1 == 0 || mag2 == 0) return 0.0;
         double cos = dot / (mag1 * mag2);
-        return 1.0 - cos; // curvature measure in [0,2]
+        return 1.0 - cos;
     }
 }

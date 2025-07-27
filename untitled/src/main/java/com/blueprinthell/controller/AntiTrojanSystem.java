@@ -11,10 +11,7 @@ import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * AntiTrojanSystem — periodically scans around this system and removes any TrojanPacket
- * within a given radius, with a cooldown between sweeps.
- */
+
 public class AntiTrojanSystem implements Updatable {
     private final SystemBoxModel box;
     private final List<WireModel> wires;
@@ -23,13 +20,7 @@ public class AntiTrojanSystem implements Updatable {
     private final double cooldown;
     private double timer = 0.0;
 
-    /**
-     * @param box           the system box center for sweeping
-     * @param wires         all wires in the network
-     * @param lossModel     model to count removed trojans as loss
-     * @param radius        sweep radius in pixels
-     * @param cooldown      minimum interval between sweeps in seconds
-     */
+
     public AntiTrojanSystem(SystemBoxModel box,
                             List<WireModel> wires,
                             PacketLossModel lossModel,
@@ -49,12 +40,10 @@ public class AntiTrojanSystem implements Updatable {
             return;
         }
         timer = 0.0;
-        // compute center point of the box
         Point center = new Point(
                 box.getX() + box.getWidth()/2,
                 box.getY() + box.getHeight()/2
         );
-        // collect trojans to remove
         for (WireModel wire : wires) {
             List<PacketModel> toRemove = new ArrayList<>();
             for (PacketModel p : wire.getPackets()) {
@@ -65,7 +54,6 @@ public class AntiTrojanSystem implements Updatable {
                     }
                 }
             }
-            // remove and count losses
             for (PacketModel t : toRemove) {
                 wire.removePacket(t);
                 lossModel.increment();

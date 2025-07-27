@@ -7,12 +7,10 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class SimulationCoreManager {
-    private final GameController gameController;// Main simulation loop & time navigation
+    private final GameController gameController;
     public final SimulationController simulation = new SimulationController(60);
     public final TimelineController timeline;
-    /* ================================================================ */
-    /*                           Game models                            */
-    /* ================================================================ */
+
     public final ScoreModel scoreModel = new ScoreModel();
     public final CoinModel coinModel = new CoinModel();
     public final PacketLossModel lossModel = new PacketLossModel();
@@ -41,10 +39,7 @@ public class SimulationCoreManager {
 
     public PacketRenderController getPacketRenderer() {
         return packetRenderer;
-    }/* --------------------------------------------------------------- */
-
-    /*                 Timeline scrubbing with keyboard                */
-    /* --------------------------------------------------------------- */
+    }
     public void onNavigateTime(int dir) {
         if (timeline.isPlaying()) return;
         simulation.stop();

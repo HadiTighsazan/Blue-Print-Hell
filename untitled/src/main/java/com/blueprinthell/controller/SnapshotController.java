@@ -5,10 +5,7 @@ import com.blueprinthell.model.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Updatable controller that records periodic snapshots of the network state
- * into a SnapshotManager, enabling temporal navigation.
- */
+
 public class SnapshotController implements Updatable {
     private final List<SystemBoxModel> boxes;
     private final List<WireModel> wires;
@@ -38,7 +35,6 @@ public class SnapshotController implements Updatable {
     @Override
     public void update(double dt) {
         elapsedTime += dt;
-        // Capture box states (including buffer packets)
         List<NetworkSnapshot.SystemBoxState> boxStates = new ArrayList<>();
         for (SystemBoxModel box : boxes) {
             List<NetworkSnapshot.PacketState> bufferStates = new ArrayList<>();
@@ -49,7 +45,6 @@ public class SnapshotController implements Updatable {
                     box.getX(), box.getY(), box.getWidth(), box.getHeight(),
                     box.getInShapes(), box.getOutShapes(), bufferStates));
         }
-        // Capture wire states
         List<NetworkSnapshot.WireState> wireStates = new ArrayList<>();
         for (WireModel wire : wires) {
             PortModel src = wire.getSrcPort();
@@ -64,7 +59,6 @@ public class SnapshotController implements Updatable {
                     dst.getCenterX(), dst.getCenterY(),
                     packetStates));
         }
-        // Build snapshot (score, coins, loss, boxes, wires)
         NetworkSnapshot snapshot = new NetworkSnapshot(
                 scoreModel.getScore(),
                 coinModel.getCoins(),

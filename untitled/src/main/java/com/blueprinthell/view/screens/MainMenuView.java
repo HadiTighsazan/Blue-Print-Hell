@@ -5,9 +5,7 @@ import com.blueprinthell.view.BackgroundPanel;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Main menu screen with a shared background image and uniformly styled buttons.
- */
+
 public class MainMenuView extends BackgroundPanel {
 
     public final JButton startButton    = makeButton("Start");
@@ -17,7 +15,7 @@ public class MainMenuView extends BackgroundPanel {
     public MainMenuView() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setPreferredSize(new Dimension(800, 600));
-        setOpaque(false); // BackgroundPanel already paints image
+        setOpaque(false);
 
         add(Box.createVerticalGlue());
         add(startButton);
@@ -28,7 +26,6 @@ public class MainMenuView extends BackgroundPanel {
         add(Box.createVerticalGlue());
     }
 
-    /* ---------------- helper ---------------- */
     private JButton makeButton(String text) {
         JButton btn = new JButton(text);
         btn.setAlignmentX(Component.CENTER_ALIGNMENT);

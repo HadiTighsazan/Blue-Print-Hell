@@ -9,24 +9,15 @@ import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.view.SystemBoxView;
 import com.blueprinthell.view.screens.GameScreenView;
 
-import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Utility class responsible **only** for instantiating the static parts of a level:
- * <ul>
- *     <li>Creating {@link SystemBoxModel} instances from a {@link LevelDefinition}</li>
- *     <li>Placing them on the {@link GameScreenView}</li>
- *     <li>Wiring mouse‑drag behaviour via {@link SystemBoxDragController}</li>
- * </ul>
- * Also handles port distribution for multi‑stage progressive levels.
- */
+
 public final class LevelBuilder {
 
     private final GameScreenView gameView;
-    private final List<WireModel> wires;         // shared list, mutated by drag/wire controllers
+    private final List<WireModel> wires;
     private final WireUsageModel usageModel;
 
     public LevelBuilder(GameScreenView gameView,
@@ -37,23 +28,14 @@ public final class LevelBuilder {
         this.usageModel = usageModel;
     }
 
-    /**
-     * Builds and returns the SystemBox models for the supplied blueprint,
-     * distributing extra output ports among existing boxes if present.
-     * Side‑effects: the related Swing components are added to the {@code gameView}.
-     *
-     * @param def            definition of the new stage
-     * @param existingBoxes  boxes from previous stages (empty on first)
-     */
+
     public List<SystemBoxModel> build(LevelDefinition def,
                                       List<SystemBoxModel> existingBoxes) {
-        // 0) determine the new specs to create and ports requirement
         List<LevelDefinition.BoxSpec> allSpecs = def.boxes();
         int existingCount = existingBoxes.size();
         List<LevelDefinition.BoxSpec> newSpecs = existingCount < allSpecs.size()
                 ? allSpecs.subList(existingCount, allSpecs.size())
                 : List.of();
-        // Calculate net required new output ports: inputPorts(new) - outputPorts(new)
         int inputPortsNew = newSpecs.stream()
                 .mapToInt(spec -> spec.inShapes().size())
                 .sum();
@@ -61,7 +43,6 @@ public final class LevelBuilder {
                 .mapToInt(spec -> spec.outShapes().size())
                 .sum();
         int requiredPorts = Math.max(0, inputPortsNew - outputPortsNew);
-        // Check available capacity in existing boxes
         int availableCapacity = existingBoxes.stream()
                 .mapToInt(box -> Config.MAX_OUTPUT_PORTS - box.getOutPorts().size())
                 .sum();
@@ -69,7 +50,6 @@ public final class LevelBuilder {
             throw new IllegalStateException("Insufficient port capacity in existing systems for new stage");
         }
 
-        // 1) distribute ports among existing boxes based on new specs need
         for (SystemBoxModel box : existingBoxes) {
             while (box.getOutPorts().size() < Config.MAX_OUTPUT_PORTS && requiredPorts > 0) {
                 PortShape shape = box.getOutShapes().isEmpty()
@@ -81,7 +61,6 @@ public final class LevelBuilder {
             if (requiredPorts == 0) break;
         }
 
-        // 2) create only new boxes for new specs
         List<SystemBoxModel> newBoxes = new ArrayList<>();
         for (LevelDefinition.BoxSpec spec : newSpecs) {
             SystemBoxModel box = new SystemBoxModel(
@@ -90,21 +69,17 @@ public final class LevelBuilder {
             newBoxes.add(box);
         }
 
-        // 3) merge existing and new, then paint
         List<SystemBoxModel> all = new ArrayList<>(existingBoxes);
         all.addAll(newBoxes);
 
-        // 🔧 تضمین وجود حداقل یک سیستم مقصد (بدون خروجی)
         boolean hasDestination = all.stream()
                 .anyMatch(box -> box.getOutPorts().isEmpty());
         if (!hasDestination && !all.isEmpty()) {
-            // حذف یک خروجی از آخرین جعبه برای ایجاد سیستم مقصد
             all.get(all.size() - 1).removeOutputPort();
         }
 
         gameView.reset(all, wires);
 
-        // 4) attach drag behaviour
         for (Component c : gameView.getGameArea().getComponents()) {
             if (c instanceof SystemBoxView sbv) {
                 new SystemBoxDragController(sbv.getModel(), sbv, wires, usageModel);

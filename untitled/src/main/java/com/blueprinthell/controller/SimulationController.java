@@ -10,27 +10,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Main simulation controller that triggers update(dt) on all registered Updatable models
- * and optionally records snapshots each second via a TimelineController.
- * همچنین وظیفه‌ی مدیریت بازتولید پکت‌های بازگشتی و نگاشت پورت‌به‌سیستم را بر عهده دارد.
- */
+
 public class SimulationController {
-    private final List<Updatable> updatables = new ArrayList<>(); // guarded by itself
+    private final List<Updatable> updatables = new ArrayList<>();
     private final Timer timer;
     private TimelineController timelineController;
     private double elapsedSeconds = 0.0;
 
-    // برای نگهداری مرجع به PacketProducerController جهت بازتولید پکت‌های بازگشتی
     private PacketProducerController packetProducer;
 
-    // نگاشت پورت‌های ورودی به سیستم مقصد مربوطه
     private final Map<PortModel, SystemBoxModel> portToSystem = new HashMap<>();
 
-    /**
-     * Constructs a simulation controller with the given frame rate.
-     * @param fps frames per second for simulation ticks
-     */
+
     public SimulationController(int fps) {
         int delay = 1000 / fps;
         this.timer = new Timer(delay, e -> tick(delay));
@@ -38,7 +29,6 @@ public class SimulationController {
 
     private void tick(int delay) {
         double dt = delay / 1000.0;
-        // Update all registered updatables
         List<Updatable> snapshot;
         synchronized (updatables) {
             snapshot = new ArrayList<>(updatables);
@@ -46,7 +36,6 @@ public class SimulationController {
         for (Updatable u : snapshot) {
             u.update(dt);
         }
-        // Record snapshot each second if a timeline controller is set
         if (timelineController != null) {
             elapsedSeconds += dt;
             if (elapsedSeconds >= 1.0) {
@@ -56,10 +45,7 @@ public class SimulationController {
         }
     }
 
-    /**
-     * Registers an Updatable to be updated each tick.
-     * @param u the updatable instance
-     */
+
     public void register(Updatable u) {
         synchronized (updatables) {
             if (!updatables.contains(u)) {
@@ -68,53 +54,38 @@ public class SimulationController {
         }
     }
 
-    /**
-     * Unregisters a previously registered Updatable.
-     * @param u the updatable to remove
-     */
+
     public void unregister(Updatable u) {
         synchronized (updatables) {
             updatables.remove(u);
         }
     }
 
-    /**
-     * Sets the TimelineController to record snapshots periodically.
-     * @param tc timeline controller instance
-     */
+
     public void setTimelineController(TimelineController tc) {
         this.timelineController = tc;
     }
 
-    /**
-     * Starts the simulation timer if not already running.
-     */
+
     public void start() {
         if (!timer.isRunning()) {
             timer.start();
         }
     }
 
-    /**
-     * Stops the simulation timer if running.
-     */
+
     public void stop() {
         if (timer.isRunning()) {
             timer.stop();
         }
     }
 
-    /**
-     * @return true if the simulation timer is currently running.
-     */
+
     public boolean isRunning() {
         return timer.isRunning();
     }
 
-    /**
-     * Clears all registered Updatable instances and resets elapsed time.
-     * Used when a new level starts.
-     */
+
     public void clearUpdatables() {
         synchronized (updatables) {
             updatables.clear();
@@ -122,39 +93,24 @@ public class SimulationController {
         elapsedSeconds = 0.0;
     }
 
-    /**
-     * Sets the PacketProducerController so that SimulationController
-     * can forward returned-packet notifications.
-     * @param producer the packet producer controller
-     */
+
     public void setPacketProducerController(PacketProducerController producer) {
         this.packetProducer = producer;
         register(producer);
     }
 
-    /**
-     * Registers a SystemBoxModel and its input port for status queries.
-     * @param system the system box model
-     * @param inPort the input port of the system
-     */
+
     public void registerSystemPort(SystemBoxModel system, PortModel inPort) {
         portToSystem.put(inPort, system);
     }
 
-    /**
-     * Checks whether the system connected to the given input port is enabled.
-     * @param inPort the input port of a system
-     * @return true if the system is enabled or not registered
-     */
+
     public boolean isSystemEnabled(PortModel inPort) {
         SystemBoxModel sys = portToSystem.get(inPort);
         return sys == null || sys.isEnabled();
     }
 
-    /**
-     * هر زمان که یک پکت به مبدا برگشت باید این متد فراخوانی شود
-     * تا اعتبار بازگشتی در تولیدکننده افزایش یابد.
-     */
+
     public void onPacketReturned() {
         if (packetProducer != null) {
             packetProducer.onPacketReturned();

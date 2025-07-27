@@ -8,15 +8,7 @@ import com.blueprinthell.model.PacketLossModel;
 import javax.swing.*;
 import java.util.List;
 
-/**
- * UIController wires together high‑level UI interactions that should not live in GameController.
- *
- * مسئولیت‌ها:
- * <ul>
- *     <li>اتصال دکمهٔ Store در HUD به ShopController</li>
- *     <li>ایجاد AudioController سراسری برای پخش موسیقی و کنترل حجم</li>
- * </ul>
- */
+
 public class UIController {
     private final JFrame          mainFrame;
     private final ShopController  shopController;
@@ -32,7 +24,6 @@ public class UIController {
                         HudController hudController) {
         this.mainFrame = parentFrame;
 
-        // ساخت کنترلر فروشگاه (مودال)
         this.shopController = new ShopController(
                 parentFrame,
                 simulation,
@@ -42,16 +33,12 @@ public class UIController {
                 wires,
                 hudController
         );
-        // کنترلر صدا (پس‌زمینه و حجم)
         this.audioController = new AudioController();
 
-        // اتصال HUD → فروشگاه
         hudView.addStoreListener(e -> shopController.openShop());
     }
 
-    /**
-     * دسترسی به فریم اصلی برای استفاده در دیگر کنترلرها
-     */
+
     public JFrame getMainFrame() {
         return mainFrame;
     }

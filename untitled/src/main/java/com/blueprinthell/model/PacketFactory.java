@@ -8,7 +8,7 @@ import java.util.Objects;
 
 public final class PacketFactory {
 
-    private PacketFactory() { /* static‑only */ }
+    private PacketFactory() {  }
 
 
     public static PacketModel create(PacketType type,
@@ -18,15 +18,11 @@ public final class PacketFactory {
         Objects.requireNonNull(src,  "src port");
         Objects.requireNonNull(dst,  "dst port");
 
-        /* -------- base packet instance -------- */
         PacketModel packet = new PacketModel(type, Config.DEFAULT_PACKET_SPEED);
 
-        /* -------- strategy selection v1 -------- */
         MotionStrategy strategy;
         boolean compatible = dst.getShape() == type.toPortShape();
-        // Phase‑2 rule‑set (to be expanded later):
-        //  – compatible  → constant speed
-        //  – incompatible→ constant speed but with initial acceleration penalty handled in WirePhysics
+
         strategy = new ConstantSpeedStrategy();
 
         packet.setMotionStrategy(strategy);

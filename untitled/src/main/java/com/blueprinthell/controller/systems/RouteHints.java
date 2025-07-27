@@ -5,11 +5,7 @@ import com.blueprinthell.model.PacketModel;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/**
- * Lightweight global hint store for routing decisions without modifying PacketModel.
- * MaliciousBehavior can mark a packet to be routed through an incompatible port.
- * PacketRouterController reads this flag and then clears it after use.
- */
+
 public final class RouteHints {
     private static final Map<PacketModel, Boolean> FORCE_INCOMPATIBLE = new WeakHashMap<>();
 
@@ -21,13 +17,10 @@ public final class RouteHints {
     }
 
     public static boolean consumeForceIncompatible(PacketModel p) {
-        // read-once semantics: remove after read so it doesn't affect future hops
         return FORCE_INCOMPATIBLE.remove(p) != null;
     }
 
-    /**
-     * Clears all routing hints (used when resetting a level).
-     */
+
     public static void clear() {
         FORCE_INCOMPATIBLE.clear();
     }

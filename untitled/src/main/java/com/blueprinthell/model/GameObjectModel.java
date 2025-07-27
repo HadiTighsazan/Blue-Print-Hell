@@ -2,9 +2,7 @@ package com.blueprinthell.model;
 
 import java.io.Serializable;
 
-/**
- * Base model for all game objects, holding position and size without any UI dependencies.
- */
+
 public abstract class GameObjectModel implements Serializable {
     private static final long serialVersionUID = 1L;
 

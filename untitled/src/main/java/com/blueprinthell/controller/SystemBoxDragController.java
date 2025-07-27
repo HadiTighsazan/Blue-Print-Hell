@@ -14,9 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Controller to enable dragging of system boxes and update wire usage based on length change.
- */
+
 public class SystemBoxDragController extends MouseAdapter implements MouseMotionListener {
     private final SystemBoxModel model;
     private final SystemBoxView view;
@@ -25,13 +23,7 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     private Point offset;
     private Map<WireModel, Double> oldLengths;
 
-    /**
-     * Constructs a drag controller for a system box.
-     * @param model the system box model
-     * @param view the system box view
-     * @param wires the list of all wires
-     * @param usageModel model tracking wire usage
-     */
+
     public SystemBoxDragController(SystemBoxModel model,
                                    SystemBoxView view,
                                    List<WireModel> wires,
@@ -48,7 +40,6 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     @Override
     public void mousePressed(MouseEvent e) {
         offset = e.getPoint();
-        // Record old lengths for wires connected to this box
         oldLengths.clear();
         for (WireModel wire : wires) {
             if (model.getInPorts().contains(wire.getSrcPort())
@@ -64,12 +55,10 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     public void mouseDragged(MouseEvent e) {
         int newX = view.getX() + e.getX() - offset.x;
         int newY = view.getY() + e.getY() - offset.y;
-        // Update view and model positions
         view.setLocation(newX, newY);
         model.setX(newX);
         model.setY(newY);
 
-        // After moving, recalculate wire lengths and update usageModel
         for (Map.Entry<WireModel, Double> entry : oldLengths.entrySet()) {
             WireModel wire = entry.getKey();
             double previous = entry.getValue();
@@ -80,11 +69,9 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
             } else if (delta < 0) {
                 usageModel.freeWire(-delta);
             }
-            // Update stored length
             entry.setValue(current);
         }
 
-        // Refresh UI to redraw wires and ports
         JComponent parent = (JComponent) view.getParent();
         parent.revalidate();
         parent.repaint();
@@ -92,6 +79,5 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
 
     @Override
     public void mouseMoved(MouseEvent e) {
-        // Not used
     }
 }

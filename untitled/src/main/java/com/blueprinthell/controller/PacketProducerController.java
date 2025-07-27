@@ -5,13 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-/**
- * Produces a stream of packets from every output‑port of all **source** boxes at a fixed interval.
- * <p>
- * – تعداد پکت به ازای هر پورت خروجی توسط سازنده (packetsPerPort) تعیین می‌شود.
- * – متد {@link #startProduction()} فقط زمانی فراخوانی می‌شود که کاربر Start را بزند.
- * – متد {@link #reset()} شمارنده‌ی زمان‌بندی را ریست می‌کند اما تعداد پکت‌های تولیدشده و اعتبار بازگشتی را حفظ می‌کند.
- */
+
 public class PacketProducerController implements Updatable {
 
     private static final Random RND = new Random();
@@ -24,7 +18,6 @@ public class PacketProducerController implements Updatable {
     private final int packetsPerPort;
     private final int totalToProduce;
 
-    /* -------- runtime state -------- */
     private double acc = 0.0;
     private boolean running = false;
     private int producedCount = 0;
@@ -44,31 +37,21 @@ public class PacketProducerController implements Updatable {
         this.totalToProduce = outs * packetsPerPort;
     }
 
-    /* ---------------- Public API ---------------- */
     public void startProduction() { running = true; }
     public void stopProduction()  { running = false; }
 
-    /**
-     * Resets only the timing accumulator and running flag.
-     * تعداد پکت‌های تولیدشده و returnedCredits حفظ می‌شوند.
-     */
+
     public void reset() {
         running = false;
         acc = 0.0;
     }
 
-    /**
-     * هر بار که یک پکت پس از عقب‌گرد زمان به مبدا می‌رسد فراخوانی شود
-     * تا برای بازتولید اعتبار بگیرد.
-     */
+
     public void onPacketReturned() {
         returnedCredits++;
     }
 
-    /**
-     * زمانی تمام شده محسوب می‌شود که هیچ اعتبار بازگشتی نمانده
-     * و همه‌ی پکت‌های جدید تولید شده باشند.
-     */
+
     public boolean isFinished() {
         return producedCount >= totalToProduce && returnedCredits == 0;
     }
@@ -86,7 +69,6 @@ public class PacketProducerController implements Updatable {
         if (isFinished()) running = false;
     }
 
-    /* ---------------- Internal helpers ---------------- */
     private void emitOnce() {
         for (SystemBoxModel box : sourceBoxes) {
             if (!box.getInPorts().isEmpty()) continue;

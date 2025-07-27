@@ -5,20 +5,15 @@ import com.blueprinthell.model.PacketModel;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * <h2>LargeGroupRegistry</h2>
- * رجیستری سطح مرحله برای رهگیری چرخهٔ حیات گروه‌های پکت‌های حجیم.
- */
+
 public final class LargeGroupRegistry {
 
-    /* =============================================================== */
-    /*                          Inner type                              */
-    /* =============================================================== */
+
     public static final class GroupState {
         public final int  groupId;
-        public final int  originalSizeUnits;   // اندازهٔ LargePacket اصلی
-        public final int  expectedBits;        // تعداد بیت‌های الزامی
-        public final int  colorId;             // برای UI
+        public final int  originalSizeUnits;
+        public final int  expectedBits;
+        public final int  colorId;
         private int       receivedBits = 0;
         private int       lostBits = 0;
         private boolean   closed   = false;
@@ -31,7 +26,6 @@ public final class LargeGroupRegistry {
             this.colorId = colorId;
         }
 
-        /* --------------- queries --------------- */
         public int  getReceivedBits() { return receivedBits; }
         public int  getMissingBits()  { return Math.max(0, expectedBits - receivedBits); }
         public int  getLostBits()     { return lostBits; }
@@ -39,7 +33,6 @@ public final class LargeGroupRegistry {
         public boolean isClosed()     { return closed; }
         public List<PacketModel> getCollectedPackets() {return Collections.unmodifiableList(collectedPackets);}
 
-        /* --------------- mutators -------------- */
         void addPacket(PacketModel p) {
             collectedPackets.add(p);
             receivedBits++;
@@ -48,19 +41,14 @@ public final class LargeGroupRegistry {
         void close()            { closed = true; }
     }
 
-    /* =============================================================== */
-    /*                           Registry                               */
-    /* =============================================================== */
+
     private final AtomicInteger idSeq  = new AtomicInteger(1);
     private final Map<Integer, GroupState> groups = new HashMap<>();
 
-    // Diagnostics
     private int totalBitsProduced = 0;
     private int totalBitsLost     = 0;
 
-    /* --------------------------------------------------------------- */
-    /*                             CRUD                                */
-    /* --------------------------------------------------------------- */
+
     public int createGroup(int originalSizeUnits, int expectedBits, int colorId) {
         int id = idSeq.getAndIncrement();
         createGroupWithId(id, originalSizeUnits, expectedBits, colorId);
@@ -75,10 +63,7 @@ public final class LargeGroupRegistry {
         });
     }
 
-    /**
-     * ثبت رسیدن بیت به Merger.
-     * @return true اگر گروه پس از این ثبت کامل شد.
-     */
+
     public boolean registerArrival(int groupId, PacketModel bit) {
         GroupState st = groups.get(groupId);
         if (st == null || st.closed) return false;
@@ -86,14 +71,12 @@ public final class LargeGroupRegistry {
         return st.isComplete();
     }
 
-    /** آمار تولید بیت در Distributor. */
     public void registerSplit(int groupId, PacketModel bit) {
         if (groups.containsKey(groupId)) {
             totalBitsProduced++;
         }
     }
 
-    /** ثبت بیت گم‑شده (Drop). */
     public void markBitLost(int groupId, int count) {
         GroupState st = groups.get(groupId);
         if (st == null || st.closed) return;
@@ -114,30 +97,20 @@ public final class LargeGroupRegistry {
 
     public Map<Integer, GroupState> view() { return Collections.unmodifiableMap(groups); }
 
-    /* =============================================================== */
-    /*                     Loss utility methods                         */
-    /* =============================================================== */
 
-    /**
-     * Loss سادهٔ گروه: اصلی − دریافت‌شده.
-     */
     public int computeSimpleLoss(int groupId) {
         GroupState st = groups.get(groupId);
         return (st == null) ? 0 : Math.max(0, st.originalSizeUnits - st.getReceivedBits());
     }
 
-    /** فرمول عمومی پروژه: originalParts - ⌊k·√[k](Πni)⌋ */
     public static int computePartialLoss(int N, List<Integer> parts) {
         int k = parts.size();
-        // ۱) محاسبه‌ی حاصل‌ضرب
         double product = 1.0;
         for (int p : parts) {
             product *= p;
         }
-        // ۲) محاسبه‌ی جذر k
         double kthRoot = Math.pow(product, 1.0 / k);
         int restored = (int) Math.floor(kthRoot);
-        // ۳) محاسبه‌ی Loss
         return N - restored;
     }
 }

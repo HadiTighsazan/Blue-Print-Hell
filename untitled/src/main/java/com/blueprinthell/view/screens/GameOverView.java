@@ -3,9 +3,7 @@ package com.blueprinthell.view.screens;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Game Over screen with Retry and Main Menu buttons.
- */
+
 public class GameOverView extends JPanel {
     public final JButton retryButton = new JButton("Retry");
     public final JLabel packetLossLabel = new JLabel("Loss: 0");

@@ -11,17 +11,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * <h2>ConfidentialThrottleController</h2>
- * کنترلری که سرعت پکت‌های «محرمانه» را وقتی مقصدشان (SystemBox) پکتی در بافر دارد،
- * به مقدار مشخصی کاهش می‌دهد تا هم‌زمان داخل باکس نباشند.
- */
+
 public class ConfidentialThrottleController implements Updatable {
 
     private final List<WireModel> wires;
-    private Map<WireModel, SystemBoxModel> destMap; // تزریق از بیرون
+    private Map<WireModel, SystemBoxModel> destMap;
 
-    /** اگر destMap در حین بازی عوض شد می‌توان با این فلگ غیرفعال کرد. */
     private boolean enabled = true;
 
     public ConfidentialThrottleController(List<WireModel> wires,
@@ -45,7 +40,6 @@ public class ConfidentialThrottleController implements Updatable {
             SystemBoxModel dest = destMap.get(w);
             if (dest == null) continue;
 
-            // اگر بافر مقصد خالی نیست (busy)، سرعت پکت‌های محرمانه را کاهش بده
             if (!dest.getBuffer().isEmpty()) {
                 for (PacketModel p : w.getPackets()) {
                     if (p instanceof ConfidentialPacket) {

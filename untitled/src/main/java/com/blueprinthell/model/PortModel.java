@@ -3,9 +3,7 @@ package com.blueprinthell.model;
 import com.blueprinthell.config.Config;
 import java.io.Serializable;
 
-/**
- * Domain model for Port, holding shape and input/output without UI dependencies.
- */
+
 public class PortModel extends GameObjectModel implements Serializable {
     private static final long serialVersionUID = 3L;
 

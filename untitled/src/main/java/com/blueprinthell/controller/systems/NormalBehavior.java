@@ -14,6 +14,5 @@ public final class NormalBehavior implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-        // Normal systems don't mutate packets here; routing happens elsewhere.
     }
 }

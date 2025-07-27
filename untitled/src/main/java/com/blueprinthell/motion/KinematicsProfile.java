@@ -7,16 +7,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static com.blueprinthell.config.Config.*;
 
-/**
- * <h2>KinematicsProfile</h2>
- * هر پروفایل یک {@link ProfileParams} دارد؛ اعداد و فلگ‌ها در همان {@code ProfileParams} ست می‌شوند و
- * ساخت استراتژی نهایی در {@link MotionStrategyFactory} انجام می‌شود.
- */
+
 public enum KinematicsProfile {
 
 
-    /* ===================== Messenger packets ===================== */
-    /** پیام‌رسان سایز 1 – سازگار: شتاب مثبت؛ ناسازگار: شتاب منفی. به‌علاوه Bounce-on-impact. */
     MSG1(
             ProfileParams.builder(
                     MotionRule.accel(MSG1_COMPAT_V0, MSG1_COMPAT_A, MSG1_COMPAT_MIN_MUL, MSG1_COMPAT_MAX_MUL),
@@ -24,7 +18,6 @@ public enum KinematicsProfile {
             ).bounceOnImpact().build()
     ),
 
-    /** پیام‌رسان سایز 2 – سازگار: سرعت ثابت نصف ناسازگار؛ ناسازگار: سرعت ثابت. */
     MSG2(
             ProfileParams.builder(
                     MotionRule.constSpeed(MSG2_COMPAT_SPEED),
@@ -32,7 +25,6 @@ public enum KinematicsProfile {
             ).build()
     ),
 
-    /** پیام‌رسان سایز 3 – سازگار: سرعت ثابت؛ ناسازگار: شتاب افزایشی. */
     MSG3(
             ProfileParams.builder(
                     MotionRule.constSpeed(MSG3_COMPAT_SPEED),
@@ -40,8 +32,7 @@ public enum KinematicsProfile {
             ).build()
     ),
 
-    /* ===================== Protected packets ===================== */
-    /** Protected – یکی از پروفایل‌های پیام‌رسان به‌صورت تصادفی انتخاب می‌شود. */
+
     PROTECTED_SHADOW(
             ProfileParams.builder(
                     MotionRule.constSpeed(0),
@@ -49,8 +40,7 @@ public enum KinematicsProfile {
             ).randomMessengerProfile().build()
     ),
 
-    /* ===================== Confidential packets ===================== */
-    /** محرمانه معمولی – سرعت ثابت؛ ولی قبل از باکس شلوغ کند می‌شود (توسط کنترلر جدا). */
+
     CONFIDENTIAL(
             ProfileParams.builder(
                     MotionRule.constSpeed(CONF_SPEED),
@@ -58,7 +48,6 @@ public enum KinematicsProfile {
             ).slowDownBeforeBusyBox(CONF_SLOW_SPEED).build()
     ),
 
-    /** محرمانه VPN – باید فاصلهٔ ثابتی با بقیه حفظ کند. */
     CONFIDENTIAL_VPN(
             ProfileParams.builder(
                     MotionRule.keepDistance(CONF_VPN_SPEED),
@@ -66,8 +55,7 @@ public enum KinematicsProfile {
             ).keepDistance(CONF_VPN_KEEP_DIST_PX).build()
     ),
 
-    /* ===================== Large packets ===================== */
-    /** Large 8 – سرعت پایه ثابت؛ روی انحنا شتاب متناسب با curvature اضافه می‌شود. */
+
     LARGE_8(
             ProfileParams.builder(
                     MotionRule.curveAccel(L8_BASE_SPEED, L8_CURVE_ACCEL, L8_MAX_MUL),
@@ -75,7 +63,6 @@ public enum KinematicsProfile {
             ).curveAccel(L8_CURVE_ACCEL, L8_MAX_MUL).build()
     ),
 
-    /** Large 10 – سرعت ثابت و Drift دوره‌ای از سیم. */
     LARGE_10(
             ProfileParams.builder(
                     MotionRule.drift(L10_BASE_SPEED),
@@ -83,7 +70,6 @@ public enum KinematicsProfile {
             ).drift(L10_DRIFT_STEP_PX, L10_DRIFT_OFFSET_PX).build()
     );
 
-    /* --------------------------- fields --------------------------- */
     private final ProfileParams params;
 
     KinematicsProfile(ProfileParams params) {
@@ -92,7 +78,6 @@ public enum KinematicsProfile {
 
     public ProfileParams getParams() { return params; }
 
-    /* --------------------------- helpers --------------------------- */
     public boolean isMessenger() { return this == MSG1 || this == MSG2 || this == MSG3; }
     public boolean isLarge()     { return this == LARGE_8 || this == LARGE_10; }
 

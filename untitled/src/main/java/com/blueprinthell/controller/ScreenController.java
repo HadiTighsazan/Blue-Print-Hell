@@ -8,12 +8,8 @@ import javax.sound.sampled.Clip;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Controls navigation between application screens via CardLayout and, if an {@link AudioController}
- * is injected, starts/stops background music and plays a game‑over jingle when appropriate.
- */
+
 public class ScreenController {
-    /* ---------- Screen identifiers ---------- */
     public static final String MAIN_MENU      = "MainMenu";
     public static final String SETTINGS       = "Settings";
     public static final String GAME_OVER      = "GameOver";
@@ -21,19 +17,16 @@ public class ScreenController {
     public static final String LEVEL_SELECT   = "LevelSelect";
     public static final String GAME_SCREEN    = "GameScreen";
 
-    /* ---------- Swing components ---------- */
     private final CardLayout cardLayout;
     private final JPanel mainPanel;
 
-    /* ---------- View instances ---------- */
     private final MainMenuView      mainMenuView;
     private final SettingsMenuView  settingsMenuView;
     private final GameOverView      gameOverView;
     private final MissionPassedView missionPassedView;
     private final LevelSelectView   levelSelectView;
 
-    /* ---------- Optional audio ---------- */
-    private AudioController audioController; // injected via setter
+    private AudioController audioController;
     private String currentScreen = MAIN_MENU;
 
     public ScreenController(JFrame frame) {
@@ -42,44 +35,34 @@ public class ScreenController {
         frame.getContentPane().removeAll();
         frame.getContentPane().add(mainPanel, BorderLayout.CENTER);
 
-        // Instantiate static screens
         mainMenuView      = new MainMenuView();
         settingsMenuView  = new SettingsMenuView();
         gameOverView      = new GameOverView();
         missionPassedView = new MissionPassedView();
         levelSelectView   = new LevelSelectView();
 
-        // Register them
         mainPanel.add(mainMenuView,      MAIN_MENU);
         mainPanel.add(settingsMenuView,  SETTINGS);
         mainPanel.add(gameOverView,      GAME_OVER);
         mainPanel.add(missionPassedView, MISSION_PASSED);
         mainPanel.add(levelSelectView,   LEVEL_SELECT);
 
-        showScreen(MAIN_MENU); // initial screen
+        showScreen(MAIN_MENU);
     }
 
-    /* -------------------------------------------------- */
-    /** Registers the dynamic game screen built by {@link GameController}. */
     public void registerGameScreen(GameScreenView gameScreen) {
         mainPanel.add(gameScreen, GAME_SCREEN);
     }
 
-    /** Injects an {@link AudioController} so this class can manage background loop when switching screens. */
     public void setAudioController(AudioController ac) { this.audioController = ac; }
 
-    /**
-     * Shows the requested screen and manages audio transitions.
-     * @param name one of the static screen identifiers
-     */
+
     public void showScreen(String name) {
         boolean enteringGame   = GAME_SCREEN.equals(name) && !GAME_SCREEN.equals(currentScreen);
         boolean leavingGame    = !GAME_SCREEN.equals(name) && GAME_SCREEN.equals(currentScreen);
         boolean enteringGameOver = GAME_OVER.equals(name) && !GAME_OVER.equals(currentScreen);
 
-        // Background loop handling removed: music is started once at app launch and keeps looping across screens
 
-        // Game‑over jingle
         if (enteringGameOver) {
             try {
                 Clip clip = ResourceManager.INSTANCE.getClip("gameover_jingle.wav");
@@ -89,14 +72,12 @@ public class ScreenController {
             } catch (Exception ignored) { }
         }
 
-        // Switch UI
         currentScreen = name;
         cardLayout.show(mainPanel, name);
         mainPanel.revalidate();
         mainPanel.repaint();
     }
 
-    /* ---------- Getters for other controllers ---------- */
     public JPanel getMainPanel()                 { return mainPanel;        }
     public MainMenuView getMainMenuView()        { return mainMenuView;     }
     public SettingsMenuView getSettingsMenuView(){ return settingsMenuView; }

@@ -3,18 +3,14 @@ package com.blueprinthell.media;
 import javax.sound.sampled.Clip;
 import javax.sound.sampled.FloatControl;
 
-/**
- * Central audio controller responsible for background loop and adjusting volume.
- */
+
 public class AudioController {
     private Clip bgLoop;
 
     public AudioController() {
-        // observe volume changes
         SoundSettings.addVolumeListener(this::applyVolumeToAll);
     }
 
-    /* ---------------- Background music ---------------- */
     public void playBackgroundLoop() {
         if (bgLoop == null) {
             bgLoop = ResourceManager.INSTANCE.getClip("bg_loop.wav");
@@ -32,7 +28,6 @@ public class AudioController {
         }
     }
 
-    /* ---------------- Utility ---------------- */
     private void applyVolumeToAll(float vol) {
         if (bgLoop != null) applyVolume(bgLoop, vol);
     }
@@ -46,7 +41,6 @@ public class AudioController {
             dB = Math.max(min, Math.min(max, dB));
             gain.setValue(dB);
         } catch (Exception ignored) {
-            // Some systems/clips may not support gain control
         }
     }
 }

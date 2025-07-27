@@ -3,12 +3,9 @@ package com.blueprinthell.view.screens;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Screen displayed when a mission is passed, with a summary and navigation options.
- */
+
 public class MissionPassedView extends JPanel {
 
-    /* ------------- components ------------- */
     private final JLabel titleLabel  = new JLabel("Mission Passed!");
     private final JLabel levelLabel  = new JLabel();
     private final JLabel scoreLabel  = new JLabel();
@@ -22,12 +19,10 @@ public class MissionPassedView extends JPanel {
         setBackground(Color.BLUE.darker());
         setPreferredSize(new Dimension(800, 600));
 
-        /* -------- title -------- */
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         titleLabel.setForeground(Color.WHITE);
         titleLabel.setFont(titleLabel.getFont().deriveFont(48f));
 
-        /* -------- summary labels -------- */
         for (JLabel l : new JLabel[]{levelLabel, scoreLabel, lossLabel}) {
             l.setAlignmentX(Component.CENTER_ALIGNMENT);
             l.setForeground(Color.WHITE);
@@ -47,15 +42,7 @@ public class MissionPassedView extends JPanel {
         add(Box.createVerticalGlue());
     }
 
-    /* ---------------- public API ---------------- */
 
-    /**
-     * Updates the summary information shown on this screen.
-     *
-     * @param currentLevel index of the level just completed (1‑based)
-     * @param score        final score for that level
-     * @param packetLoss   total lost packets
-     */
     public void setSummary(int currentLevel, int score, int packetLoss) {
         levelLabel.setText("Level " + currentLevel + " completed");
         scoreLabel.setText("Score: " + score);
@@ -63,7 +50,6 @@ public class MissionPassedView extends JPanel {
         nextMissionButton.setText("Next Mission (Level " + (currentLevel + 1) + ")");
     }
 
-    /* ---------------- helper ---------------- */
     private JPanel createButtonPanel(JButton button) {
         JPanel panel = new JPanel();
         panel.setOpaque(false);

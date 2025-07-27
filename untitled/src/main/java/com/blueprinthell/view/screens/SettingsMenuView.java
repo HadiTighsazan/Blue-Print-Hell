@@ -5,14 +5,12 @@ import com.blueprinthell.view.BackgroundPanel;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Settings menu screen with shared background, styled buttons and slider.
- */
+
 public class SettingsMenuView extends BackgroundPanel {
 
     public final JButton backButton        = makeButton("Back");
     public final JSlider volumeSlider      = new JSlider(0, 100, 50);
-    public final JButton keyBindingButton  = makeButton(""); // متن توسط کنترلر ست می‌شود
+    public final JButton keyBindingButton  = makeButton("");
 
     public SettingsMenuView() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -33,7 +31,6 @@ public class SettingsMenuView extends BackgroundPanel {
         add(Box.createVerticalGlue());
     }
 
-    /* ---------------- helper widgets ---------------- */
     private JLabel makeLabel(String text) {
         JLabel label = new JLabel(text);
         label.setAlignmentX(Component.CENTER_ALIGNMENT);

@@ -7,9 +7,7 @@ import java.awt.*;
 import java.util.List;
 import java.util.stream.IntStream;
 
-/**
- * Screen for selecting a level/mission with a shared background and styled buttons.
- */
+
 public class LevelSelectView extends BackgroundPanel {
 
     public final JButton backButton = makeButton("Back");
@@ -36,7 +34,6 @@ public class LevelSelectView extends BackgroundPanel {
         add(Box.createVerticalGlue());
     }
 
-    /* ---------------- helper ---------------- */
     private JButton makeButton(String text) {
         JButton btn = new JButton(text);
         btn.setAlignmentX(Component.CENTER_ALIGNMENT);

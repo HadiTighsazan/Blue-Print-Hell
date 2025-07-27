@@ -10,15 +10,7 @@ import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
 
-/**
- * <h2>DistributorBehavior</h2>
- * <ul>
- *   <li>هنگام ورود یک {@link LargePacket}، آن را به <i>BitPacket</i>های جداگانه تقسیم می‌کند.</li>
- *   <li>هر گروه یک شناسه یکتا، رنگ و متادیتا در {@link LargeGroupRegistry} دارد.</li>
- *   <li>BitPacketها پروفایل حرکتی «MSG1» می‌گیرند.</li>
- *   <li>اگر بافر جا نداشته باشد، بیت از بین می‌رود و <i>Packet Loss</i> و <i>GroupRegistry.markBitLost()</i> بروزرسانی می‌شود.</li>
- * </ul>
- */
+
 public final class DistributorBehavior implements SystemBehavior {
 
     private final SystemBoxModel     box;
@@ -34,10 +26,8 @@ public final class DistributorBehavior implements SystemBehavior {
         this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
     }
 
-    /* --------------------- tick --------------------- */
     @Override public void update(double dt) { /* no-op */ }
 
-    /* ------------------ packet arrived -------------- */
     @Override public void onPacketEnqueued(PacketModel packet) {
         onPacketEnqueued(packet, null);
     }
@@ -48,39 +38,35 @@ public final class DistributorBehavior implements SystemBehavior {
         splitLarge(lp);
     }
 
-    @Override public void onEnabledChanged(boolean enabled) { /* none */ }
+    @Override public void onEnabledChanged(boolean enabled) {  }
 
-    /* ------------------------------------------------ */
-    /*                     Helpers                      */
-    /* ------------------------------------------------ */
+
 
     private void splitLarge(LargePacket large) {
         int parentSize = large.getOriginalSizeUnits();
-        int expectedBits = parentSize; // طبق توضیح فاز
+        int expectedBits = parentSize;
 
         int groupId;
         int colorId;
         if (!large.hasGroup()) {
-            colorId = rnd.nextInt(360); // hue (برای UI)
+            colorId = rnd.nextInt(360);
             groupId  = registry.createGroup(parentSize, expectedBits, colorId);
             large.setGroupInfo(groupId, expectedBits, colorId);
         } else {
             groupId = large.getGroupId();
             colorId = large.getColorId();
-            // اگر قبلاً create شده ولی در Registry نیست، آن را بساز
             if (registry.get(groupId) == null) {
                 registry.createGroupWithId(groupId, parentSize, expectedBits, colorId);
             }
         }
 
-        // Large را از بافر حذف کنیم و بیت‌ها جایگزین شوند
         removeFromBuffer(large);
 
         int lostBits = 0;
         for (int i = 0; i < expectedBits; i++) {
             BitPacket bit = new BitPacket(
-                    large.getType(),               // شکل و سکه همان نوع پدر
-                    Config.DEFAULT_PACKET_SPEED,    // سرعت پایه (می‌تواند متفاوت باشد)
+                    large.getType(),
+                    Config.DEFAULT_PACKET_SPEED,
                     groupId,
                     parentSize,
                     i,

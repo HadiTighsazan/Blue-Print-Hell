@@ -8,23 +8,14 @@ import com.blueprinthell.model.WireModel;
 
 import java.util.*;
 
-/**
- * <h2>WireTimeoutController</h2>
- * اگر یک پکت بیش از مدت زمان مجاز روی یک سیم بماند (بدون رسیدن به مقصد)، حذف می‌شود و در PacketLoss ثبت می‌گردد.
- * <p>
- *  این کنترلر هر تیک، همهٔ سیم‌ها را اسکن می‌کند و برای هر پکت زمان حضور روی سیم را افزایش می‌دهد.
- *  هرگاه پکت به سیم جدیدی وارد شود، تایمرش ریست می‌شود. اگر پکت دیگر روی هیچ سیمی نباشد، از جدول پاک می‌شود.
- * </p>
- */
+
 public final class WireTimeoutController implements Updatable {
 
-    private final List<WireModel>   wires;          // مرجع اصلی سیم‌ها
+    private final List<WireModel>   wires;
     private final PacketLossModel   lossModel;
-    private final double            maxTimeOnWire;  // ثانیه
+    private final double            maxTimeOnWire;
 
-    /** زمان سپری‌شده روی سیم فعلی برای هر پکت */
     private final Map<PacketModel, Double> elapsed = new HashMap<>();
-    /** آخرین سیمی که پکت روی آن بوده (برای تشخیص ورود به سیم جدید) */
     private final Map<PacketModel, WireModel> lastWire = new HashMap<>();
 
     public WireTimeoutController(List<WireModel> wires,
@@ -44,7 +35,6 @@ public final class WireTimeoutController implements Updatable {
     @Override
     public void update(double dt) {
         if (dt <= 0) return;
-        // جمع آوری تمام پکت‌های فعلی روی همهٔ سیم‌ها
         Set<PacketModel> alivePackets = new HashSet<>();
         List<Removal> toRemove = new ArrayList<>();
 
@@ -53,7 +43,6 @@ public final class WireTimeoutController implements Updatable {
                 alivePackets.add(p);
                 WireModel prevWire = lastWire.get(p);
                 if (prevWire != w) {
-                    // وارد سیم جدید شده است → تایمر صفر
                     elapsed.put(p, 0.0);
                     lastWire.put(p, w);
                 } else {
@@ -66,7 +55,6 @@ public final class WireTimeoutController implements Updatable {
             }
         }
 
-        // حذف پکت‌های تایم‌اوت شده
         for (Removal r : toRemove) {
             if (r.wire.removePacket(r.packet)) {
                 lossModel.increment();
@@ -75,9 +63,7 @@ public final class WireTimeoutController implements Updatable {
             lastWire.remove(r.packet);
         }
 
-        // پاکسازی رکورد پکت‌هایی که دیگر روی هیچ سیمی نیستند
         if (elapsed.size() != alivePackets.size()) {
-            // remove stale
             Iterator<PacketModel> it = elapsed.keySet().iterator();
             while (it.hasNext()) {
                 PacketModel p = it.next();
@@ -89,13 +75,11 @@ public final class WireTimeoutController implements Updatable {
         }
     }
 
-    /** ریست کامل هنگام ریست مرحله */
     public void clear() {
         elapsed.clear();
         lastWire.clear();
     }
 
-    /** امکان ریست دستی تایمر برای یک پکت (مثلاً هنگام ورود به باکس) */
     public void resetTimer(PacketModel p) {
         if (p == null) return;
         elapsed.put(p, 0.0);

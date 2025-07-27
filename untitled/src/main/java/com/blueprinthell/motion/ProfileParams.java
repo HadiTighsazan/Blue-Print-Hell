@@ -5,17 +5,16 @@ public final class ProfileParams {
     public final MotionRule compatRule;
     public final MotionRule incompatRule;
 
-    // Optional behaviour flags
     public final boolean bounceOnImpact;
 
-    public final boolean keepDistance;     // (redundant if rule mode == KEEP_DISTANCE, kept for clarity)
+    public final boolean keepDistance;
     public final double  keepDistancePx;
 
-    public final boolean curveAccel;       // redundant if rule mode == CURVE_ACCEL
+    public final boolean curveAccel;
     public final double  curveAccelFactor;
     public final double  curveMaxMul;
 
-    public final boolean driftOffWire;     // redundant if rule mode == DRIFT
+    public final boolean driftOffWire;
     public final double  driftStepDistancePx;
     public final double  driftOffsetPx;
 
@@ -47,7 +46,6 @@ public final class ProfileParams {
 
 
 
-    /* ------------------------------ Builder ------------------------------ */
     public static final class Builder {
         private final MotionRule compatRule;
         private final MotionRule incompatRule;

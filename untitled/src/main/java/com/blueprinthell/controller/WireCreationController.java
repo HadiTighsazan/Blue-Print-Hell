@@ -11,11 +11,6 @@ import java.awt.event.*;
 import java.util.*;
 import java.util.List;
 
-/**
- * Controller that lets the player draw new wires with length constraint and edit
- * curve bend‑points. Multiple outgoing wires (fan‑out) are allowed; each input
- * port still accepts at most one incoming wire.
- */
 public class WireCreationController {
     private final GameScreenView      gameView;
     private final SimulationController simulation;
@@ -27,16 +22,13 @@ public class WireCreationController {
     private final CoinModel           coinModel;
     private final Runnable            networkChanged;
 
-    /* drawing state */
     private boolean   drawing   = false;
     private PortModel startPort;
     private Point     startPt;
 
-    /* preview overlay */
     private final Overlay             overlay;
     private final MouseMotionListener previewListener;
 
-    /* cached game area */
     private final JPanel area;
 
     public WireCreationController(GameScreenView gameView,
@@ -59,21 +51,18 @@ public class WireCreationController {
         this.area = gameView.getGameArea();
         area.setLayout(null);
 
-        // lock existing wires
         for (WireModel w : wires) {
             destMap.put(w, findDestBox(w.getDstPort()));
             lockedInputs.add(w.getDstPort());
             usageModel.useWire(w.getLength());
         }
 
-        /* overlay */
         overlay = new Overlay();
         area.add(overlay);
         overlay.setBounds(0,0,area.getWidth(),area.getHeight());
         overlay.setVisible(false);
         area.addComponentListener(new ComponentAdapter(){@Override public void componentResized(ComponentEvent e){overlay.setSize(area.getSize());}});
 
-        /* preview listener */
         previewListener = new MouseMotionAdapter(){@Override public void mouseMoved(MouseEvent e){if(!drawing)return; Point p=SwingUtilities.convertPoint(e.getComponent(),e.getPoint(),overlay); overlay.updateLine(startPt,p);}};
 
         attachToPorts(area);
@@ -92,7 +81,6 @@ public class WireCreationController {
 
     private PortView findPortView(Container c, PortModel pm){for(Component comp:c.getComponents()){if(comp instanceof PortView pv && pv.getModel()==pm) return pv; if(comp instanceof Container inner){PortView f=findPortView(inner,pm); if(f!=null) return f;}} return null;}
 
-    /* overlay */
     private static class Overlay extends JComponent{
         private Point p1,p2; @Override public boolean contains(int x,int y){return false;} void beginPreview(){ } void endPreview(){ } @Override protected void paintComponent(Graphics g){super.paintComponent(g); if(p1!=null&&p2!=null){Graphics2D g2=(Graphics2D)g.create(); g2.setColor(Color.RED); g2.setStroke(new BasicStroke(Config.STROKE_WIDTH_WIRE)); g2.drawLine(p1.x,p1.y,p2.x,p2.y); g2.dispose();}}
         void updateLine(Point a,Point b){p1=a;p2=b; repaint();} void clearLine(){p1=p2=null; repaint();}

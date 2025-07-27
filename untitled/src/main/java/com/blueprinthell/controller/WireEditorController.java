@@ -14,19 +14,13 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
-/**
- * Controller that enables the player to add or move up‑to three intermediate control‑points
- * ("bends") on a selected wire.  هنگام هر ویرایش، اختلاف طول جدید/قدیم به {@link WireUsageModel}
- * اعمال می‌شود تا HUD و منطق ظرفیت سیم فوراً به‌روز شود.
- */
+
 public class WireEditorController {
-    /* constants */
     private static final int MAX_BENDS     = 3;
     private static final int HANDLE_RADIUS = 6; // px
     private static final int CLICK_DIST    = 8; // px
     private static final int BEND_COST     = 1; // coins
 
-    /* injected refs */
     private final JPanel              canvas;
     private final WireModel           wire;
     private final WireView            wireView;
@@ -35,7 +29,6 @@ public class WireEditorController {
     private final WireUsageModel      usage;
     private final Runnable            networkChanged;
 
-    /* state */
     private int dragIndex = -1;
 
     public WireEditorController(JPanel canvas,
@@ -72,7 +65,6 @@ public class WireEditorController {
     }
 
     private void selectOrAddHandle(Point click) {
-        // Prevent editing of wires from previous levels
         if (wire.isForPreviousLevels()) {
             Toolkit.getDefaultToolkit().beep();
             return;
@@ -93,7 +85,6 @@ public class WireEditorController {
     }
 
     private void dragHandle(Point p) {
-        // Prevent dragging of wires from previous levels
         if (wire.isForPreviousLevels()) {
             Toolkit.getDefaultToolkit().beep();
             dragIndex = -1;

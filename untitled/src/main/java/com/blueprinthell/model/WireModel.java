@@ -10,47 +10,28 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import com.blueprinthell.controller.SimulationController;
 
-/**
- * Runtime model for a wire: holds its two endpoint ports, current geometric {@link WirePath},
- * and the packets travelling on it.
- * <p>
- * کلید: {@code WirePath#getPoints()} لیستی غیرقابل تغییر می‌دهد. برای همگام‌سازی
- * نقاط ابتدا/انتها باید یک کپی قابل‌تغییر بسازیم و {@link WirePath} جدید ایجاد کنیم.
- * همچنین هر زمان که پکتی به انتها رسید و اگر مقصدش سیستم منبع باشد،
- * اعلان بازگشت پکت به SimulationController ارسال می‌شود.
- */
+
 public class WireModel implements Serializable {
     private static final long serialVersionUID = 4L;
 
-    /* ---------------- immutable association ---------------- */
     private final PortModel src;
     private final PortModel dst;
 
-    /* ---------------- mutable state ---------------- */
     private WirePath path;
     private final List<PacketModel> packets = new ArrayList<>();
 
-    /** مرجع به SimulationController برای اعلام بازگشت پکت */
     private static SimulationController simulationController;
 
-    /**
-     * مجموعه‌ی پورت‌های ورودی سیستم‌های منبع (برای تشخیص بازگشت)
-     */
     private static Set<PortModel> sourceInputPorts = Collections.emptySet();
 
-    /**
-     * اگر true باشد، این سیم متعلق به مراحل قبلی است و غیرقابل حذف خواهد بود.
-     */
+
     private boolean isForPreviousLevels = false;
 
-    /** تنظیم SimulationController برای دریافت اعلان‌های بازگشت پکت */
     public static void setSimulationController(SimulationController sc) {
         simulationController = sc;
     }
 
-    /**
-     * تنظیم لیست سیستم‌های منبع برای تشخیص بازگشت پکت‌ها
-     */
+
     public static void setSourceInputPorts(List<SystemBoxModel> sources) {
         sourceInputPorts = sources.stream()
                 .flatMap(b -> b.getInPorts().stream())
@@ -63,16 +44,11 @@ public class WireModel implements Serializable {
         this.path = buildDefaultPath();
     }
 
-    /**
-     * آیا این سیم متعلق به سطوح قبلی است؟
-     */
+
     public boolean isForPreviousLevels() {
         return isForPreviousLevels;
     }
 
-    /**
-     * تعیین اینکه سیم به مراحل قبلی تعلق دارد یا خیر
-     */
     public void setForPreviousLevels(boolean flag) {
         this.isForPreviousLevels = flag;
     }
@@ -94,36 +70,26 @@ public class WireModel implements Serializable {
         this.path = new WirePath(newPts);
     }
 
-    /**
-     * Advances all attached packets; returns those that reached the destination.
-     * برای هر پکتی که progress>=1.0 شود و dst یکی از پورت‌های منبع باشد، اعلان بازگشت ارسال می‌شود.
-     */
+
     public List<PacketModel> update(double dt) {
         List<PacketModel> arrived = new ArrayList<>();
         Iterator<PacketModel> it = packets.iterator();
         while (it.hasNext()) {
             PacketModel p = it.next();
-            // Advance or fallback based on destination status
             if (simulationController != null && !simulationController.isSystemEnabled(dst)) {
-                // Destination disabled: move packet backward along wire
-                // compute backward progress delta based on packet speed and wire length
                 double length = getLength();
                 if (length > 0) {
                     double deltaProg = p.getSpeed() * dt / length;
                     double newProg = p.getProgress() - deltaProg;
                     p.setProgress(Math.max(0.0, newProg));
                 }
-                // continue on wire
                 continue;
             } else {
-                // Normal forward movement
                 p.advance(dt);
             }
-            // After moving forward, check arrival
             if (p.getProgress() >= 1.0) {
                 it.remove();
                 arrived.add(p);
-                // Notify return to source if needed
                 if (simulationController != null && sourceInputPorts.contains(dst)) {
                     simulationController.onPacketReturned();
                 }

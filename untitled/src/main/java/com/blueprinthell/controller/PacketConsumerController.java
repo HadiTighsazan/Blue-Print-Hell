@@ -2,9 +2,7 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.model.*;
 
-/**
- * Consumes packets that arrive in a sink SystemBox, awards score **و** سکه.
- */
+
 public class PacketConsumerController implements Updatable {
 
     private final SystemBoxModel box;

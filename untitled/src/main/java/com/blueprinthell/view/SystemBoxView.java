@@ -6,9 +6,7 @@ import com.blueprinthell.model.PortModel;
 import javax.swing.*;
 import java.awt.*;
 
-/**
- * Swing view for displaying a SystemBoxModel with its ports.
- */
+
 public class SystemBoxView extends GameObjectView<SystemBoxModel> {
 
     public SystemBoxView(SystemBoxModel model) {
@@ -17,7 +15,6 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
         setBackground(Config.COLOR_BOX_BG);
         setOpaque(true);
 
-        // Create and add PortViews as child components with relative bounds
         for (PortModel pm : model.getInPorts()) {
             PortView pv = new PortView(pm);
             add(pv);
@@ -31,9 +28,7 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
 
     @Override
     public void refresh() {
-        // First update this view's bounds
         setBounds(model.getX(), model.getY(), model.getWidth(), model.getHeight());
-        // Then position each PortView relative to this view
         for (Component c : getComponents()) {
             if (c instanceof PortView pv) {
                 PortModel pm = pv.getModel();

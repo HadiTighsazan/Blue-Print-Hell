@@ -8,16 +8,7 @@ import com.blueprinthell.view.HudView;
 import javax.swing.*;
 import java.awt.event.ActionListener;
 
-/**
- * Single‑responsibility helper that keeps the HUD (labels & buttons) in sync with
- * the running simulation.  Responsibilities:
- * <ul>
- *     <li>Attach / detach listeners on Start & Pause buttons per level</li>
- *     <li>Enable/disable Start button based on an external predicate</li>
- *     <li>Lightweight refresh of score / coins / loss each tick (or on‑demand)</li>
- * </ul>
- * This class knows **nothing** about packets, boxes یا wires؛ فقط با مدل‌های عددی کار می‌کند.
- */
+
 public final class HudCoordinator {
 
     private  HudView hud ;
@@ -42,14 +33,13 @@ public final class HudCoordinator {
         this.timeline   = timeline;
     }
 
-    /* ----------------------------- Wiring per level ----------------------------- */
     public void wireLevel(PacketProducerController producer) {
         this.producer = producer;
         clearButtonListeners();
 
         hud.addStartListener(startListener);
         hud.addToggleListener(toggleListener);
-        hud.getStartButton().setEnabled(false); // گیم کنترلر بعداً فعال می‌کند
+        hud.getStartButton().setEnabled(false);
         hud.setToggleText("Pause");
     }
 
@@ -80,13 +70,11 @@ public final class HudCoordinator {
             hud.getToggleButton().removeActionListener(l);
     }
 
-    /* ----------------------------- Refresh labels ----------------------------- */
     public void refresh() {
         hud.setCoins(coinModel.getCoins());
         hud.setPacketLoss(lossModel.getLostCount());
     }
 
-    /*  enable / disable Start button from outside */
     public void setStartEnabled(boolean enabled) {
         SwingUtilities.invokeLater(() -> hud.getStartButton().setEnabled(enabled));
     }

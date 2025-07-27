@@ -20,25 +20,18 @@ public class GameController implements NetworkController {
     private final LevelCoreManager levelCoreManager = new LevelCoreManager(this);
     private final SimulationCoreManager simulationCoreManager = new SimulationCoreManager(this);
     private final SnapshotCoreController snapshotCoreController = new SnapshotCoreController();
-    /* ================================================================ */
-    /*                      Core UI & controllers                       */
-    /* ================================================================ */
+
     private ScreenController              screenController;
 
     public LevelCoreManager getLevelSessionManager() {
         return levelCoreManager;
     }
 
-    /* ================================================================ */
-    /*                    Swing views (immutable roots)                 */
-    /* ================================================================ */
     private final JFrame                  mainFrame;
     private final HudView                 hudView;
     private final GameScreenView          gameView;
 
-    /* ================================================================ */
-    /*                 HUD / game‑state coordination helpers            */
-    /* ================================================================ */
+
     private HudController                 hudController;
 
     public ScreenController getScreenController() {
@@ -117,7 +110,6 @@ public class GameController implements NetworkController {
     private ShopController                shopController;
 
 
-    // *** NEW: keep reference to creator to free ports when purging ***
     private WireCreationController        wireCreator;
 
 
@@ -136,47 +128,34 @@ public class GameController implements NetworkController {
         gameView.setTemporalNavigationListener(this::onNavigateTime);
     }
 
-    /* --------------------------------------------------------------- */
-    /*                 Timeline scrubbing with keyboard                */
-    /* --------------------------------------------------------------- */
+
     private void onNavigateTime(int dir) {
         simulationCoreManager.onNavigateTime(dir);
     }
 
-    /* --------------------------------------------------------------- */
-    /*                    External setter (DI‑style)                   */
-    /* --------------------------------------------------------------- */
+
     public void setLevelManager(LevelManager mgr) {
         this.levelCoreManager.levelManager = mgr;
     }
 
-    /* --------------------------------------------------------------- */
-    /*               Public API to load a level by index               */
-    /* --------------------------------------------------------------- */
+
     public void startLevel(int idx) {
         levelCoreManager.startLevel(idx);
     }
 
-    /* --------------------------------------------------------------- */
-    /*                Core level bootstrap (fresh start)               */
-    /* --------------------------------------------------------------- */
+
     public void startLevel(LevelDefinition def) {
 
         levelCoreManager.startLevel(def);
     }
 
-    /* --------------------------------------------------------------- */
-    /*              Build controllers for wire creation/removal        */
-    /* --------------------------------------------------------------- */
+
     private void buildWireControllers() {
-        // keep reference for port‑freeing on purge
 
         levelCoreManager.buildWireControllers();
     }
 
-    /* --------------------------------------------------------------- */
-    /*                  Enable / disable “Start” button                */
-    /* --------------------------------------------------------------- */
+
     public void updateStartEnabled() {
         levelCoreManager.updateStartEnabled();
     }

@@ -8,9 +8,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.stream.Collectors;
 
-/**
- * Domain model for a system box, holding input/output ports and packet buffer.
- */
+
 public class SystemBoxModel extends GameObjectModel implements Serializable, Updatable {
     private static final long serialVersionUID = 5L;
 
@@ -18,13 +16,10 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     private final List<PortModel> outPorts = new ArrayList<>();
     private final Queue<PacketModel> buffer;
 
-    // Enabled/disabled state and timer for disable duration
     private boolean enabled = true;
     private double disableTimer = 0.0;
 
-    /**
-     * Constructs a SystemBoxModel with specified position, size, and port shapes.
-     */
+
     public SystemBoxModel(int x, int y, int width, int height,
                           List<PortShape> inShapes,
                           List<PortShape> outShapes) {
@@ -33,9 +28,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         createPorts(inShapes, outShapes);
     }
 
-    /**
-     * Convenience constructor for uniform port shapes/counts.
-     */
+
     public SystemBoxModel(int x, int y, int width, int height,
                           int inCount, PortShape inShape,
                           int outCount, PortShape outShape) {
@@ -84,37 +77,25 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
-    /**
-     * Returns the sequence of input port shapes.
-     */
+
     public List<PortShape> getInShapes() {
         return inPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
     }
-
-    /**
-     * Returns the sequence of output port shapes.
-     */
     public List<PortShape> getOutShapes() {
         return outPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
     }
 
-    /**
-     * Returns the input port models.
-     */
+
     public List<PortModel> getInPorts() {
         return java.util.Collections.unmodifiableList(inPorts);
     }
 
-    /**
-     * Returns the output port models.
-     */
+
     public List<PortModel> getOutPorts() {
         return java.util.Collections.unmodifiableList(outPorts);
     }
 
-    /**
-     * Attempts to enqueue a packet; returns true if accepted, false if buffer full.
-     */
+
     public boolean enqueue(PacketModel packet) {
         if (buffer.size() < Config.MAX_BUFFER_CAPACITY) {
             buffer.add(packet);
@@ -137,24 +118,18 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
                 : new ArrayDeque<>(buffer);
     }
 
-    /**
-     * Disables the system for the configured duration.
-     */
+
     public void disable() {
         this.enabled = false;
         this.disableTimer = Config.SYSTEM_DISABLE_DURATION;
     }
 
-    /**
-     * Checks if the system is enabled (active).
-     */
+
     public boolean isEnabled() {
         return enabled;
     }
 
-    /**
-     * Update method for Updatable: handles re-enabling after disable duration.
-     */
+
     @Override
     public void update(double dt) {
         if (!enabled) {
@@ -165,9 +140,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
-    /**
-     * Adds one output port if total does not exceed a maximum (e.g., 3).
-     */
+
     public void addOutputPort(PortShape shape) {
         if (outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
         int portSize = Config.PORT_SIZE;
@@ -176,9 +149,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         updatePortsPosition();
     }
 
-    /**
-     * Attempts to remove one output port; returns true if successful.
-     */
+
     public boolean removeOutputPort() {
         if (outPorts.isEmpty()) return false;
         outPorts.remove(outPorts.size() - 1);

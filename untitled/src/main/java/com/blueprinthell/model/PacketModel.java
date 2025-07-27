@@ -7,28 +7,22 @@ import com.blueprinthell.motion.MotionStrategy;
 import java.awt.*;
 import java.io.Serializable;
 
-/**
- * Runtime domain model for a packet travelling through the network. Geometry is delegated to
- * {@link WireModel}, while kinematics are delegated to a pluggable {@link MotionStrategy}.
- */
+
 public class PacketModel extends GameObjectModel implements Serializable {
     private static final long serialVersionUID = 2L;
 
-    /* ============ immutable identity ============ */
     private final PacketType        type;
     private final double            baseSpeed;
 
-    /* ============ mutable state ============ */
-    private double progress;      // 0..1 along current wire
-    private double speed;         // instantaneous px/s – may differ from baseSpeed
-    private double noise;         // accumulated noise 0..>
+    private double progress;
+    private double speed;
+    private double noise;
 
     private WireModel       currentWire;
     private MotionStrategy  motion;
 
     private double acceleration = 0.0;
 
-    /* ============ ctor ============ */
     public PacketModel(PacketType type, double baseSpeed) {
         super(0, 0,
                 type.sizeUnits * Config.PACKET_SIZE_MULTIPLIER,
@@ -36,10 +30,9 @@ public class PacketModel extends GameObjectModel implements Serializable {
         this.type      = type;
         this.baseSpeed = baseSpeed;
         this.speed     = baseSpeed;
-        this.motion    = new ConstantSpeedStrategy(baseSpeed); // default; caller may override
+        this.motion    = new ConstantSpeedStrategy(baseSpeed);
     }
 
-    /* ============ public API ============ */
     public PacketType getType()            { return type; }
     public double     getBaseSpeed()       { return baseSpeed; }
     public double     getSpeed()           { return speed; }
@@ -55,12 +48,10 @@ public class PacketModel extends GameObjectModel implements Serializable {
     public void setMotionStrategy(MotionStrategy m) { this.motion = m; }
     public MotionStrategy getMotionStrategy()       { return motion; }
 
-    /** Advances the packet by dt seconds using its injected MotionStrategy. */
     public void advance(double dt) {
         if (motion != null) motion.update(this, dt);
     }
 
-    /* ============ helpers ============ */
     private void recomputeSpeedFromNoise() {
         double ratio = Math.min(1.0, noise / Config.MAX_NOISE_CAPACITY);
         speed = Math.min(Config.MAX_SPEED, baseSpeed * (1 + ratio));

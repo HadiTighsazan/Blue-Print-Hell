@@ -12,10 +12,7 @@ import java.awt.event.*;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Controller to remove wires: toggle with SPACE, then click any wire to delete it.
- * Also frees the ports in the WireCreationController and wire usage length.
- */
+
 public class WireRemovalController {
     private final GameScreenView gameView;
     private final List<WireModel> wires;
@@ -79,7 +76,6 @@ public class WireRemovalController {
                                 glassPane.setVisible(false);
                                 break;
                             }
-                            // Proceed with removal for current-level wires
                             wires.remove(wm);
                             destMap.remove(wm);
                             creator.freePortsForWire(wm);
@@ -121,13 +117,11 @@ public class WireRemovalController {
         JPanel area = gameView.getGameArea();
         JRootPane root = SwingUtilities.getRootPane(area);
 
-        // حذف از مدل
         wires.remove(wm);
         destMap.remove(wm);
         creator.freePortsForWire(wm);
         usageModel.freeWire(wm.getLength());
 
-        // حذف ویو متناظر
         for (Component c : area.getComponents()) {
             if (c instanceof WireView wv && wv.getModel() == wm) {
                 area.remove(wv);

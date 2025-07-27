@@ -7,10 +7,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.KeyEvent;
 
-/**
- * Controller for key‑binding selection using a two‑step dialog: first Back, then Forward.
- * Now works with a single button in SettingsMenuView.
- */
+
 public class SettingsController {
     private final SettingsMenuView view;
 
@@ -19,16 +16,13 @@ public class SettingsController {
         syncButtonText(KeyBindings.INSTANCE.getBackKey(), KeyBindings.INSTANCE.getForwardKey());
         KeyBindings.INSTANCE.addListener(this::syncButtonText);
 
-        // Start rebind process when the single button is clicked
         view.keyBindingButton.addActionListener(e -> startRebindProcess());
     }
 
-    /* Sync single button label with current bindings */
     private void syncButtonText(int back, int forward) {
         view.keyBindingButton.setText(KeyEvent.getKeyText(back) + "  |  " + KeyEvent.getKeyText(forward));
     }
 
-    /* ---------------- Rebind process ---------------- */
     private void startRebindProcess() {
         KeyboardFocusManager kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager();
         KeyEventDispatcher dispatcher = new KeyEventDispatcher() {
@@ -49,7 +43,7 @@ public class SettingsController {
                     kfm.removeKeyEventDispatcher(this);
                     JOptionPane.showMessageDialog(view, "Key bindings updated.");
                 }
-                return true; // consume
+                return true;
             }
         };
 

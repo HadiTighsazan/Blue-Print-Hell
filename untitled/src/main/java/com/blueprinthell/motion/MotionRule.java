@@ -1,15 +1,13 @@
 package com.blueprinthell.motion;
 
 
-/**
- * Small immutable value object describing how a packet should move on a single port-compatibility branch.
- */
+
 public final class MotionRule {
-    public final MotionMode mode;          // CONST / ACCEL / DECEL / ...
-    public final double     speedStart;    // starting speed (px/s) or constant speed for CONST
-    public final double     accel;         // px/s^2 (can be negative). Ignored for CONST/KEEP_DISTANCE/DRIFT/etc.
-    public final double     minMul;        // min multiplier for speed caps (relative to baseSpeed)
-    public final double     maxMul;        // max multiplier for speed caps (relative to baseSpeed)
+    public final MotionMode mode;
+    public final double     speedStart;
+    public final double     accel;
+    public final double     minMul;
+    public final double     maxMul;
 
     public MotionRule(MotionMode mode,
                       double speedStart,

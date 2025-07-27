@@ -3,18 +3,12 @@ package com.blueprinthell.model;
 import java.awt.*;
 import java.util.List;
 
-/**
- * Stateless helpers for querying geometric information on a {@link WirePath}.
- * <p>All methods are <b>pure</b> and allocate no state beyond local variables, so they
- * are safe to use from multiple threads (e.g. Render + Physics) as‑is.</p>
- */
+
 public final class WirePhysics {
 
-    private WirePhysics() { /* utility */ }
+    private WirePhysics() {  }
 
-    /* ===== Length & Position ===== */
 
-    /** Returns the total Euclidean length of the poly‑line representing the path. */
     public static double length(WirePath path) {
         double len = 0.0;
         List<Point> pts = path.controlPoints();
@@ -24,10 +18,7 @@ public final class WirePhysics {
         return len;
     }
 
-    /**
-     * Linear interpolation along the poly‑line.
-     * @param t normalised progress in [0‥1]
-     */
+
     public static Point pointAt(WirePath path, double t) {
         List<Point> pts = path.controlPoints();
         if (t <= 0) return pts.get(0);
@@ -47,14 +38,10 @@ public final class WirePhysics {
             }
             traversed += segLen;
         }
-        return pts.get(pts.size() - 1); // fallback (numerical edge‑case)
+        return pts.get(pts.size() - 1);
     }
 
-    /* ===== Hit‑Test ===== */
 
-    /**
-     * Fast distance from <code>p</code> to the nearest point on the path (pixel units).
-     */
     public static double distanceTo(WirePath path, Point p) {
         double min = Double.MAX_VALUE;
         List<Point> pts = path.controlPoints();
@@ -64,15 +51,11 @@ public final class WirePhysics {
         return min;
     }
 
-    /** Returns <code>true</code> if <code>p</code> lies within <code>tol</code> pixels of the path. */
     public static boolean contains(WirePath path, Point p, double tol) {
         return distanceTo(path, p) <= tol;
     }
 
-    /* ===== Internal helpers ===== */
-    /**
-     * Distance from point <code>p</code> to segment AB.
-     */
+
     private static double distancePointToSegment(Point p, Point a, Point b) {
         double vx = b.x - a.x; double vy = b.y - a.y;
         double wx = p.x - a.x; double wy = p.y - a.y;

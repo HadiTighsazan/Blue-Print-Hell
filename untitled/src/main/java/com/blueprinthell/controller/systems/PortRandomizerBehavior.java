@@ -10,11 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Random;
 
-/**
- * <h2>PortRandomizerBehavior</h2>
- * وقتی یک {@link LargePacket} وارد باکس شود، شکل پورتی که از آن وارد شده است به‌صورت تصادفی به شکل دیگری تغییر می‌کند.
- * اگر پورت ورود در دسترس نباشد، به‌صورت fallback یکی از پورت‌های باکس تغییر می‌یابد.
- */
+
 public final class PortRandomizerBehavior implements SystemBehavior {
 
     private final SystemBoxModel box;
@@ -26,29 +22,23 @@ public final class PortRandomizerBehavior implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-        // رفتار زمان‌محور ندارد
     }
 
-    /** نسخهٔ جدید با پورت ورودی واقعی. */
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (!(packet instanceof LargePacket)) return;
         if (enteredPort != null && belongsToBox(enteredPort)) {
             mutateShape(enteredPort);
         } else {
-            // fallback: انتخاب تصادفی یک پورت
             randomizeOnePort();
         }
     }
 
     @Override
     public void onEnabledChanged(boolean enabled) {
-        // نیازی به واکنش خاصی نیست
     }
 
-    /* --------------------------------------------------------------- */
-    /*                            Helpers                               */
-    /* --------------------------------------------------------------- */
+
 
     private boolean belongsToBox(PortModel p) {
         return box.getInPorts().contains(p) || box.getOutPorts().contains(p);
@@ -74,7 +64,6 @@ public final class PortRandomizerBehavior implements SystemBehavior {
         do {
             next = vals[rnd.nextInt(vals.length)];
         } while (next == current);
-        // PortModel اکنون setter دارد (طبق استراتژی A)
         port.setShape(next);
     }
 }

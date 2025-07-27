@@ -4,18 +4,10 @@ import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.controller.PacketProducerController;
-import com.blueprinthell.level.LevelManager;
 import javax.swing.SwingUtilities;
 import java.util.List;
 
-/**
- * Monitors packet flow to determine when a level is successfully completed.
- * Criteria:
- *  1. Packet production has finished
- *  2. No packets remain on any wire
- *  3. Packet loss ratio below threshold based on planned total packets
- * Then notifies LevelManager of success.
- */
+
 public class LevelCompletionDetector implements Updatable {
     private final List<WireModel> wires;
     private final PacketLossModel lossModel;
@@ -45,9 +37,7 @@ public class LevelCompletionDetector implements Updatable {
         if (!producer.isFinished() || reported) {
             return;
         }
-        // Condition 1: no packets on any wire
         boolean empty = wires.stream().allMatch(w -> w.getPackets().isEmpty());
-        // Condition 2: loss ratio based on total planned packets
          double ratio = plannedPackets > 0
                      ? (double) lossModel.getLostCount() / plannedPackets
                      : 0.0;        boolean okLoss = ratio < lossThreshold;

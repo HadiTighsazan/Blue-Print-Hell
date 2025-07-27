@@ -11,10 +11,7 @@ import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Controller to manage the in‑game shop: pausing simulation, handling purchases,
- * applying temporary power‑ups, and updating the HUD with active effects.
- */
+
 public class ShopController {
     private final SimulationController simulation;
     private final CoinModel coinModel;
@@ -26,7 +23,6 @@ public class ShopController {
     private final ShopView shopView;
     private final JDialog dialog;
 
-    // Track active scroll effects and their remaining seconds
     private final List<String> activeNames  = new ArrayList<>();
     private final List<Integer> activeTimes = new ArrayList<>();
 
@@ -45,20 +41,17 @@ public class ShopController {
         this.hudController       = hudController;
         this.shopView            = new ShopView();
 
-        // Setup modal dialog
         dialog = new JDialog(parentFrame, "Store", true);
         dialog.setContentPane(shopView);
         dialog.pack();
         dialog.setLocationRelativeTo(parentFrame);
 
-        // Hook up listeners
         shopView.addBuyOAtarListener(e -> buyOAtar());
         shopView.addBuyOAiryamanListener(e -> buyOAiryaman());
         shopView.addBuyOAnahitaListener(e -> buyOAnahita());
         shopView.addCloseListener(e -> closeShop());
     }
 
-    /** Opens the shop: pauses simulation and shows dialog. */
     public void openShop() {
         simulation.stop();
         shopView.setMessage("Welcome to the store!");
@@ -70,7 +63,6 @@ public class ShopController {
         simulation.start();
     }
 
-    /** O’Atar – Disable impact wave noise propagation for 10 seconds (cost: 3 coins). */
     private void buyOAtar() {
         int cost = 3, duration = 10;
         if (!deductCoins(cost)) return;
@@ -86,7 +78,6 @@ public class ShopController {
         t.start();
     }
 
-    /** O’Airyaman – Disable collisions for 5 seconds (cost: 4 coins). */
     private void buyOAiryaman() {
         int cost = 4, duration = 5;
         if (!deductCoins(cost)) return;
@@ -102,25 +93,21 @@ public class ShopController {
         t.start();
     }
 
-    /** O’Anahita – Clear noise from all packets and reset packet‑loss counter (cost: 5 coins). */
     private void buyOAnahita() {
         int cost = 5;
         if (!deductCoins(cost)) return;
         shopView.setMessage("O’Anahita purchased: Noise cleared");
 
-        activateFeature("O’Anahita", 0); // instantaneous effect
-        // Reset noise on every packet currently travelling
+        activateFeature("O’Anahita", 0);
         for (WireModel w : wires) {
             for (PacketModel p : w.getPackets()) {
                 p.resetNoise();
             }
         }
-        // Reset accumulated packet loss metric
         lossModel.reset();
         deactivateFeature("O’Anahita");
     }
 
-    /** Helper: deducts coins or shows error. */
     private boolean deductCoins(int cost) {
         if (!coinModel.spend(cost)) {
             shopView.setMessage("Not enough coins (need " + cost + ")");
@@ -129,14 +116,12 @@ public class ShopController {
         return true;
     }
 
-    /** Marks a scroll as active, updates HUD. */
     private void activateFeature(String name, int seconds) {
         activeNames.add(name);
         activeTimes.add(seconds);
         hudController.setActiveFeatures(List.copyOf(activeNames), List.copyOf(activeTimes));
     }
 
-    /** Removes a scroll from active list and updates HUD. */
     private void deactivateFeature(String name) {
         int idx = activeNames.indexOf(name);
         if (idx >= 0) {
