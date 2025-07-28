@@ -23,6 +23,12 @@ public class PacketModel extends GameObjectModel implements Serializable {
 
     private double acceleration = 0.0;
 
+    private double exitBoost = 1.0;
+    private double startSpeedMul = 1.0;
+
+    private boolean returning = false;
+
+
     public PacketModel(PacketType type, double baseSpeed) {
         super(0, 0,
                 type.sizeUnits * Config.PACKET_SIZE_MULTIPLIER,
@@ -82,4 +88,27 @@ public class PacketModel extends GameObjectModel implements Serializable {
     public void setNoise(double v) {
         this.noise=v;
     }
+
+    public void setExitBoostMultiplier(double m) {
+        if (m <= 0) m = 1.0;
+        this.exitBoost = m;
+    }
+    public double consumeExitBoostMultiplier() {
+        double r = this.exitBoost;
+        this.exitBoost = 1.0;
+        return r;
+    }
+    public void setStartSpeedMul(double m) {
+        if (m <= 0) m = 1.0;
+        this.startSpeedMul = m;
+    }
+
+    public double consumeStartSpeedMul() {
+        double r = this.startSpeedMul;
+        this.startSpeedMul = 1.0;
+        return r;
+    }
+
+    public boolean isReturning() { return returning; }
+    public void setReturning(boolean v) { this.returning = v; }
 }

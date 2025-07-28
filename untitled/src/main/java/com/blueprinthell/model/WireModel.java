@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import com.blueprinthell.controller.SimulationController;
 
+// NEW:
+import java.util.Map;
 
 public class WireModel implements Serializable {
     private static final long serialVersionUID = 4L;
@@ -24,6 +26,7 @@ public class WireModel implements Serializable {
 
     private static Set<PortModel> sourceInputPorts = Collections.emptySet();
 
+    private static Map<PortModel, SystemBoxModel> portToBoxMap = Collections.emptyMap();
 
     private boolean isForPreviousLevels = false;
 
@@ -31,11 +34,15 @@ public class WireModel implements Serializable {
         simulationController = sc;
     }
 
-
     public static void setSourceInputPorts(List<SystemBoxModel> sources) {
         sourceInputPorts = sources.stream()
                 .flatMap(b -> b.getInPorts().stream())
                 .collect(Collectors.toSet());
+    }
+
+    // NEW: تزریق نگاشت پورت→باکس (در Registrar ست کن)
+    public static void setPortToBoxMap(Map<PortModel, SystemBoxModel> map) {
+        portToBoxMap = (map != null) ? map : Collections.emptyMap();
     }
 
     public WireModel(PortModel src, PortModel dst) {
@@ -43,7 +50,6 @@ public class WireModel implements Serializable {
         this.dst = dst;
         this.path = buildDefaultPath();
     }
-
 
     public boolean isForPreviousLevels() {
         return isForPreviousLevels;
@@ -74,22 +80,69 @@ public class WireModel implements Serializable {
     public List<PacketModel> update(double dt) {
         List<PacketModel> arrived = new ArrayList<>();
         Iterator<PacketModel> it = packets.iterator();
+
         while (it.hasNext()) {
             PacketModel p = it.next();
-            if (simulationController != null && !simulationController.isSystemEnabled(dst)) {
+
+            boolean destDisabled = (simulationController != null && !simulationController.isSystemEnabled(dst));
+
+            if (p.isReturning() || destDisabled) {
                 double length = getLength();
                 if (length > 0) {
                     double deltaProg = p.getSpeed() * dt / length;
-                    double newProg = p.getProgress() - deltaProg;
+                    double newProg   = p.getProgress() - deltaProg;
                     p.setProgress(Math.max(0.0, newProg));
+                } else {
+                    p.setProgress(0.0);
                 }
+
+                if (p.isReturning() && p.getProgress() <= 0.0) {
+                    SystemBoxModel srcBox = (portToBoxMap != null) ? portToBoxMap.get(getSrcPort()) : null;
+
+                    // ورود به صف مبدأ/سیستم واسط
+                    boolean accepted = false;
+                    if (srcBox != null) {
+                        if (srcBox.getInPorts().isEmpty()) {
+                            // مبدأ بدون ورودی: جلوی صف بگذار تا همان پکت دوباره خارج شود
+                            accepted = srcBox.enqueueFront(p);
+                        } else {
+                            // سیستم واسط: ورود عادی به صف
+                            accepted = srcBox.enqueue(p);
+                        }
+                    }
+
+                    if (accepted) {
+                        // از سیم جدا و وضعیت بازگشت را خاموش کن
+                        it.remove();
+                        p.attachToWire(null, 0.0);
+                        p.setReturning(false);
+
+                        // نکتهٔ کلیدی: برای Messenger/سبز notify نکن تا Producer پکت جدید نسازد
+                        if (simulationController != null) {
+                            boolean isMessenger = PacketOps.isMessenger(p);
+                            if (!isMessenger) {
+                                simulationController.onPacketReturned();
+                            }
+                        }
+                    } else {
+                        // اگر وارد صف نشد، در ابتدای سیم متوقف بماند
+                        p.setProgress(0.0);
+                    }
+                }
+
+                // در حالت بازگشت/یا مقصد غیرفعال، حلقه را ادامه بده (بدون advance)
                 continue;
-            } else {
-                p.advance(dt);
             }
+            // --- END ---
+
+            // حالت عادی: استراتژی سرعت/شتاب خودش progress را جلو می‌برد
+            p.advance(dt);
+
             if (p.getProgress() >= 1.0) {
                 it.remove();
                 arrived.add(p);
+
+                // اگر مقصد یک "ورودیِ سیستم‌های مبدأ" است، اطلاع بده (رفتار موجود قبلی)
                 if (simulationController != null && sourceInputPorts.contains(dst)) {
                     simulationController.onPacketReturned();
                 }
@@ -97,6 +150,7 @@ public class WireModel implements Serializable {
         }
         return arrived;
     }
+
 
     public void attachPacket(PacketModel packet, double initialProgress) {
         packets.add(packet);

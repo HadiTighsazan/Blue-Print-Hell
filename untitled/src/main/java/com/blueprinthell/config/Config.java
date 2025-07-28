@@ -23,9 +23,10 @@ public final class Config {
     public static final int    PORT_SIZE                = 14;
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
-    public static final int PACKET_COINS_SQUARE        = 1;
+    public static final int PACKET_COINS_SQUARE        = 2;
     public static final int PACKET_SIZE_UNITS_TRIANGLE = 3;
-    public static final int PACKET_COINS_TRIANGLE      = 2;
+    public static final int PACKET_COINS_TRIANGLE      = 3;
+
 
     public static final Color COLOR_PACKET_SQUARE   = new Color(0x1E90FF);
     public static final Color COLOR_PACKET_TRIANGLE = new Color(0xF4A742);
@@ -99,4 +100,10 @@ public final class Config {
     public static final double L10_BASE_SPEED      = 160;
     public static final double L10_DRIFT_STEP_PX   = 200;
     public static final double L10_DRIFT_OFFSET_PX = 6;
+
+    public static final double CIRCLE_RENDER_SCALE = Math.sqrt(2.0)/2;
+    public static final int   PACKET_SIZE_UNITS_CIRCLE = 1;
+    public static final int   PACKET_COINS_CIRCLE      = 1;
+    public static final Color COLOR_PACKET_CIRCLE      = new Color(0x39B54A); // سبز
+
 }

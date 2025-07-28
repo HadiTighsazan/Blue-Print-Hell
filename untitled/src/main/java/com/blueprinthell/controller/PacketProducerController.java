@@ -1,6 +1,9 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.*;
+import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.MotionStrategyFactory;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -71,27 +74,42 @@ public class PacketProducerController implements Updatable {
 
     private void emitOnce() {
         for (SystemBoxModel box : sourceBoxes) {
-            if (!box.getInPorts().isEmpty()) continue;
-            box.getOutPorts().forEach(port -> wires.stream()
-                    .filter(w -> w.getSrcPort() == port)
-                    .findFirst()
-                    .ifPresent(wire -> {
-                        PacketModel pkt;
-                        if (returnedCredits > 0) {
-                            pkt = new PacketModel(randomType(), baseSpeed);
-                            returnedCredits--;
-                        } else if (producedCount < totalToProduce) {
-                            pkt = new PacketModel(randomType(), baseSpeed);
-                            producedCount++;
-                        } else {
-                            return;
-                        }
-                        wire.attachPacket(pkt, 0.01);
-                    }));
+            if (!box.getInPorts().isEmpty()) {
+                continue;
+            }
+            for (PortModel out : box.getOutPorts()) {
+                wires.stream()
+                        .filter(w -> w.getSrcPort() == out)
+                        .findFirst()
+                        .ifPresent(wire -> {
+                            PacketModel packet;
+                            if (returnedCredits > 0) {
+                                packet = new PacketModel(randomType(), baseSpeed);
+                                returnedCredits--;
+                            } else if (producedCount < totalToProduce) {
+                                packet = new PacketModel(randomType(), baseSpeed);
+                                producedCount++;
+                            } else {
+                                return;
+                            }
+
+                            boolean compatible = wire.getSrcPort().isCompatible(packet);
+
+                            packet.setStartSpeedMul(1.0);
+                            MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
+                            packet.setMotionStrategy(ms);
+
+                            wire.attachPacket(packet, 0.0);
+                        });
+            }
         }
     }
 
     private PacketType randomType() {
-        return RND.nextBoolean() ? PacketType.SQUARE : PacketType.TRIANGLE;
+        int r = RND.nextInt(3);
+        return (r == 0) ? PacketType.SQUARE
+                : (r == 1) ? PacketType.TRIANGLE
+                : PacketType.CIRCLE;
     }
+
 }

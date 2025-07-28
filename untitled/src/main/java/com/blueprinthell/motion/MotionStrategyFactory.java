@@ -32,6 +32,11 @@ public final class MotionStrategyFactory {
             rule    = compatible ? params.compatRule : params.incompatRule;
         }
 
+        double startMul = packet.consumeStartSpeedMul();
+        if (startMul != 1.0) {
+            rule = scaleStartSpeed(rule, startMul);
+        }
+
         return switch (rule.mode) {
             case CONST           -> new ConstFromRuleStrategy(rule);
             case ACCEL           -> new LinearAccelStrategy(rule);
@@ -45,26 +50,53 @@ public final class MotionStrategyFactory {
 
 
 
+    private static MotionRule scaleStartSpeed(MotionRule rule, double mul) {
+        if (mul == 1.0) return rule;
+        double s = rule.speedStart * mul;
+
+        return switch (rule.mode) {
+            case CONST             -> MotionRule.constSpeed(s);
+            case ACCEL             -> MotionRule.accel(s, rule.accel, rule.minMul, rule.maxMul);
+            case DECEL             -> MotionRule.decel(s, Math.abs(rule.accel), rule.minMul, rule.maxMul);
+            case CURVE_ACCEL       -> MotionRule.curveAccel(s, rule.accel, rule.maxMul);
+            case KEEP_DISTANCE     -> MotionRule.keepDistance(s);
+            case DRIFT             -> MotionRule.drift(s);
+            case RANDOM_OF_MESSENGER -> rule;
+        };
+    }
+
     private static KinematicsProfile ensureProfile(PacketModel p) {
         KinematicsProfile existing = KinematicsRegistry.getProfile(p);
-        if (existing != null) return existing;
+        if (existing != null) {
+            return existing;
+        }
 
         if (p instanceof ProtectedPacket) {
             existing = KinematicsProfile.PROTECTED_SHADOW;
         }
-        else if (p instanceof ConfidentialPacket conf) {
+        else if (p instanceof ConfidentialPacket) {
             existing = KinematicsProfile.CONFIDENTIAL;
-        } else {
-            PacketType t = p.getType();
-            int su = t.sizeUnits;
-            if (su == 1)      existing = KinematicsProfile.MSG1;
-            else if (su == 2) existing = KinematicsProfile.MSG2;
-            else if (su == 3) existing = KinematicsProfile.MSG3;
-            else               existing = KinematicsProfile.MSG2;
         }
+        else {
+            int su = p.getType().sizeUnits;
+            if (su == 1) {
+                existing = KinematicsProfile.MSG1;
+            }
+            else if (su == 2) {
+                existing = KinematicsProfile.MSG2;
+            }
+            else if (su == 3) {
+                existing = KinematicsProfile.MSG3;
+            }
+            else {
+                existing = KinematicsProfile.MSG2;
+            }
+        }
+
         KinematicsRegistry.setProfile(p, existing);
         return existing;
     }
+
 
 
     private static final class ConstFromRuleStrategy implements MotionStrategy {

@@ -1,49 +1,64 @@
 package com.blueprinthell.level;
-
+import com.blueprinthell.controller.PacketProducerController;
 import com.blueprinthell.model.PacketLossModel;
+import com.blueprinthell.model.PacketModel;
+import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
-import com.blueprinthell.controller.PacketProducerController;
 import javax.swing.SwingUtilities;
 import java.util.List;
 
-
-public class LevelCompletionDetector implements Updatable {
+    public class LevelCompletionDetector implements Updatable {
     private final List<WireModel> wires;
+    private final List<SystemBoxModel> boxes;
     private final PacketLossModel lossModel;
     private final PacketProducerController producer;
     private final LevelManager levelManager;
     private final double lossThreshold;
     private final double plannedPackets;
 
-    private boolean reported = false;
+            private boolean reported = false;
 
-    public LevelCompletionDetector(List<WireModel> wires,
+            public LevelCompletionDetector(List<WireModel> wires,
+                                   List<SystemBoxModel> boxes,
                                    PacketLossModel lossModel,
                                    PacketProducerController producer,
                                    LevelManager levelManager,
                                    double lossThreshold,
                                    double plannedPackets) {
-        this.wires = wires;
-        this.lossModel = lossModel;
-        this.producer = producer;
-        this.levelManager = levelManager;
-        this.lossThreshold = lossThreshold;
-        this.plannedPackets = plannedPackets;
-    }
+                this.wires = wires;
+                this.boxes = boxes;
+                this.lossModel = lossModel;
+                this.producer = producer;
+                this.levelManager = levelManager;
+                this.lossThreshold = lossThreshold;
+                this.plannedPackets = plannedPackets;
+            }
 
-    @Override
+            @Override
     public void update(double dt) {
-        if (!producer.isFinished() || reported) {
-            return;
-        }
-        boolean empty = wires.stream().allMatch(w -> w.getPackets().isEmpty());
-         double ratio = plannedPackets > 0
-                     ? (double) lossModel.getLostCount() / plannedPackets
-                     : 0.0;        boolean okLoss = ratio < lossThreshold;
-        if (empty && okLoss) {
-            reported = true;
-            SwingUtilities.invokeLater(levelManager::reportLevelCompleted);
-        }
-    }
+                if (!producer.isFinished() || reported) {
+                        return;
+                   }
+
+                                boolean wiresEmpty = wires.stream()
+                                .allMatch(w -> w.getPackets().isEmpty());
+
+                                boolean boxesEmpty = boxes.stream()
+                               .allMatch(b -> b.getBuffer().isEmpty());
+
+                                boolean noReturning = wires.stream()
+                                .flatMap(w -> w.getPackets().stream())
+                                .noneMatch(PacketModel::isReturning);
+
+                                double ratio = plannedPackets > 0
+                                ? (double) lossModel.getLostCount() / plannedPackets
+                               : 0.0;
+                boolean okLoss = ratio < lossThreshold;
+
+                        if (wiresEmpty && boxesEmpty && noReturning && okLoss) {
+                        reported = true;
+                        SwingUtilities.invokeLater(levelManager::reportLevelCompleted);
+                    }
+            }
 }

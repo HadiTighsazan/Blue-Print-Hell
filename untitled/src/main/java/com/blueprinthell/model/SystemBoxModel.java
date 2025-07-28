@@ -14,7 +14,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     private final List<PortModel> inPorts = new ArrayList<>();
     private final List<PortModel> outPorts = new ArrayList<>();
-    private final Queue<PacketModel> buffer;
+    private Queue<PacketModel> buffer;
 
     private boolean enabled = true;
     private double disableTimer = 0.0;
@@ -97,6 +97,14 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
 
     public boolean enqueue(PacketModel packet) {
+        if (getInPorts().isEmpty()) {
+            if (buffer == null) {
+                buffer = new ArrayDeque<>();
+            }
+            return buffer.offer(packet);
+        }
+
+
         if (buffer.size() < Config.MAX_BUFFER_CAPACITY) {
             buffer.add(packet);
             return true;
@@ -156,4 +164,21 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         updatePortsPosition();
         return true;
     }
+    // در SystemBoxModel
+    public boolean enqueueFront(PacketModel packet) {
+        if (buffer == null) {
+            buffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
+        }
+        if (buffer.size() >= Config.MAX_BUFFER_CAPACITY) return false;
+
+        if (buffer instanceof ArrayDeque<PacketModel> dq) {
+            dq.addFirst(packet);
+            return true;
+        }
+        if (buffer instanceof java.util.Deque<PacketModel> deq) {
+            return deq.offerFirst(packet);
+        }
+        return buffer.offer(packet);
+    }
+
 }

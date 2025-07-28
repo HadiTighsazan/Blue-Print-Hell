@@ -3,6 +3,8 @@ package com.blueprinthell.model;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.motion.ConstantSpeedStrategy;
 import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.MotionStrategyFactory;
+
 import java.util.Objects;
 
 
@@ -18,14 +20,16 @@ public final class PacketFactory {
         Objects.requireNonNull(src,  "src port");
         Objects.requireNonNull(dst,  "dst port");
 
-        PacketModel packet = new PacketModel(type, Config.DEFAULT_PACKET_SPEED);
+        PacketModel pm = new PacketModel(type, Config.DEFAULT_PACKET_SPEED);
 
-        MotionStrategy strategy;
-        boolean compatible = dst.getShape() == type.toPortShape();
+        boolean comp = src != null && src.isCompatible(pm);
 
-        strategy = new ConstantSpeedStrategy();
+        pm.setStartSpeedMul(1.0);
 
-        packet.setMotionStrategy(strategy);
-        return packet;
+        pm.setMotionStrategy(MotionStrategyFactory.create(pm, comp));
+
+        return pm;
     }
+
+
 }

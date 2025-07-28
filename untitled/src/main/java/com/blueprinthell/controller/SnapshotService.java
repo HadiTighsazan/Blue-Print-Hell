@@ -2,6 +2,8 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
+import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.MotionStrategyFactory;
 import com.blueprinthell.view.HudView;
 import com.blueprinthell.view.screens.GameScreenView;
 
@@ -77,9 +79,12 @@ public final class SnapshotService {
     public void restore(NetworkSnapshot snap) {
         if (snap == null) return;
 
-        scoreModel.reset(); scoreModel.addPoints(snap.score());
-        coinModel.reset();  coinModel.add(snap.coins());
-        lossModel.reset();  for (int i = 0; i < snap.packetLoss(); i++) lossModel.increment();
+        scoreModel.reset();   scoreModel.addPoints(snap.score());
+        coinModel.reset();    coinModel.add(snap.coins());
+        lossModel.reset();
+        for (int i = 0; i < snap.packetLoss(); i++) {
+            lossModel.increment();
+        }
 
         for (PacketProducerController p : producers) {
             p.reset();
@@ -93,8 +98,9 @@ public final class SnapshotService {
             box.setX(st.x());
             box.setY(st.y());
             box.clearBuffer();
+
             for (var ps : st.bufferPackets()) {
-                var pkt = new PacketModel(ps.type(), Config.DEFAULT_PACKET_SPEED);
+                PacketModel pkt = new PacketModel(ps.type(), Config.DEFAULT_PACKET_SPEED);
                 pkt.increaseNoise(ps.noise());
                 box.enqueue(pkt);
             }
@@ -105,9 +111,16 @@ public final class SnapshotService {
             var wire  = wires.get(i);
             var state = wireStates.get(i);
             wire.clearPackets();
+
             for (var ps : state.packets()) {
-                var pkt = new PacketModel(ps.type(), Config.DEFAULT_PACKET_SPEED);
+                PacketModel pkt = new PacketModel(ps.type(), Config.DEFAULT_PACKET_SPEED);
                 pkt.increaseNoise(ps.noise());
+
+                boolean compatible = wire.getSrcPort().isCompatible(pkt);
+                pkt.setStartSpeedMul(1.0);
+                MotionStrategy ms = MotionStrategyFactory.create(pkt, compatible);
+                pkt.setMotionStrategy(ms);
+
                 wire.attachPacket(pkt, ps.progress());
             }
         }
@@ -115,7 +128,6 @@ public final class SnapshotService {
         SwingUtilities.invokeLater(() -> {
             gameView.reset(boxes, wires);
             packetRenderer.refreshAll();
-
             hudView.setCoins(coinModel.getCoins());
             hudView.setPacketLoss(lossModel.getLostCount());
         });

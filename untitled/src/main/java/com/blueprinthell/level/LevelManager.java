@@ -12,6 +12,8 @@ public class LevelManager {
     private LevelDefinition current;
     private int levelIndex = -1;
 
+    private boolean missionReported = false;
+
     public LevelManager(GameController gc, ScreenController sc) {
         this.gameController  = gc;
         this.screenController = sc;
@@ -21,11 +23,17 @@ public class LevelManager {
     public void startGame() {
         levelIndex = 0;
         current = LevelGenerator.firstLevel();
+        missionReported = false;
         gameController.startLevel(current);
     }
 
 
     public void reportLevelCompleted() {
+
+        if (missionReported) return;
+        missionReported = true;
+        gameController.getSimulation().stop();
+
         MissionPassedView mv = screenController.getMissionPassedView();
         mv.setSummary(levelIndex + 1,
                 gameController.getScoreModel().getScore(),
@@ -37,6 +45,7 @@ public class LevelManager {
     public void startNextLevel() {
         levelIndex++;
         current = LevelGenerator.nextLevel(current);
+        missionReported = false;
         gameController.startLevel(current);
         screenController.showScreen(ScreenController.GAME_SCREEN);
     }

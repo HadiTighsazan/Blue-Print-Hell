@@ -1,8 +1,8 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.*;
-import com.blueprinthell.motion.ConstantSpeedStrategy;
 import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.MotionStrategyFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,15 +32,21 @@ public class PacketRouterController implements Updatable {
         while ((p = box.pollPacket()) != null) toRoute.add(p);
 
         for (PacketModel packet : toRoute) {
+            // CHANGED: Null-guard برای destMap.get(w)
             List<PortModel> outs = box.getOutPorts().stream()
                     .filter(port -> {
                         WireModel w = findWire(port);
-                        return w != null && destMap.get(w).isEnabled();
+                        if (w == null) return false;
+                        SystemBoxModel d = destMap.get(w);
+                        return d != null && d.isEnabled();
                     })
                     .collect(Collectors.toList());
 
+            // CHANGED: در نبود خروجی مجاز، بازصف‌گذاری و فقط در صورت پر بودن صف Drop
             if (outs.isEmpty()) {
-                drop(packet);
+                if (!box.enqueue(packet)) {
+                    drop(packet);
+                }
                 continue;
             }
 
@@ -71,10 +77,14 @@ public class PacketRouterController implements Updatable {
             }
 
             boolean comp = chosen.isCompatible(packet);
-            double base = packet.getBaseSpeed();
-            MotionStrategy ms = new ConstantSpeedStrategy(comp ? base / 2 : base);
-            packet.setMotionStrategy(ms);
 
+            double mul = packet.consumeExitBoostMultiplier();
+
+            packet.setStartSpeedMul(mul);
+
+            MotionStrategy ms = MotionStrategyFactory.create(packet, comp);
+
+            packet.setMotionStrategy(ms);
             wire.attachPacket(packet, 0.0);
         }
     }

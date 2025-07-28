@@ -29,8 +29,13 @@ public class PortModel extends GameObjectModel implements Serializable {
     }
 
     public boolean isCompatible(PacketModel packet) {
-        return shape == packet.getType().toPortShape();
+        PacketType t = packet.getType();
+        return switch (this.shape) {
+            case SQUARE   -> (t == PacketType.SQUARE || t == PacketType.CIRCLE);
+            case TRIANGLE -> (t == PacketType.TRIANGLE);
+        };// circle port hasn't made!!
     }
+
 
     public boolean isCompatibleWith(PortModel other) {
         return !this.input && other.input;

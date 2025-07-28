@@ -61,10 +61,12 @@ public class CollisionController implements Updatable {
         handleNoiseRemovalAndSound();
     }
 
+
     private List<Point> performCollisionPass() {
         List<Point> impactPoints = new ArrayList<>();
         grid.clear();
-        // Broad phase
+
+        // Broad phase: همهٔ بسته‌ها رو وارد گرید می‌کنیم (به‌جز محافظت‌شده‌ها)
         for (WireModel w : wires) {
             for (PacketModel p : w.getPackets()) {
                 if (isShielded(p)) continue;
@@ -72,34 +74,53 @@ public class CollisionController implements Updatable {
                 grid.insert(pos.x, pos.y, p);
             }
         }
+
         Set<PacketModel> processed = new HashSet<>();
+
+        // Narrow phase: برخوردها
         for (WireModel w : wires) {
             for (PacketModel p : new ArrayList<>(w.getPackets())) {
                 if (processed.contains(p) || p.getProgress() <= 0) continue;
                 if (isShielded(p)) continue;
+
                 Point pPos = w.pointAt(p.getProgress());
                 for (PacketModel other : grid.retrieve(pPos.x, pPos.y)) {
                     if (other == p || processed.contains(other)) continue;
                     if (isShielded(other)) continue;
-                    Point oPos = other.getCurrentWire().pointAt(other.getProgress());
+
+                    WireModel ow = other.getCurrentWire();
+                    Point oPos = ow.pointAt(other.getProgress());
                     double dx = pPos.x - oPos.x;
                     double dy = pPos.y - oPos.y;
+
                     if (Math.hypot(dx, dy) <= COLLISION_RADIUS) {
-                        p.increaseNoise(NOISE_INCREMENT);
-                        other.increaseNoise(NOISE_INCREMENT);
+                        boolean pIsMsg1     = isMsg1(p);
+                        boolean otherIsMsg1 = isMsg1(other);
+
+                        // برای MSG1 (سبز): برگشت واقعی روی سیم
+                        if (pIsMsg1)     bounceToSource(p, w);
+                        if (otherIsMsg1) bounceToSource(other, ow);
+
+                        // به غیر از MSG1، نویز برخورد را اعمال کن
+                        if (!pIsMsg1)     p.increaseNoise(NOISE_INCREMENT);
+                        if (!otherIsMsg1) other.increaseNoise(NOISE_INCREMENT);
+
                         processed.add(p);
                         processed.add(other);
+
+                        // نقطهٔ اثر برای موج ضربه
                         int ix = (pPos.x + oPos.x) / 2;
                         int iy = (pPos.y + oPos.y) / 2;
                         impactPoints.add(new Point(ix, iy));
-
-
                     }
                 }
             }
         }
+
         return impactPoints;
     }
+
+
 
     private boolean isShielded(PacketModel p) {
         return (p instanceof ProtectedPacket pp) && pp.getShield() > 0;
@@ -110,18 +131,16 @@ public class CollisionController implements Updatable {
         return prof == KinematicsProfile.MSG1;
     }
 
-    private void bounceToSource(PacketModel p, WireModel w) {
-        if (w == null) return;
-        w.removePacket(p);
-        SystemBoxModel srcBox = (portToBox != null) ? portToBox.get(w.getSrcPort()) : null;
-        if (srcBox != null) {
-            if (!srcBox.enqueue(p)) {
-                lossModel.increment();
-            }
-        } else {
-            lossModel.increment();
-        }
+    public void bounceToSource(PacketModel p, WireModel w) {
+        if (w == null || p == null) return;
+        // برگشت روی همان سیم: از سیم حذف نمی‌کنیم؛ progress رو به عقب می‌رود
+        p.setReturning(true);
+        // کنترل صاف‌تر برگشت
+        p.setAcceleration(0.0);
+        // اگر لازم داری، نویز را هم ریست کن تا در مسیر برگشت حذف نشود:
+        // p.resetNoise();  // اختیاری
     }
+
 
     private void propagateImpactWaves(List<Point> impacts) {
         for (Point pt : impacts) {
@@ -131,6 +150,9 @@ public class CollisionController implements Updatable {
                 double dy = pPos.y - pt.y;
                 double dist = Math.hypot(dx, dy);
                 if (dist <= IMPACT_RADIUS) {
+                    // --- NEW: موجِ برخورد به MSG1 که در حال برگشت است اعمال نشود ---
+                    if (isMsg1(p) && p.isReturning()) continue;  // جلوگیری از حذف ناخواسته
+                    // -------------------------------------------------------------------
                     double waveNoise = IMPACT_STRENGTH * (1.0 - dist / IMPACT_RADIUS);
                     p.increaseNoise(waveNoise);
                 }
@@ -138,12 +160,18 @@ public class CollisionController implements Updatable {
         }
     }
 
+
     private void handleNoiseRemovalAndSound() {
         boolean played = false;
         for (WireModel w : wires) {
             List<PacketModel> doomed = new ArrayList<>();
             for (PacketModel p : w.getPackets()) {
                 if (!(p instanceof ProtectedPacket) && p.getNoise() >= MAX_NOISE) {
+                    // --- NEW: MSG1 در حال برگشت را حذف نکن ---
+                    if (isMsg1(p) && p.isReturning()) {
+                        continue; // معاف از حذف تا به مبدأ برسد
+                    }
+                    // -----------------------------------------
                     doomed.add(p);
                 }
             }
@@ -155,6 +183,7 @@ public class CollisionController implements Updatable {
         }
         if (played) playImpactSound();
     }
+
 
     private void playImpactSound() {
         try {

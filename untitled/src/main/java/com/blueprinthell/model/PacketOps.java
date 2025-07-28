@@ -83,6 +83,12 @@ public final class PacketOps {
     }
 
 
+    public static boolean isMessenger(PacketModel p) {
+        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
+        return prof == KinematicsProfile.MSG1
+                || prof == KinematicsProfile.MSG2
+                || prof == KinematicsProfile.MSG3;
+    }
 
 
 }

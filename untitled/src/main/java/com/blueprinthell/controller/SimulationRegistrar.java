@@ -6,8 +6,7 @@ import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.view.HudView;
 import com.blueprinthell.view.screens.GameScreenView;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -63,6 +62,33 @@ public final class SimulationRegistrar {
             systems.forEach(simulation::register);
         }
 
+        // NEW: از ثبت تکراری جلوگیری کنیم
+        Set<Updatable> already = new HashSet<>();
+        if (systems != null) {
+            already.addAll(systems);
+        }
+
+        Map<PortModel, SystemBoxModel> portToBoxMap = new HashMap<>();
+        for (SystemBoxModel b : boxes) {
+            b.getInPorts().forEach(p  -> portToBoxMap.put(p, b));
+            b.getOutPorts().forEach(p -> portToBoxMap.put(p, b));
+        }
+
+        collisionController.setPortToBoxMap(portToBoxMap);
+        WireModel.setPortToBoxMap(portToBoxMap);
+
+        WireModel.setSimulationController(simulation);
+        if (sources != null) {
+            WireModel.setSourceInputPorts(sources);
+        }
+
+        // NEW: خودِ باکس‌ها را به‌عنوان Updatable رجیستر کن تا re-enable کار کند
+        for (SystemBoxModel b : boxes) {
+            if (!already.contains(b)) {
+                simulation.register(b);
+            }
+        }
+
         simulation.register(producer);
         simulation.register(new PacketDispatcherController(wires, destMap, coinModel, lossModel));
         if (sink != null) {
@@ -70,7 +96,7 @@ public final class SimulationRegistrar {
         }
 
         boxes.stream()
-                .filter(b -> !b.getInPorts().isEmpty() && !b.getOutPorts().isEmpty())
+                .filter(b -> !b.getOutPorts().isEmpty()) // مبدأها نیز روتر می‌گیرند
                 .forEach(b -> simulation.register(
                         new PacketRouterController(b, wires, destMap, lossModel)
                 ));
@@ -78,10 +104,11 @@ public final class SimulationRegistrar {
         simulation.register(packetRenderer);
         simulation.register(collisionController);
 
+        // NEW: محافظت در برابر null
+        int plannedTotal = (sources != null)
+                ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
+                : 0;
 
-        int plannedTotal = sources.stream()
-                .mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort())
-                .sum();
         if (screenController != null) {
             simulation.register(new LossMonitorController(
                     lossModel,
@@ -93,7 +120,7 @@ public final class SimulationRegistrar {
             ));
         }
         simulation.register(new LevelCompletionDetector(
-                wires, lossModel, producer,
+                wires, boxes, lossModel, producer,
                 levelManager, 0.5, plannedTotal));
 
         simulation.register(new SnapshotController(
@@ -103,4 +130,5 @@ public final class SimulationRegistrar {
                 usageModel, lossModel, coinModel, levelManager, hudView
         ));
     }
+
 }
