@@ -1,13 +1,11 @@
 package com.blueprinthell.model;
 
 import com.blueprinthell.config.Config;
+import com.blueprinthell.controller.systems.SystemBehavior;
 import java.io.Serializable;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
-
 
 public class SystemBoxModel extends GameObjectModel implements Serializable, Updatable {
     private static final long serialVersionUID = 5L;
@@ -19,6 +17,22 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     private boolean enabled = true;
     private double disableTimer = 0.0;
 
+    // ثبت behavior های متصل به این باکس
+    private final List<SystemBehavior> behaviors = new ArrayList<>();
+
+    // صف ورودی‌های جدید با اطلاعات پورت
+    private final Queue<PacketEntry> newEntries = new ConcurrentLinkedQueue<>();
+
+    // کلاس داخلی برای نگهداری پکت و پورت ورودی
+    public static class PacketEntry {
+        public final PacketModel packet;
+        public final PortModel enteredPort;
+
+        public PacketEntry(PacketModel packet, PortModel enteredPort) {
+            this.packet = packet;
+            this.enteredPort = enteredPort;
+        }
+    }
 
     public SystemBoxModel(int x, int y, int width, int height,
                           List<PortShape> inShapes,
@@ -27,7 +41,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         this.buffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
         createPorts(inShapes, outShapes);
     }
-
 
     public SystemBoxModel(int x, int y, int width, int height,
                           int inCount, PortShape inShape,
@@ -77,39 +90,63 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
-
     public List<PortShape> getInShapes() {
         return inPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
     }
+
     public List<PortShape> getOutShapes() {
         return outPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
     }
-
 
     public List<PortModel> getInPorts() {
         return java.util.Collections.unmodifiableList(inPorts);
     }
 
-
     public List<PortModel> getOutPorts() {
         return java.util.Collections.unmodifiableList(outPorts);
     }
 
+    // متد جدید برای ثبت behavior
+    public void addBehavior(SystemBehavior behavior) {
+        if (!behaviors.contains(behavior)) {
+            behaviors.add(behavior);
+        }
+    }
 
-    public boolean enqueue(PacketModel packet) {
+    public void removeBehavior(SystemBehavior behavior) {
+        behaviors.remove(behavior);
+    }
+
+    public List<SystemBehavior> getBehaviors() {
+        return Collections.unmodifiableList(behaviors);
+    }
+
+    // متد بهبود یافته enqueue با ثبت پورت ورودی
+    public boolean enqueue(PacketModel packet, PortModel enteredPort) {
+        if (!enabled) return false;
+
         if (getInPorts().isEmpty()) {
             if (buffer == null) {
                 buffer = new ArrayDeque<>();
             }
-            return buffer.offer(packet);
+            boolean added = buffer.offer(packet);
+            if (added) {
+                newEntries.offer(new PacketEntry(packet, enteredPort));
+            }
+            return added;
         }
-
 
         if (buffer.size() < Config.MAX_BUFFER_CAPACITY) {
             buffer.add(packet);
+            newEntries.offer(new PacketEntry(packet, enteredPort));
             return true;
         }
         return false;
+    }
+
+    // متد قدیمی برای سازگاری
+    public boolean enqueue(PacketModel packet) {
+        return enqueue(packet, null);
     }
 
     public PacketModel pollPacket() {
@@ -118,6 +155,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     public void clearBuffer() {
         buffer.clear();
+        newEntries.clear();
     }
 
     public Queue<PacketModel> getBuffer() {
@@ -126,28 +164,46 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
                 : new ArrayDeque<>(buffer);
     }
 
-
     public void disable() {
         this.enabled = false;
         this.disableTimer = Config.SYSTEM_DISABLE_DURATION;
+        // اطلاع به behavior ها
+        for (SystemBehavior behavior : behaviors) {
+            behavior.onEnabledChanged(false);
+        }
     }
-
 
     public boolean isEnabled() {
         return enabled;
     }
 
-
     @Override
     public void update(double dt) {
+        // بررسی وضعیت فعال/غیرفعال
         if (!enabled) {
             disableTimer -= dt;
             if (disableTimer <= 0) {
                 enabled = true;
+                // اطلاع به behavior ها
+                for (SystemBehavior behavior : behaviors) {
+                    behavior.onEnabledChanged(true);
+                }
             }
         }
-    }
 
+        // پردازش پکت‌های جدید و اطلاع به behavior ها
+        PacketEntry entry;
+        while ((entry = newEntries.poll()) != null) {
+            for (SystemBehavior behavior : behaviors) {
+                behavior.onPacketEnqueued(entry.packet, entry.enteredPort);
+            }
+        }
+
+        // فراخوانی update behavior ها
+        for (SystemBehavior behavior : behaviors) {
+            behavior.update(dt);
+        }
+    }
 
     public void addOutputPort(PortShape shape) {
         if (outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
@@ -157,14 +213,13 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         updatePortsPosition();
     }
 
-
     public boolean removeOutputPort() {
         if (outPorts.isEmpty()) return false;
         outPorts.remove(outPorts.size() - 1);
         updatePortsPosition();
         return true;
     }
-    // در SystemBoxModel
+
     public boolean enqueueFront(PacketModel packet) {
         if (buffer == null) {
             buffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
@@ -173,12 +228,17 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
         if (buffer instanceof ArrayDeque<PacketModel> dq) {
             dq.addFirst(packet);
+            // برای پکت‌های برگشتی، پورت ورودی null است
+            newEntries.offer(new PacketEntry(packet, null));
             return true;
         }
         if (buffer instanceof java.util.Deque<PacketModel> deq) {
-            return deq.offerFirst(packet);
+            boolean added = deq.offerFirst(packet);
+            if (added) {
+                newEntries.offer(new PacketEntry(packet, null));
+            }
+            return added;
         }
         return buffer.offer(packet);
     }
-
 }

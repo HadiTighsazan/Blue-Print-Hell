@@ -6,7 +6,6 @@ import com.blueprinthell.model.*;
 import java.util.List;
 import java.util.Map;
 
-
 public class PacketDispatcherController implements Updatable {
 
     private final List<WireModel> wires;
@@ -29,19 +28,21 @@ public class PacketDispatcherController implements Updatable {
         for (WireModel wire : wires) {
             List<PacketModel> arrived = wire.update(dt);
             SystemBoxModel dest = destinationMap.get(wire);
-            PortModel dstPort = wire.getDstPort(); // اضافه شده: پورت مقصد همین wire
+            PortModel dstPort = wire.getDstPort(); // پورت مقصد
 
             for (PacketModel packet : arrived) {
-                // --- قانون مرحله ۳: ورود از پورت ناسازگار => خروج بعدی با 2× ---
+                // قانون مرحله ۳: ورود از پورت ناسازگار => خروج بعدی با 2×
                 if (dstPort != null && !dstPort.isCompatible(packet) && PacketOps.isMessenger(packet)) {
                     packet.setExitBoostMultiplier(2.0);
                 }
-                // ---------------------------------------------------------------
 
                 if (packet.getSpeed() > Config.MAX_ALLOWED_SPEED && dest.isEnabled()) {
                     dest.disable();
                 }
-                boolean accepted = dest.enqueue(packet);
+
+                // استفاده از متد جدید enqueue با پورت
+                boolean accepted = dest.enqueue(packet, dstPort);
+
                 if (accepted) {
                     coinModel.add(packet.getType().coins);
                 } else {
@@ -50,5 +51,4 @@ public class PacketDispatcherController implements Updatable {
             }
         }
     }
-
 }

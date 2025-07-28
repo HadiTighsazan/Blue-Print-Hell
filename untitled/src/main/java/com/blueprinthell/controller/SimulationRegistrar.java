@@ -1,14 +1,14 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.controller.systems.*;
 import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
+import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.view.HudView;
-import com.blueprinthell.view.screens.GameScreenView;
 
 import java.util.*;
 import java.util.stream.Collectors;
-
 
 public final class SimulationRegistrar {
 
@@ -24,6 +24,12 @@ public final class SimulationRegistrar {
     private final SnapshotManager snapshotManager;
     private final HudView         hudView;
     private final LevelManager    levelManager;
+
+    // اضافه کردن BehaviorRegistry
+    private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
+
+    // نگهداری مشخصات باکس‌ها از LevelDefinition
+    private List<LevelDefinition.BoxSpec> currentBoxSpecs;
 
     public SimulationRegistrar(SimulationController simulation,
                                ScreenController screenController,
@@ -49,6 +55,26 @@ public final class SimulationRegistrar {
         this.levelManager       = levelManager;
     }
 
+    // متد جدید برای ست کردن BoxSpec ها
+    public void setCurrentBoxSpecs(List<LevelDefinition.BoxSpec> specs) {
+        this.currentBoxSpecs = specs;
+    }
+
+    // متد پیدا کردن BoxSpec متناظر با SystemBoxModel
+    private LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
+        if (currentBoxSpecs == null) return null;
+
+        // مقایسه بر اساس موقعیت و اندازه
+        for (LevelDefinition.BoxSpec spec : currentBoxSpecs) {
+            if (spec.x() == box.getX() &&
+                    spec.y() == box.getY() &&
+                    spec.width() == box.getWidth() &&
+                    spec.height() == box.getHeight()) {
+                return spec;
+            }
+        }
+        return null;
+    }
 
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
@@ -62,7 +88,6 @@ public final class SimulationRegistrar {
             systems.forEach(simulation::register);
         }
 
-        // NEW: از ثبت تکراری جلوگیری کنیم
         Set<Updatable> already = new HashSet<>();
         if (systems != null) {
             already.addAll(systems);
@@ -82,7 +107,7 @@ public final class SimulationRegistrar {
             WireModel.setSourceInputPorts(sources);
         }
 
-        // NEW: خودِ باکس‌ها را به‌عنوان Updatable رجیستر کن تا re-enable کار کند
+        // ثبت باکس‌ها
         for (SystemBoxModel b : boxes) {
             if (!already.contains(b)) {
                 simulation.register(b);
@@ -95,16 +120,61 @@ public final class SimulationRegistrar {
             simulation.register(new PacketConsumerController(sink, scoreModel, coinModel));
         }
 
-        boxes.stream()
-                .filter(b -> !b.getOutPorts().isEmpty()) // مبدأها نیز روتر می‌گیرند
-                .forEach(b -> simulation.register(
-                        new PacketRouterController(b, wires, destMap, lossModel)
-                ));
+        // ثبت سیستم‌های خاص بر اساس نوع
+        for (SystemBoxModel box : boxes) {
+            LevelDefinition.BoxSpec spec = findBoxSpec(box);
+            if (spec != null) {
+                switch (spec.kind()) {
+                    case SPY:
+                        SpyBehavior spyBehavior = new SpyBehavior(
+                                box, behaviorRegistry, lossModel, wires, destMap
+                        );
+                        box.addBehavior(spyBehavior);
+                        behaviorRegistry.register(box, spyBehavior);
+                        // سیستم جاسوس هم نیاز به روتر دارد
+                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
+                        break;
+
+                    case MALICIOUS:
+                        MaliciousBehavior maliciousBehavior = new MaliciousBehavior(box, 0.15);
+                        box.addBehavior(maliciousBehavior);
+                        behaviorRegistry.register(box, maliciousBehavior);
+                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
+                        break;
+
+                    case VPN:
+                        VpnBehavior vpnBehavior = new VpnBehavior(box);
+                        box.addBehavior(vpnBehavior);
+                        behaviorRegistry.register(box, vpnBehavior);
+                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
+                        break;
+
+                    case ANTI_TROJAN:
+                        AntiTrojanBehavior antiTrojanBehavior = new AntiTrojanBehavior(box, wires);
+                        box.addBehavior(antiTrojanBehavior);
+                        behaviorRegistry.register(box, antiTrojanBehavior);
+                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
+                        break;
+
+                    case NORMAL:
+                    default:
+                        // سیستم‌های عادی فقط روتر دارند
+                        if (!box.getOutPorts().isEmpty()) {
+                            simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
+                        }
+                        break;
+                }
+            } else {
+                // اگر spec پیدا نشد، رفتار پیش‌فرض
+                if (!box.getOutPorts().isEmpty()) {
+                    simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
+                }
+            }
+        }
 
         simulation.register(packetRenderer);
         simulation.register(collisionController);
 
-        // NEW: محافظت در برابر null
         int plannedTotal = (sources != null)
                 ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
                 : 0;
@@ -119,6 +189,7 @@ public final class SimulationRegistrar {
                     () -> levelManager.startGame()
             ));
         }
+
         simulation.register(new LevelCompletionDetector(
                 wires, boxes, lossModel, producer,
                 levelManager, 0.5, plannedTotal));
@@ -126,9 +197,9 @@ public final class SimulationRegistrar {
         simulation.register(new SnapshotController(
                 boxes, wires,
                 scoreModel, coinModel, usageModel, lossModel, snapshotManager));
+
         simulation.register(new HudController(
                 usageModel, lossModel, coinModel, levelManager, hudView
         ));
     }
-
 }
