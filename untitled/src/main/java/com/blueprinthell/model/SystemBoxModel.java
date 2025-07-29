@@ -22,10 +22,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     private final List<SystemBehavior> behaviors = new ArrayList<>();
 
-    /**
-     * Backward-compat event queue for code paths that still rely on push-style notifications.
-     * The new adapter-based path reads the main buffer directly and does not require this.
-     */
+
     private final Queue<PacketEntry> newEntries = new ConcurrentLinkedQueue<>();
 
     private boolean lastEnabledState = true;
@@ -112,7 +109,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         return java.util.Collections.unmodifiableList(outPorts);
     }
 
-    // متد جدید برای ثبت behavior
     public void addBehavior(SystemBehavior behavior) {
         if (!behaviors.contains(behavior)) {
             behaviors.add(behavior);
@@ -135,27 +131,22 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
             return false;
         }
 
-        // Capacity check
         if (buffer.size() >= Config.MAX_BUFFER_CAPACITY) {
             return false;
         }
 
-        // Record exact entered port for the adapter path (consumed on first read)
         if (enteredPort != null) {
             SystemBehaviorAdapter.EnteredPortTracker.record(packet, enteredPort);
         }
 
-        // Add to buffer
         final boolean added = buffer.offer(packet);
         if (added) {
-            // Back-compat push event (older behaviors still listening via SystemBoxModel.update)
             newEntries.offer(new PacketEntry(packet, enteredPort));
         }
 
         return added;
     }
 
-    // متد قدیمی برای سازگاری
     public boolean enqueue(PacketModel packet) {
         return enqueue(packet, null);
     }
@@ -167,16 +158,12 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     public void clearBuffer() {
         buffer.clear();
         newEntries.clear();
-        // Optional but safe: clear entered port hints to avoid stale entries after resets
         SystemBehaviorAdapter.EnteredPortTracker.clear();
     }
 
-    /**
-     * Read-only intent: returned reference is the live buffer. Callers MUST NOT mutate it directly.
-     * The adapter only iterates it.
-     */
+
     public Queue<PacketModel> getBuffer() {
-        return buffer; // returning live buffer avoids per-frame allocations/copies
+        return buffer;
     }
 
     public void disable() {
@@ -208,8 +195,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
             behavior.update(dt);
         }
 
-        // Back-compat: push-style notifications. When migrating fully to the adapter path,
-        // you may remove this block and rely solely on SystemBehaviorAdapter.update().
         PacketEntry entry;
         while ((entry = newEntries.poll()) != null) {
             for (SystemBehavior behavior : behaviors) {
@@ -238,9 +223,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         return true;
     }
 
-    /**
-     * Remove a packet from the buffer. Used by behaviors that transfer or destroy packets.
-     */
+
     public boolean removeFromBuffer(PacketModel packet) {
         if (packet == null) return false;
         return buffer.remove(packet);
@@ -252,7 +235,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         if (buffer instanceof java.util.Deque<PacketModel> deq) {
             if (deq.size() >= Config.MAX_BUFFER_CAPACITY) return false;
             deq.addFirst(packet);
-            // Mark as a programmatic entry (no physical port): enteredPort == null
             newEntries.offer(new PacketEntry(packet, null));
             return true;
         }

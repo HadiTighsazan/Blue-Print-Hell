@@ -2,6 +2,8 @@ package com.blueprinthell.controller.core;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.*;
+import com.blueprinthell.controller.systems.RouteHints;
+import com.blueprinthell.controller.systems.VpnRevertHints;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelGenerator;
 import com.blueprinthell.level.LevelManager;
@@ -114,6 +116,9 @@ public class LevelCoreManager {
             }
         }
 
+        RouteHints.clear();
+        VpnRevertHints.clear();
+
         WireModel.setSourceInputPorts(sources);
         WireModel.setSimulationController(gameController.getSimulation());
 
@@ -153,6 +158,7 @@ public class LevelCoreManager {
         gameController.setRegistrar(new SimulationRegistrar(
                 gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
                 gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));
+        gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
 
         List<Updatable> systemControllers = new ArrayList<Updatable>();
         systemControllers.add(gameController.getHudController());

@@ -3,10 +3,10 @@ package com.blueprinthell.controller;
 import com.blueprinthell.model.*;
 import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.MotionStrategyFactory;
+import com.blueprinthell.controller.systems.RouteHints;
 
 import java.util.*;
 import java.util.stream.Collectors;
-
 
 public class PacketRouterController implements Updatable {
     private final SystemBoxModel box;
@@ -32,7 +32,6 @@ public class PacketRouterController implements Updatable {
         while ((p = box.pollPacket()) != null) toRoute.add(p);
 
         for (PacketModel packet : toRoute) {
-            // CHANGED: Null-guard برای destMap.get(w)
             List<PortModel> outs = box.getOutPorts().stream()
                     .filter(port -> {
                         WireModel w = findWire(port);
@@ -42,7 +41,6 @@ public class PacketRouterController implements Updatable {
                     })
                     .collect(Collectors.toList());
 
-            // CHANGED: در نبود خروجی مجاز، بازصف‌گذاری و فقط در صورت پر بودن صف Drop
             if (outs.isEmpty()) {
                 if (!box.enqueue(packet)) {
                     drop(packet);
@@ -50,6 +48,33 @@ public class PacketRouterController implements Updatable {
                 continue;
             }
 
+            // Handle forced incompatible routing from Malicious systems
+            boolean forceIncompat = RouteHints.consumeForceIncompatible(packet);
+            if (forceIncompat) {
+                List<PortModel> incompat = outs.stream()
+                        .filter(port -> !port.isCompatible(packet))
+                        .collect(Collectors.toList());
+                List<PortModel> emptyIncompat = incompat.stream()
+                        .filter(this::isWireEmpty)
+                        .collect(Collectors.toList());
+
+                PortModel chosen = null;
+                if (!emptyIncompat.isEmpty()) {
+                    chosen = emptyIncompat.get(0);
+                } else if (!incompat.isEmpty()) {
+                    chosen = incompat.get(rnd.nextInt(incompat.size()));
+                }
+
+                if (chosen != null) {
+                    WireModel w2 = findWire(chosen);
+                    if (w2 != null) {
+                        w2.attachPacket(packet, 0.0);
+                        continue;
+                    }
+                }
+            }
+
+            // Regular compatible routing
             List<PortModel> compat = outs.stream()
                     .filter(port -> port.isCompatible(packet))
                     .collect(Collectors.toList());
@@ -77,13 +102,10 @@ public class PacketRouterController implements Updatable {
             }
 
             boolean comp = chosen.isCompatible(packet);
-
             double mul = packet.consumeExitBoostMultiplier();
-
             packet.setStartSpeedMul(mul);
 
             MotionStrategy ms = MotionStrategyFactory.create(packet, comp);
-
             packet.setMotionStrategy(ms);
             wire.attachPacket(packet, 0.0);
         }
