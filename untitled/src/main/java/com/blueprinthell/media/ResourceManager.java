@@ -23,8 +23,9 @@ public enum ResourceManager {
 
     private Clip loadClip(String fileName) {
         try {
-            URL url = new URL("file:" + BASE_PATH + fileName);
-            AudioInputStream ais = AudioSystem.getAudioInputStream(url);
+            AudioInputStream ais = AudioSystem.getAudioInputStream(
+                    ResourceManager.class.getResourceAsStream("/" + fileName)
+            );
             Clip clip = AudioSystem.getClip();
             clip.open(ais);
             return clip;
@@ -33,16 +34,17 @@ public enum ResourceManager {
         }
     }
 
+
     public BufferedImage getImage(String fileName) {
         return imageCache.computeIfAbsent(fileName, this::loadImage);
     }
 
     private BufferedImage loadImage(String fileName) {
         try {
-            URL url = new URL("file:" + BASE_PATH + fileName);
-            return ImageIO.read(url);
+            return ImageIO.read(ResourceManager.class.getResourceAsStream("/" + fileName));
         } catch (IOException e) {
             throw new RuntimeException("Could not load image file: " + fileName, e);
         }
     }
+
 }

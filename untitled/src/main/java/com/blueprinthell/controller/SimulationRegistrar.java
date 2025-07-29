@@ -1,35 +1,40 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.*;
 import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
+import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.view.HudView;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
-public final class SimulationRegistrar {
 
+public class SimulationRegistrar {
+
+    // Core engines & shared models
     private final SimulationController simulation;
-    private final ScreenController screenController;
-    private final CollisionController collisionController;
-    private final PacketRenderController packetRenderer;
+    private final ScreenController screenController; // may be null in headless tests
+    private final CollisionController collisionController; // provided by caller
+    private final PacketRenderController packetRenderer;   // provided by caller
 
-    private final ScoreModel    scoreModel;
-    private final CoinModel     coinModel;
+    private final ScoreModel scoreModel;
+    private final CoinModel coinModel;
     private final PacketLossModel lossModel;
-    private final WireUsageModel  usageModel;
+    private final WireUsageModel usageModel;
+
     private final SnapshotManager snapshotManager;
-    private final HudView         hudView;
-    private final LevelManager    levelManager;
+    private final HudView hudView;
+    private final LevelManager levelManager;
 
-    // اضافه کردن BehaviorRegistry
+    // Behavior coordination
     private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
+    private final LargeGroupRegistry largeGroupRegistry = new LargeGroupRegistry();
 
-    // نگهداری مشخصات باکس‌ها از LevelDefinition
-    private List<LevelDefinition.BoxSpec> currentBoxSpecs;
+    // Level specs (optional, used to decide behavior kinds per box)
+    private List<LevelDefinition.BoxSpec> currentBoxSpecs = Collections.emptyList();
 
     public SimulationRegistrar(SimulationController simulation,
                                ScreenController screenController,
@@ -42,164 +47,257 @@ public final class SimulationRegistrar {
                                SnapshotManager snapshotManager,
                                HudView hudView,
                                LevelManager levelManager) {
-        this.simulation         = simulation;
-        this.screenController   = screenController;
-        this.collisionController= collisionController;
-        this.packetRenderer     = packetRenderer;
-        this.scoreModel         = scoreModel;
-        this.coinModel          = coinModel;
-        this.lossModel          = lossModel;
-        this.usageModel         = usageModel;
-        this.snapshotManager    = snapshotManager;
-        this.hudView            = hudView;
-        this.levelManager       = levelManager;
+        this.simulation = Objects.requireNonNull(simulation, "simulation");
+        this.screenController = screenController; // may be null
+        this.collisionController = Objects.requireNonNull(collisionController, "collisionController");
+        this.packetRenderer = Objects.requireNonNull(packetRenderer, "packetRenderer");
+        this.scoreModel = Objects.requireNonNull(scoreModel, "scoreModel");
+        this.coinModel = Objects.requireNonNull(coinModel, "coinModel");
+        this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
+        this.usageModel = Objects.requireNonNull(usageModel, "usageModel");
+        this.snapshotManager = Objects.requireNonNull(snapshotManager, "snapshotManager");
+        this.hudView = Objects.requireNonNull(hudView, "hudView");
+        this.levelManager = Objects.requireNonNull(levelManager, "levelManager");
     }
 
-    // متد جدید برای ست کردن BoxSpec ها
+    // ---------------------------------------------------------------------
+    // Level spec bindings
+    // ---------------------------------------------------------------------
+
+    /** Injects BoxSpecs of the current level so registrar can attach behaviors per system kind. */
     public void setCurrentBoxSpecs(List<LevelDefinition.BoxSpec> specs) {
-        this.currentBoxSpecs = specs;
+        this.currentBoxSpecs = (specs != null) ? specs : Collections.emptyList();
     }
 
-    // متد پیدا کردن BoxSpec متناظر با SystemBoxModel
-    private LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
-        if (currentBoxSpecs == null) return null;
-
-        // مقایسه بر اساس موقعیت و اندازه
-        for (LevelDefinition.BoxSpec spec : currentBoxSpecs) {
-            if (spec.x() == box.getX() &&
-                    spec.y() == box.getY() &&
-                    spec.width() == box.getWidth() &&
-                    spec.height() == box.getHeight()) {
-                return spec;
+    /**
+     * Finds a BoxSpec that matches the given box by geometry (x,y,width,height).
+     * If your BoxSpec later exposes IDs, switch to ID-based mapping.
+     */
+    public LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
+        if (box == null || currentBoxSpecs == null) return null;
+        for (var spec : currentBoxSpecs) {
+            try {
+                if (spec.x() == box.getX() && spec.y() == box.getY()
+                        && spec.width() == box.getWidth() && spec.height() == box.getHeight()) {
+                    return spec;
+                }
+            } catch (Throwable ignore) {
+                // If spec API differs, callers can override setCurrentBoxSpecs with richer info in future.
             }
         }
         return null;
     }
 
+    public BehaviorRegistry getBehaviorRegistry() {
+        return behaviorRegistry;
+    }
+
+    // ---------------------------------------------------------------------
+    // Registration pipeline
+    // ---------------------------------------------------------------------
+
+    /**
+     * Registers all controllers and behaviors into the simulation loop.
+     * Ordering matters: behavior adapters -> routers -> dispatchers -> monitors/HUD -> renderer.
+     */
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
                             Map<WireModel, SystemBoxModel> destMap,
                             List<SystemBoxModel> sources,
                             SystemBoxModel sink,
                             PacketProducerController producer,
-                            List<Updatable> systems) {
+                            List<Updatable> extraSystems) {
 
-        if (systems != null) {
-            systems.forEach(simulation::register);
-        }
+        Objects.requireNonNull(boxes, "boxes");
+        Objects.requireNonNull(wires, "wires");
+        Objects.requireNonNull(destMap, "destMap");
 
+        // --- 0) Register any extra systems first and memo to avoid double-registering
         Set<Updatable> already = new HashSet<>();
-        if (systems != null) {
-            already.addAll(systems);
+        if (extraSystems != null) {
+            for (Updatable u : extraSystems) {
+                if (u != null) {
+                    simulation.register(u);
+                    already.add(u);
+                }
+            }
         }
 
+        // --- 0.5) Build Port -> Box mapping and inject into collision & wire models
         Map<PortModel, SystemBoxModel> portToBoxMap = new HashMap<>();
         for (SystemBoxModel b : boxes) {
-            b.getInPorts().forEach(p  -> portToBoxMap.put(p, b));
-            b.getOutPorts().forEach(p -> portToBoxMap.put(p, b));
+            for (PortModel p : b.getInPorts()) portToBoxMap.put(p, b);
+            for (PortModel p : b.getOutPorts()) portToBoxMap.put(p, b);
         }
-
         collisionController.setPortToBoxMap(portToBoxMap);
         WireModel.setPortToBoxMap(portToBoxMap);
-
         WireModel.setSimulationController(simulation);
         if (sources != null) {
             WireModel.setSourceInputPorts(sources);
         }
 
-        // ثبت باکس‌ها
+        // --- 1) Register boxes themselves (timers/enable flip etc.)
         for (SystemBoxModel b : boxes) {
-            if (!already.contains(b)) {
-                simulation.register(b);
-            }
+            if (!already.contains(b)) simulation.register(b);
         }
 
-        simulation.register(producer);
-        simulation.register(new PacketDispatcherController(wires, destMap, coinModel, lossModel));
-        if (sink != null) {
-            simulation.register(new PacketConsumerController(sink, scoreModel, coinModel));
-        }
-
-        // ثبت سیستم‌های خاص بر اساس نوع
+        // --- 2) Behaviors (via adapters), registered BEFORE routers ---
         for (SystemBoxModel box : boxes) {
-            LevelDefinition.BoxSpec spec = findBoxSpec(box);
-            if (spec != null) {
-                switch (spec.kind()) {
-                    case SPY:
-                        SpyBehavior spyBehavior = new SpyBehavior(
-                                box, behaviorRegistry, lossModel, wires, destMap
-                        );
-                        box.addBehavior(spyBehavior);
-                        behaviorRegistry.register(box, spyBehavior);
-                        // سیستم جاسوس هم نیاز به روتر دارد
-                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
-                        break;
+            attachBehaviorsForBox(box, boxes, wires, destMap);
+        }
 
-                    case MALICIOUS:
-                        MaliciousBehavior maliciousBehavior = new MaliciousBehavior(box, 0.15);
-                        box.addBehavior(maliciousBehavior);
-                        behaviorRegistry.register(box, maliciousBehavior);
-                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
-                        break;
-
-                    case VPN:
-                        VpnBehavior vpnBehavior = new VpnBehavior(box);
-                        box.addBehavior(vpnBehavior);
-                        behaviorRegistry.register(box, vpnBehavior);
-                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
-                        break;
-
-                    case ANTI_TROJAN:
-                        AntiTrojanBehavior antiTrojanBehavior = new AntiTrojanBehavior(box, wires);
-                        box.addBehavior(antiTrojanBehavior);
-                        behaviorRegistry.register(box, antiTrojanBehavior);
-                        simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
-                        break;
-
-                    case NORMAL:
-                    default:
-                        // سیستم‌های عادی فقط روتر دارند
-                        if (!box.getOutPorts().isEmpty()) {
-                            simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
-                        }
-                        break;
-                }
-            } else {
-                // اگر spec پیدا نشد، رفتار پیش‌فرض
-                if (!box.getOutPorts().isEmpty()) {
-                    simulation.register(new PacketRouterController(box, wires, destMap, lossModel));
-                }
+        // --- 3) Routers per box ---
+        for (SystemBoxModel box : boxes) {
+            if (!box.getOutPorts().isEmpty()) {
+                PacketRouterController router = new PacketRouterController(box, wires, destMap, lossModel);
+                simulation.register(router);
             }
         }
+
+        // --- 4) Producer/Dispatcher ---
+        if (producer != null) {
+            simulation.register(producer);
+        }
+        PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
+        simulation.register(dispatcher);
+
+        // --- 5) Consumer at sink (if any) ---
+        if (sink != null) {
+            PacketConsumerController consumer = new PacketConsumerController(sink, scoreModel, coinModel);
+            simulation.register(consumer);
+        }
+
+        // --- 6) Optional controllers and monitors ---
+        registerOptionalControllers(wires, boxes, destMap);
+
+        // Completion & loss monitors depending on planned packets
+        int plannedTotal = (sources != null && producer != null)
+                ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
+                : 0;
+        if (screenController != null) {
+            LossMonitorController lossMonitor = new LossMonitorController(
+                    lossModel,
+                    plannedTotal,
+                    0.5, // threshold ratio
+                    simulation,
+                    screenController,
+                    () -> {
+                        if (producer != null) producer.reset();
+                        levelManager.startGame();
+                    }
+            );
+            simulation.register(lossMonitor);
+        }
+
+        if (producer != null) {
+            LevelCompletionDetector detector = new LevelCompletionDetector(
+                    wires, boxes, lossModel, producer, levelManager, 0.5, plannedTotal);
+            simulation.register(detector);
+        }
+
+        // --- 7) Snapshot/HUD/render/collision ---
+        SnapshotController snapshotCtrl = new SnapshotController(
+                boxes, wires, scoreModel, coinModel, usageModel, lossModel, snapshotManager);
+        simulation.register(snapshotCtrl);
+
+        HudController hudController = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
+        simulation.register(hudController);
 
         simulation.register(packetRenderer);
         simulation.register(collisionController);
 
-        int plannedTotal = (sources != null)
-                ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
-                : 0;
-
-        if (screenController != null) {
-            simulation.register(new LossMonitorController(
-                    lossModel,
-                    plannedTotal,
-                    0.5,
-                    simulation,
-                    screenController,
-                    () -> levelManager.startGame()
-            ));
-        }
-
-        simulation.register(new LevelCompletionDetector(
-                wires, boxes, lossModel, producer,
-                levelManager, 0.5, plannedTotal));
-
-        simulation.register(new SnapshotController(
-                boxes, wires,
-                scoreModel, coinModel, usageModel, lossModel, snapshotManager));
-
-        simulation.register(new HudController(
-                usageModel, lossModel, coinModel, levelManager, hudView
-        ));
     }
+
+    // Attach behaviors to a single box. Spy uses adapter path. Others are registered similarly via adapters
+    // to avoid double-calling newEntries push path.
+    private void attachBehaviorsForBox(SystemBoxModel box,
+                                       List<SystemBoxModel> allBoxes,
+                                       List<WireModel> wires,
+                                       Map<WireModel, SystemBoxModel> destMap) {
+        LevelDefinition.BoxSpec spec = findBoxSpec(box);
+        SystemKind kind = null;
+        try {
+            // Prefer direct spec.kind() when available
+            if (spec != null) {
+                kind = spec.kind();
+            }
+        } catch (Throwable ignore) {
+            // If API differs, default to NORMAL
+        }
+        if (kind == null) kind = SystemKind.NORMAL; // sensible default
+
+        switch (kind) {
+            case SPY: {
+                SpyBehavior spy = new SpyBehavior(box, behaviorRegistry, lossModel, wires, destMap);
+                behaviorRegistry.register(box, spy);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, spy);
+                simulation.register(adapter); // BEFORE routers
+                break;
+            }
+            case MALICIOUS: {
+                MaliciousBehavior mal = new MaliciousBehavior(box, 0.15);
+                behaviorRegistry.register(box, mal);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, mal);
+                simulation.register(adapter);
+                break;
+            }
+            case VPN: {
+                VpnBehavior vpn = new VpnBehavior(box);
+                behaviorRegistry.register(box, vpn);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, vpn);
+                simulation.register(adapter);
+                break;
+            }
+            case ANTI_TROJAN: {
+                AntiTrojanBehavior anti = new AntiTrojanBehavior(box, wires);
+                behaviorRegistry.register(box, anti);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, anti);
+                simulation.register(adapter);
+                break;
+            }
+            case DISTRIBUTOR: {
+                DistributorBehavior db = new DistributorBehavior(box, largeGroupRegistry, lossModel);
+                behaviorRegistry.register(box, db);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, db);
+                simulation.register(adapter);
+                break;
+            }
+            case MERGER: {
+                MergerBehavior mb = new MergerBehavior(box, largeGroupRegistry, lossModel);
+                behaviorRegistry.register(box, mb);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, mb);
+                simulation.register(adapter);
+                break;
+            }
+            case NORMAL:
+            default: {
+                NormalBehavior nb = new NormalBehavior(box);
+                behaviorRegistry.register(box, nb);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, nb);
+                simulation.register(adapter);
+                break;
+            }
+        }
+    }
+
+    private double estimatePlannedTotal(PacketProducerController producer, List<SystemBoxModel> sources) {
+        if (producer == null || sources == null) return 0.0;
+        try {
+            int ppp = producer.getPacketsPerPort();
+            return (double) ppp * Math.max(1, sources.size());
+        } catch (Throwable ignore) {
+            return 0.0;
+        }
+    }
+
+    public void registerOptionalControllers(List<WireModel> wires,
+                                            List<SystemBoxModel> boxes,
+                                            Map<WireModel, SystemBoxModel> destMap) {
+        // Timeouts on wires to prevent stuck packets
+        WireTimeoutController timeout = new WireTimeoutController(wires, lossModel);
+        simulation.register(timeout);
+
+    }
+
+
 }

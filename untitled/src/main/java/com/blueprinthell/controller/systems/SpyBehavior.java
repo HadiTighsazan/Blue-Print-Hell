@@ -1,25 +1,24 @@
 package com.blueprinthell.controller.systems;
 
-import com.blueprinthell.model.PacketLossModel;
-import com.blueprinthell.model.PacketModel;
-import com.blueprinthell.model.SystemBoxModel;
-import com.blueprinthell.model.ProtectedPacket;
-import com.blueprinthell.model.ConfidentialPacket;
-import com.blueprinthell.model.PortModel;
-import com.blueprinthell.model.WireModel;
+import com.blueprinthell.model.*;
 
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 
-public final class SpyBehavior implements SystemBehavior {
 
-    private final SystemBoxModel   box;
+public final class SpyBehavior implements SystemBehavior, Updatable {
+
+    private final SystemBoxModel box;
     private final BehaviorRegistry registry;
-    private final PacketLossModel  lossModel;
-    private final List<WireModel>  wires;
-    private final Map<WireModel, SystemBoxModel> destMap;
+    private final PacketLossModel lossModel;
+    private final List<WireModel> wires;              // for optional reachability checks
+    private final Map<WireModel, SystemBoxModel> destMap; // unused for core behavior but kept for future use
 
-    private final Queue<TransferRequest> pendingTransfers = new ArrayDeque<>();
+    private final Random rnd = new Random();
+
+    // Debug/telemetry
+    private long teleportCount = 0;
+    private long destroyedConfidentialCount = 0;
+    private volatile boolean lastEnabledState = true;
 
     public SpyBehavior(SystemBoxModel box,
                        BehaviorRegistry registry,
@@ -29,136 +28,131 @@ public final class SpyBehavior implements SystemBehavior {
         this.box = Objects.requireNonNull(box, "box");
         this.registry = Objects.requireNonNull(registry, "registry");
         this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
-        this.wires = Objects.requireNonNull(wires, "wires");
-        this.destMap = Objects.requireNonNull(destMap, "destMap");
+        this.wires = Objects.requireNonNullElseGet(wires, ArrayList::new);
+        this.destMap = Objects.requireNonNullElseGet(destMap, HashMap::new);
     }
 
-    @Override
-    public void update(double dt) {
-        processPendingTransfers();
-    }
-
-    @Override
-    public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
-        if (packet instanceof ProtectedPacket) {
-            return;
-        }
-
-        if (packet instanceof ConfidentialPacket) {
-            removeFromBuffer(box, packet);
-            lossModel.increment();
-            return;
-        }
-
-        SystemBoxModel targetSpy = chooseAnotherSpy(box);
-        if (targetSpy == null) {
-            return;
-        }
-
-        if (!removeFromBuffer(box, packet)) {
-            return;
-        }
-
-        pendingTransfers.add(new TransferRequest(packet, targetSpy));
-    }
 
     @Override
     public void onPacketEnqueued(PacketModel packet) {
+        // Backwards-compat overload: treat as programmatic entry (no physical port)
         onPacketEnqueued(packet, null);
     }
 
     @Override
-    public void onEnabledChanged(boolean enabled) {
-        if (!enabled) {
-            pendingTransfers.clear();
+    public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
+        if (packet == null) return;
+
+        // 1) Protected packets are immune
+        if (PacketOps.isProtected(packet)) {
+            return;
         }
-    }
 
-    private void processPendingTransfers() {
-        Iterator<TransferRequest> it = pendingTransfers.iterator();
-        while (it.hasNext()) {
-            TransferRequest req = it.next();
-
-            if (transferToSpyOutput(req.packet, req.targetSpy)) {
-                it.remove();
+        // 2) Confidential packets are destroyed on entry
+        if (PacketOps.isConfidential(packet)) {
+            // Remove from this box and count as loss
+            if (box.removeFromBuffer(packet)) {
+                destroyedConfidentialCount++;
+                lossModel.increment();
             }
+            return;
+        }
+
+        // 3) Teleport once per physical entry only (avoid chains):
+        //    Only react when we know this was an external arrival via an input port
+        if (enteredPort == null || !enteredPort.isInput()) {
+            return; // programmatic re-queue or output-side events -> ignore
+        }
+
+        // 4) Choose a different spy box to teleport to
+        final SystemBoxModel target = chooseAnotherSpy();
+        if (target == null) {
+            return; // no other spies -> no-op
+        }
+
+        // 5) Transfer packet to the target spy (enteredPort == null to avoid re-trigger)
+        if (transferToAnotherSpy(packet, target)) {
+            teleportCount++;
         }
     }
 
-    private boolean transferToSpyOutput(PacketModel packet, SystemBoxModel targetSpy) {
-        List<WireModel> outgoingWires = findOutgoingWires(targetSpy);
-        if (outgoingWires.isEmpty()) {
-            lossModel.increment();
-            return true;
+    @Override
+    public void onEnabledChanged(boolean enabled) {
+        lastEnabledState = enabled;
+        // No special state to clear; behavior is event-driven
+    }
+
+
+    @Override
+    public void update(double dt) {
+        // SpyBehavior is event-driven via onPacketEnqueued. No per-tick work required.
+    }
+
+
+    private SystemBoxModel chooseAnotherSpy() {
+        final List<SystemBoxModel> candidates = new ArrayList<>();
+        try {
+            // registry.view() is expected to expose all (box -> behaviors) mappings
+            for (Map.Entry<SystemBoxModel, List<SystemBehavior>> e : registry.view().entrySet()) {
+                final SystemBoxModel candidate = e.getKey();
+                if (candidate == box) continue;
+                final List<SystemBehavior> bs = e.getValue();
+                if (bs == null) continue;
+                for (SystemBehavior b : bs) {
+                    if (b instanceof SpyBehavior) {
+                        // Optional: require at least one outbound wire to avoid dead-ends
+                        if (hasUsableOutbound(candidate)) {
+                            candidates.add(candidate);
+                        } else {
+                            // fallback: still accept, but lower priority if there are better ones
+                        }
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable ignore) {
+            // Be conservative: if registry.view() contract changes, just return null.
         }
+        if (candidates.isEmpty()) return null;
+        return candidates.get(rnd.nextInt(candidates.size()));
+    }
 
-        WireModel selectedWire = outgoingWires.get(
-                ThreadLocalRandom.current().nextInt(outgoingWires.size())
-        );
+    private boolean hasUsableOutbound(SystemBoxModel system) {
+        // Minimal heuristic: has at least one out port, and ideally a wire starting from it
+        if (system.getOutPorts() == null || system.getOutPorts().isEmpty()) return false;
+        // If wires are provided, check for at least one outgoing wire
+        if (wires != null && !wires.isEmpty()) {
+            for (WireModel w : wires) {
+                if (w == null) continue;
+                PortModel src = w.getSrcPort();
+                if (src != null && system.getOutPorts().contains(src)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true; // no wire list -> assume usable
+    }
 
-        selectedWire.attachPacket(packet, 0.0);
+    /** Transfer packet from this box to the target spy box. */
+    private boolean transferToAnotherSpy(PacketModel packet, SystemBoxModel target) {
+        if (packet == null || target == null) return false;
+        // Remove from source first; if enqueue at target fails, put it back at the front to preserve order
+        if (!box.removeFromBuffer(packet)) {
+            return false; // nothing to do
+        }
+        final boolean ok = target.enqueue(packet, null); // programmatic entry; will not retrigger spy teleport
+        if (!ok) {
+            // Restore to source at the front (best-effort)
+            box.enqueueFront(packet);
+            return false;
+        }
         return true;
     }
 
-    private List<WireModel> findOutgoingWires(SystemBoxModel system) {
-        List<WireModel> outgoing = new ArrayList<>();
-        for (WireModel wire : wires) {
-            if (system.getOutPorts().contains(wire.getSrcPort())) {
-                outgoing.add(wire);
-            }
-        }
-        return outgoing;
-    }
 
-    private SystemBoxModel chooseAnotherSpy(SystemBoxModel self) {
-        List<SystemBoxModel> spies = new ArrayList<>();
-        for (Map.Entry<SystemBoxModel, List<SystemBehavior>> e : registry.view().entrySet()) {
-            SystemBoxModel candidate = e.getKey();
-            if (candidate == self) continue;
 
-            boolean isSpy = false;
-            for (SystemBehavior b : e.getValue()) {
-                if (b instanceof SpyBehavior) {
-                    isSpy = true;
-                    break;
-                }
-            }
-            if (isSpy) {
-                spies.add(candidate);
-            }
-        }
-
-        if (spies.isEmpty()) return null;
-        return spies.get(ThreadLocalRandom.current().nextInt(spies.size()));
-    }
-
-    private boolean removeFromBuffer(SystemBoxModel box, PacketModel target) {
-        Deque<PacketModel> temp = new ArrayDeque<>();
-        PacketModel p;
-        boolean found = false;
-
-        while ((p = box.pollPacket()) != null) {
-            if (!found && p == target) {
-                found = true;
-            } else {
-                temp.addLast(p);
-            }
-        }
-
-        for (PacketModel q : temp) {
-            box.enqueue(q);
-        }
-
-        return found;
-    }
-
-    private static class TransferRequest {
-        final PacketModel packet;
-        final SystemBoxModel targetSpy;
-
-        TransferRequest(PacketModel packet, SystemBoxModel targetSpy) {
-            this.packet = packet;
-            this.targetSpy = targetSpy;
-        }
+    public void clear() {
+        // no internal collections to clear
     }
 }
