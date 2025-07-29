@@ -19,7 +19,7 @@ public final class Config {
     private Config() { /* Prevent instantiation */ }
 
     public static final int    PACKET_SIZE_MULTIPLIER   = 8;
-    public static final int    MAX_BUFFER_CAPACITY      = 5;
+    public static final int    MAX_BUFFER_CAPACITY      = 8;
     public static final int    PORT_SIZE                = 14;
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
@@ -70,19 +70,20 @@ public final class Config {
 
 
     public static final double MSG1_COMPAT_V0       = 80;
-    public static final double MSG1_COMPAT_A        = 140;
+    public static final double MSG1_COMPAT_A        = 120;
     public static final double MSG1_COMPAT_MIN_MUL  = 1.0;
     public static final double MSG1_COMPAT_MAX_MUL  = 1.6;
+
     public static final double MSG1_INCOMPAT_V0      = 160;
-    public static final double MSG1_INCOMPAT_A       = -120;
+    public static final double MSG1_INCOMPAT_A       = -100;
     public static final double MSG1_INCOMPAT_MIN_MUL = 0.4;
     public static final double MSG1_INCOMPAT_MAX_MUL = 1.0;
 
     public static final double MSG2_COMPAT_SPEED   = 110;
     public static final double MSG2_INCOMPAT_SPEED = 220;
-
     public static final double MSG3_COMPAT_SPEED     = 180;
     public static final double MSG3_INCOMPAT_V0      = 120;
+
     public static final double MSG3_INCOMPAT_A       = 90;
     public static final double MSG3_INCOMPAT_MIN_MUL = 1.0;
     public static final double MSG3_INCOMPAT_MAX_MUL = 1.6;
@@ -94,7 +95,7 @@ public final class Config {
     public static final double CONF_VPN_KEEP_DIST_PX = 60;
 
     public static final double L8_BASE_SPEED   = 140;
-    public static final double L8_CURVE_ACCEL  = 100;
+    public static final double L8_CURVE_ACCEL  = 80;
     public static final double L8_MAX_MUL      = 1.8;
 
     public static final double L10_BASE_SPEED      = 160;

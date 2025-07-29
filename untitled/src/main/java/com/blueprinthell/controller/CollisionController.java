@@ -10,7 +10,27 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 
-
+/**
+ * CollisionController — revised on 2025-07-29
+ *
+ * Summary of changes (per discussion):
+ * 1) Immediate removals on collision (per design doc):
+ *    - Non-green vs non-green  => both are removed immediately (loss += 2).
+ *    - Green (MSG1) vs non-green => non-green is removed immediately (loss += 1),
+ *      green is bounced back to source (setReturning=true, no removal).
+ *    - Green vs Green => both bounce back; no removals.
+ *    - Shielded packets remain unaffected as before.
+ *    - Removed the old behavior of adding NOISE_INCREMENT to colliding packets at the moment of collision.
+ *
+ * 2) Tamed impact-wave spillover between wires:
+ *    - IMPACT_RADIUS reduced from 100.0 to 45.0
+ *    - IMPACT_STRENGTH reduced from 1.0 to 0.35
+ *    - Still skips impact noise for green packets that are returning.
+ *
+ * 3) Kept protections:
+ *    - ProtectedPacket (shield>0) is not inserted into broad phase and is not affected by waves.
+ *    - Returning green packets are not removed on noise pass.
+ */
 public class CollisionController implements Updatable {
     private final List<WireModel> wires;
     private final SpatialHashGrid<PacketModel> grid;
@@ -21,11 +41,13 @@ public class CollisionController implements Updatable {
     private static final int    CELL_SIZE        = 50;
     private static final double COLLISION_RADIUS = 18.0;
 
+    // Removed usage at collision time; retained constants for possible future use
     private static final double NOISE_INCREMENT = 0.5;
     private static final double MAX_NOISE       = 5.0;
 
-    private static final double IMPACT_RADIUS    = 100.0;
-    private static final double IMPACT_STRENGTH  = 1.0;
+    // Tamed wave
+    private static final double IMPACT_RADIUS   = 45.0;   // was 100.0
+    private static final double IMPACT_STRENGTH = 0.35;   // was 1.0
 
     private boolean collisionsEnabled = true;
     private boolean impactWaveEnabled = true;
@@ -66,7 +88,7 @@ public class CollisionController implements Updatable {
         List<Point> impactPoints = new ArrayList<>();
         grid.clear();
 
-        // Broad phase: همهٔ بسته‌ها رو وارد گرید می‌کنیم (به‌جز محافظت‌شده‌ها)
+        // Broad phase: insert all unshielded packets into the grid
         for (WireModel w : wires) {
             for (PacketModel p : w.getPackets()) {
                 if (isShielded(p)) continue;
@@ -77,7 +99,7 @@ public class CollisionController implements Updatable {
 
         Set<PacketModel> processed = new HashSet<>();
 
-        // Narrow phase: برخوردها
+        // Narrow phase: detect and resolve collisions
         for (WireModel w : wires) {
             for (PacketModel p : new ArrayList<>(w.getPackets())) {
                 if (processed.contains(p) || p.getProgress() <= 0) continue;
@@ -97,18 +119,38 @@ public class CollisionController implements Updatable {
                         boolean pIsMsg1     = isMsg1(p);
                         boolean otherIsMsg1 = isMsg1(other);
 
-                        // برای MSG1 (سبز): برگشت واقعی روی سیم
-                        if (pIsMsg1)     bounceToSource(p, w);
-                        if (otherIsMsg1) bounceToSource(other, ow);
+                        if (pIsMsg1 && !otherIsMsg1) {
+                            // Green vs non-green: bounce green, remove other
+                            bounceToSource(p, w);
+                            ow.removePacket(other);
+                            lossModel.increment();
+                            processed.add(p);
+                            processed.add(other);
+                        } else if (!pIsMsg1 && otherIsMsg1) {
+                            // Non-green vs green
+                            bounceToSource(other, ow);
+                            w.removePacket(p);
+                            lossModel.increment();
+                            processed.add(p);
+                            processed.add(other);
+                        } else if (pIsMsg1 /*&&*/ && otherIsMsg1) {
+                            // Green vs green: both bounce; no removals
+                            bounceToSource(p, w);
+                            bounceToSource(other, ow);
+                            processed.add(p);
+                            processed.add(other);
+                        } else {
+                            // Non-green vs non-green: remove both immediately
+                            w.removePacket(p);
+                            ow.removePacket(other);
+                            lossModel.incrementBy(2);
+                            processed.add(p);
+                            processed.add(other);
+                        }
 
-                        // به غیر از MSG1، نویز برخورد را اعمال کن
-                        if (!pIsMsg1)     p.increaseNoise(NOISE_INCREMENT);
-                        if (!otherIsMsg1) other.increaseNoise(NOISE_INCREMENT);
+                        // NOTE: we DO NOT add NOISE_INCREMENT to colliders anymore.
 
-                        processed.add(p);
-                        processed.add(other);
-
-                        // نقطهٔ اثر برای موج ضربه
+                        // Impact point for wave (still used to give nearby packets mild noise)
                         int ix = (pPos.x + oPos.x) / 2;
                         int iy = (pPos.y + oPos.y) / 2;
                         impactPoints.add(new Point(ix, iy));
@@ -119,7 +161,6 @@ public class CollisionController implements Updatable {
 
         return impactPoints;
     }
-
 
 
     private boolean isShielded(PacketModel p) {
@@ -133,12 +174,11 @@ public class CollisionController implements Updatable {
 
     public void bounceToSource(PacketModel p, WireModel w) {
         if (w == null || p == null) return;
-        // برگشت روی همان سیم: از سیم حذف نمی‌کنیم؛ progress رو به عقب می‌رود
+        // Bounce on the same wire: do not detach; let progress run backward via motion strategy
         p.setReturning(true);
-        // کنترل صاف‌تر برگشت
         p.setAcceleration(0.0);
-        // اگر لازم داری، نویز را هم ریست کن تا در مسیر برگشت حذف نشود:
-        // p.resetNoise();  // اختیاری
+        // Optional: reset noise so it won't get removed while returning
+        // p.resetNoise();
     }
 
 
@@ -150,9 +190,8 @@ public class CollisionController implements Updatable {
                 double dy = pPos.y - pt.y;
                 double dist = Math.hypot(dx, dy);
                 if (dist <= IMPACT_RADIUS) {
-                    // --- NEW: موجِ برخورد به MSG1 که در حال برگشت است اعمال نشود ---
-                    if (isMsg1(p) && p.isReturning()) continue;  // جلوگیری از حذف ناخواسته
-                    // -------------------------------------------------------------------
+                    // Do not apply wave to returning green packets
+                    if (isMsg1(p) && p.isReturning()) continue;
                     double waveNoise = IMPACT_STRENGTH * (1.0 - dist / IMPACT_RADIUS);
                     p.increaseNoise(waveNoise);
                 }
@@ -167,11 +206,10 @@ public class CollisionController implements Updatable {
             List<PacketModel> doomed = new ArrayList<>();
             for (PacketModel p : w.getPackets()) {
                 if (!(p instanceof ProtectedPacket) && p.getNoise() >= MAX_NOISE) {
-                    // --- NEW: MSG1 در حال برگشت را حذف نکن ---
+                    // Do not remove returning green packets due to noise
                     if (isMsg1(p) && p.isReturning()) {
-                        continue; // معاف از حذف تا به مبدأ برسد
+                        continue;
                     }
-                    // -----------------------------------------
                     doomed.add(p);
                 }
             }
