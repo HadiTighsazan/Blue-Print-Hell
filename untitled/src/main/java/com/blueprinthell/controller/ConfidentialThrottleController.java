@@ -7,10 +7,7 @@ import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
+import java.util.*;
 
 public class ConfidentialThrottleController implements Updatable {
 
@@ -18,6 +15,9 @@ public class ConfidentialThrottleController implements Updatable {
     private Map<WireModel, SystemBoxModel> destMap;
 
     private boolean enabled = true;
+
+    // Phase-4 additions: remember original/base speeds to restore after congestion clears
+    private final Map<PacketModel, Double> baseSpeed = new WeakHashMap<>();
 
     public ConfidentialThrottleController(List<WireModel> wires,
                                           Map<WireModel, SystemBoxModel> destMap) {
@@ -40,12 +40,28 @@ public class ConfidentialThrottleController implements Updatable {
             SystemBoxModel dest = destMap.get(w);
             if (dest == null) continue;
 
-            if (!dest.getBuffer().isEmpty()) {
-                for (PacketModel p : w.getPackets()) {
-                    if (p instanceof ConfidentialPacket) {
-                        double slow = Config.CONF_SLOW_SPEED;
-                        if (p.getSpeed() > slow) {
-                            p.setSpeed(slow);
+            boolean congested = !dest.getBuffer().isEmpty();
+
+            for (PacketModel p : w.getPackets()) {
+                if (!(p instanceof ConfidentialPacket)) continue;
+
+                if (congested) {
+                    // Slow down to configured min; remember base speed once
+                    baseSpeed.putIfAbsent(p, p.getSpeed());
+                    double slow = Config.CONF_SLOW_SPEED;
+                    if (p.getSpeed() > slow) {
+                        p.setSpeed(slow);
+                    }
+                } else {
+                    // Restore original/base speed if we had slowed it before
+                    Double orig = baseSpeed.remove(p);
+                    if (orig != null && orig > 0) {
+                        p.setSpeed(orig);
+                    } else {
+                        // Fallback: if no remembered speed, at least ensure not below base
+                        double min = Math.max(0, p.getBaseSpeed());
+                        if (p.getSpeed() < min) {
+                            p.setSpeed(min);
                         }
                     }
                 }

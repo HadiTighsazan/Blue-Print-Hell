@@ -45,6 +45,7 @@ public class CollisionController implements Updatable {
     private static final double NOISE_INCREMENT = 0.5;
     private static final double MAX_NOISE       = 5.0;
 
+    private static final double GREEN_GREEN_COLLISION_NOISE = 0.15;
     // Tamed wave
     private static final double IMPACT_RADIUS   = 45.0;   // was 100.0
     private static final double IMPACT_STRENGTH = 0.35;   // was 1.0
@@ -119,34 +120,45 @@ public class CollisionController implements Updatable {
                         boolean pIsMsg1     = isMsg1(p);
                         boolean otherIsMsg1 = isMsg1(other);
 
+                        // قبل از if اصلی برای همین برخورد:
+                        boolean lossSfxPlayed = false;
+
                         if (pIsMsg1 && !otherIsMsg1) {
                             // Green vs non-green: bounce green, remove other
                             bounceToSource(p, w);
                             ow.removePacket(other);
                             lossModel.increment();
+                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; } // اضافه
                             processed.add(p);
                             processed.add(other);
+
                         } else if (!pIsMsg1 && otherIsMsg1) {
                             // Non-green vs green
                             bounceToSource(other, ow);
                             w.removePacket(p);
                             lossModel.increment();
+                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; } // اضافه
                             processed.add(p);
                             processed.add(other);
+
                         } else if (pIsMsg1 /*&&*/ && otherIsMsg1) {
-                            // Green vs green: both bounce; no removals
-                            bounceToSource(p, w);
-                            bounceToSource(other, ow);
+
+                            // Green–Green: فقط نویز کم اضافه شود؛ هیچ بازگشتی انجام نشود
+                            p.increaseNoise(GREEN_GREEN_COLLISION_NOISE);
+                            other.increaseNoise(GREEN_GREEN_COLLISION_NOISE);
                             processed.add(p);
                             processed.add(other);
+
                         } else {
                             // Non-green vs non-green: remove both immediately
                             w.removePacket(p);
                             ow.removePacket(other);
                             lossModel.incrementBy(2);
+                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; } // اضافه
                             processed.add(p);
                             processed.add(other);
                         }
+
 
                         // NOTE: we DO NOT add NOISE_INCREMENT to colliders anymore.
 
@@ -232,5 +244,17 @@ public class CollisionController implements Updatable {
 
     public void pauseCollisions()  { this.collisionsEnabled = false; }
     public void resumeCollisions() { this.collisionsEnabled = true;  }
+
     public void setImpactWaveEnabled(boolean enabled) { this.impactWaveEnabled = enabled; }
+
+        private void playLossSfxOnce() {
+                try {
+                       Clip c = ResourceManager.INSTANCE.getClip("impact_thud.wav");
+                       if (c != null) {
+                                c.stop();
+                                c.setFramePosition(0);
+                                c.start();
+                            }
+                    } catch (Exception ignore) {}
+            }
 }

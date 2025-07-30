@@ -10,7 +10,6 @@ import java.util.Deque;
 import java.util.Objects;
 import java.util.Random;
 
-
 public final class MaliciousBehavior implements SystemBehavior {
 
     private final SystemBoxModel box;
@@ -40,16 +39,28 @@ public final class MaliciousBehavior implements SystemBehavior {
     public void onEnabledChanged(boolean enabled) {
     }
 
-
     private void applyRules(PacketModel packet) {
+        if (packet == null) return;
+
+        // --- Phase-2 addition: revert Protected back to original if mapping exists
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
-            return;
+            PacketModel orig = VpnRevertHints.consume(packet);
+            if (orig != null) {
+                replaceInBuffer(packet, orig);
+                // Continue applying malicious rules to the original in the same tick
+                packet = orig;
+            } else {
+                // If no mapping, let Protected pass unaffected per spec
+                return;
+            }
         }
 
+        // If noise is zero, inject 1 unit
         if (packet.getNoise() == 0.0) {
             packet.increaseNoise(1.0);
         }
 
+        // With probability, convert to Trojan (preserving kinematics)
         if (rnd.nextDouble() < trojanProbability) {
             PacketModel trojan = PacketOps.toTrojan(packet);
             if (trojan != packet) {
@@ -58,6 +69,7 @@ public final class MaliciousBehavior implements SystemBehavior {
             }
         }
 
+        // Force incompatible routing for malicious behavior
         RouteHints.setForceIncompatible(packet, true);
     }
 

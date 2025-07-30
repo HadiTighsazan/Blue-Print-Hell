@@ -6,9 +6,10 @@ import com.blueprinthell.model.ProtectedPacket;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.PacketOps;
 import com.blueprinthell.model.PortModel;
+import com.blueprinthell.motion.KinematicsProfile;
+import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
-
 
 public final class VpnBehavior implements SystemBehavior {
 
@@ -37,13 +38,26 @@ public final class VpnBehavior implements SystemBehavior {
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
+        // --- Phase-2 semantics ---
+        // 1) If packet is Protected already: do nothing.
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) return;
 
+        // 2) If packet is Confidential: keep it Confidential but assign VPN profile & tag.
+        if (PacketOps.isConfidential(packet)) {
+            KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
+            // Tag so coinValue=4 applies without further wiring
+            PacketOps.tag(packet, PacketOps.PacketTag.CONFIDENTIAL_VPN);
+            return;
+        }
+
+        // 3) Otherwise (Messenger etc.): convert to Protected with shadow profile and mark mapping for revert.
         PacketModel prot = PacketOps.toProtected(packet, shieldCapacity);
         if (prot == packet) return;
 
         replaceInBuffer(packet, prot);
         protectedMap.put(prot, packet);
+        VpnRevertHints.mark(prot, packet);
+
     }
 
     @Override
@@ -61,8 +75,6 @@ public final class VpnBehavior implements SystemBehavior {
             protectedMap.remove(prot);
         }
     }
-
-
 
     private void replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
         replaceInBufferGeneric(box, oldPkt, newPkt);

@@ -10,7 +10,6 @@ import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
 
-
 public final class DistributorBehavior implements SystemBehavior {
 
     private final SystemBoxModel     box;
@@ -40,17 +39,15 @@ public final class DistributorBehavior implements SystemBehavior {
 
     @Override public void onEnabledChanged(boolean enabled) {  }
 
-
-
     private void splitLarge(LargePacket large) {
-        int parentSize = large.getOriginalSizeUnits();
+        int parentSize   = large.getOriginalSizeUnits();
         int expectedBits = parentSize;
 
         int groupId;
         int colorId;
         if (!large.hasGroup()) {
             colorId = rnd.nextInt(360);
-            groupId  = registry.createGroup(parentSize, expectedBits, colorId);
+            groupId = registry.createGroup(parentSize, expectedBits, colorId);
             large.setGroupInfo(groupId, expectedBits, colorId);
         } else {
             groupId = large.getGroupId();
@@ -71,7 +68,10 @@ public final class DistributorBehavior implements SystemBehavior {
                     parentSize,
                     i,
                     colorId);
-            KinematicsRegistry.setProfile(bit, KinematicsProfile.MSG1);
+
+            // Phase-3: assign a random messenger profile to each bit
+            KinematicsRegistry.setProfile(bit, randomMessengerProfile());
+
             boolean accepted = box.enqueue(bit);
             if (!accepted) {
                 lostBits++;
@@ -98,5 +98,15 @@ public final class DistributorBehavior implements SystemBehavior {
             }
         }
         for (PacketModel q : tmp) box.enqueue(q);
+    }
+
+    // Helper: choose a random messenger profile MSG1/MSG2/MSG3
+    private KinematicsProfile randomMessengerProfile() {
+        int r = rnd.nextInt(3);
+        switch (r) {
+            case 0: return KinematicsProfile.MSG1;
+            case 1: return KinematicsProfile.MSG2;
+            default: return KinematicsProfile.MSG3;
+        }
     }
 }

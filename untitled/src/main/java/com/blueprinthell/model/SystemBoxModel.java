@@ -37,6 +37,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
+
     public SystemBoxModel(int x, int y, int width, int height,
                           List<PortShape> inShapes,
                           List<PortShape> outShapes) {
