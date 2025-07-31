@@ -1,6 +1,5 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.*;
 import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
@@ -14,11 +13,10 @@ import java.util.*;
 
 public class SimulationRegistrar {
 
-    // Core engines & shared models
     private final SimulationController simulation;
-    private final ScreenController screenController; // may be null in headless tests
-    private final CollisionController collisionController; // provided by caller
-    private final PacketRenderController packetRenderer;   // provided by caller
+    private final ScreenController screenController;
+    private final CollisionController collisionController;
+    private final PacketRenderController packetRenderer;
 
     private final ScoreModel scoreModel;
     private final CoinModel coinModel;
@@ -29,11 +27,9 @@ public class SimulationRegistrar {
     private final HudView hudView;
     private final LevelManager levelManager;
 
-    // Behavior coordination
     private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
     private final LargeGroupRegistry largeGroupRegistry = new LargeGroupRegistry();
 
-    // Level specs (optional, used to decide behavior kinds per box)
     private List<LevelDefinition.BoxSpec> currentBoxSpecs = Collections.emptyList();
 
     public SimulationRegistrar(SimulationController simulation,
@@ -48,7 +44,7 @@ public class SimulationRegistrar {
                                HudView hudView,
                                LevelManager levelManager) {
         this.simulation = Objects.requireNonNull(simulation, "simulation");
-        this.screenController = screenController; // may be null
+        this.screenController = screenController;
         this.collisionController = Objects.requireNonNull(collisionController, "collisionController");
         this.packetRenderer = Objects.requireNonNull(packetRenderer, "packetRenderer");
         this.scoreModel = Objects.requireNonNull(scoreModel, "scoreModel");
@@ -60,19 +56,13 @@ public class SimulationRegistrar {
         this.levelManager = Objects.requireNonNull(levelManager, "levelManager");
     }
 
-    // ---------------------------------------------------------------------
-    // Level spec bindings
-    // ---------------------------------------------------------------------
 
-    /** Injects BoxSpecs of the current level so registrar can attach behaviors per system kind. */
+
     public void setCurrentBoxSpecs(List<LevelDefinition.BoxSpec> specs) {
         this.currentBoxSpecs = (specs != null) ? specs : Collections.emptyList();
     }
 
-    /**
-     * Finds a BoxSpec that matches the given box by geometry (x,y,width,height).
-     * If your BoxSpec later exposes IDs, switch to ID-based mapping.
-     */
+
     public LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
         if (box == null || currentBoxSpecs == null) return null;
         for (var spec : currentBoxSpecs) {
@@ -82,7 +72,6 @@ public class SimulationRegistrar {
                     return spec;
                 }
             } catch (Throwable ignore) {
-                // If spec API differs, callers can override setCurrentBoxSpecs with richer info in future.
             }
         }
         return null;
@@ -92,14 +81,7 @@ public class SimulationRegistrar {
         return behaviorRegistry;
     }
 
-    // ---------------------------------------------------------------------
-    // Registration pipeline
-    // ---------------------------------------------------------------------
 
-    /**
-     * Registers all controllers and behaviors into the simulation loop.
-     * Ordering matters: behavior adapters -> routers -> dispatchers -> monitors/HUD -> renderer.
-     */
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
                             Map<WireModel, SystemBoxModel> destMap,
@@ -112,7 +94,6 @@ public class SimulationRegistrar {
         Objects.requireNonNull(wires, "wires");
         Objects.requireNonNull(destMap, "destMap");
 
-        // --- 0) Register any extra systems first and memo to avoid double-registering
         Set<Updatable> already = new HashSet<>();
         if (extraSystems != null) {
             for (Updatable u : extraSystems) {
@@ -123,7 +104,6 @@ public class SimulationRegistrar {
             }
         }
 
-        // --- 0.5) Build Port -> Box mapping and inject into collision & wire models
         Map<PortModel, SystemBoxModel> portToBoxMap = new HashMap<>();
         for (SystemBoxModel b : boxes) {
             for (PortModel p : b.getInPorts()) portToBoxMap.put(p, b);
@@ -136,17 +116,14 @@ public class SimulationRegistrar {
             WireModel.setSourceInputPorts(sources);
         }
 
-        // --- 1) Register boxes themselves (timers/enable flip etc.)
         for (SystemBoxModel b : boxes) {
             if (!already.contains(b)) simulation.register(b);
         }
 
-        // --- 2) Behaviors (via adapters), registered BEFORE routers ---
         for (SystemBoxModel box : boxes) {
             attachBehaviorsForBox(box, boxes, wires, destMap);
         }
 
-        // --- 3) Routers per box ---
         for (SystemBoxModel box : boxes) {
             if (!box.getOutPorts().isEmpty()) {
                 PacketRouterController router = new PacketRouterController(box, wires, destMap, lossModel);
@@ -154,23 +131,19 @@ public class SimulationRegistrar {
             }
         }
 
-        // --- 4) Producer/Dispatcher ---
         if (producer != null) {
             simulation.register(producer);
         }
         PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
         simulation.register(dispatcher);
 
-        // --- 5) Consumer at sink (if any) ---
         if (sink != null) {
             PacketConsumerController consumer = new PacketConsumerController(sink, scoreModel, coinModel);
             simulation.register(consumer);
         }
 
-        // --- 6) Optional controllers and monitors ---
         registerOptionalControllers(wires, boxes, destMap);
 
-        // Completion & loss monitors depending on planned packets
         int plannedTotal = (sources != null && producer != null)
                 ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
                 : 0;
@@ -178,7 +151,7 @@ public class SimulationRegistrar {
             LossMonitorController lossMonitor = new LossMonitorController(
                     lossModel,
                     plannedTotal,
-                    0.5, // threshold ratio
+                    0.5,
                     simulation,
                     screenController,
                     () -> {
@@ -195,7 +168,6 @@ public class SimulationRegistrar {
             simulation.register(detector);
         }
 
-        // --- 7) Snapshot/HUD/render/collision ---
         SnapshotController snapshotCtrl = new SnapshotController(
                 boxes, wires, scoreModel, coinModel, usageModel, lossModel, snapshotManager);
         simulation.register(snapshotCtrl);
@@ -208,8 +180,7 @@ public class SimulationRegistrar {
 
     }
 
-    // Attach behaviors to a single box. Spy uses adapter path. Others are registered similarly via adapters
-    // to avoid double-calling newEntries push path.
+
     private void attachBehaviorsForBox(SystemBoxModel box,
                                        List<SystemBoxModel> allBoxes,
                                        List<WireModel> wires,
@@ -217,21 +188,19 @@ public class SimulationRegistrar {
         LevelDefinition.BoxSpec spec = findBoxSpec(box);
         SystemKind kind = null;
         try {
-            // Prefer direct spec.kind() when available
             if (spec != null) {
                 kind = spec.kind();
             }
         } catch (Throwable ignore) {
-            // If API differs, default to NORMAL
         }
-        if (kind == null) kind = SystemKind.NORMAL; // sensible default
+        if (kind == null) kind = SystemKind.NORMAL;
 
         switch (kind) {
             case SPY: {
                 SpyBehavior spy = new SpyBehavior(box, behaviorRegistry, lossModel, wires, destMap);
                 behaviorRegistry.register(box, spy);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, spy);
-                simulation.register(adapter); // BEFORE routers
+                simulation.register(adapter);
                 break;
             }
             case MALICIOUS: {
@@ -293,7 +262,11 @@ public class SimulationRegistrar {
     public void registerOptionalControllers(List<WireModel> wires,
                                             List<SystemBoxModel> boxes,
                                             Map<WireModel, SystemBoxModel> destMap) {
-        // Timeouts on wires to prevent stuck packets
+        // Throttle برای Confidential-4
+        ConfidentialThrottleController throttle = new ConfidentialThrottleController(wires, destMap);
+        throttle.setEnabled(true);
+        simulation.register(throttle);
+
         WireTimeoutController timeout = new WireTimeoutController(wires, lossModel);
         simulation.register(timeout);
 

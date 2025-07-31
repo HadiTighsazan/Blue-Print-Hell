@@ -29,6 +29,7 @@ public class MainController {
             gameController.setScreenController(screenController);
 
 
+
             SimulationController simController = gameController.getSimulation();
             PacketProducerController producerController = gameController.getProducerController();
             WireModel.setSimulationController(simController);

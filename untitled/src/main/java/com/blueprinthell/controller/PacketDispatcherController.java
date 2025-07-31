@@ -44,7 +44,10 @@ public class PacketDispatcherController implements Updatable {
                 boolean accepted = dest.enqueue(packet, dstPort);
 
                 if (accepted) {
-
+                    int coins = PacketOps.coinValueOnEntry(packet); // ← به جای coinValue(...)
+                    if (coins > 0) {
+                        coinModel.add(coins);
+                    }
                 } else {
                     lossModel.increment();
                 }

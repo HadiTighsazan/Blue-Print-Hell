@@ -36,18 +36,25 @@ public class PacketView extends GameObjectView<PacketModel> {
                 Polygon poly = ShapeUtils.regularPolygon(sides, w, h, Config.POLY_INSET);
                 g2.fillPolygon(poly);
 
-                // (اختیاری) خط دور برای تمایز
                 g2.setColor(Config.COLOR_BOX_BORDER);
                 g2.drawPolygon(poly);
 
-                // Badgeها
                 drawPacketBadges(g2, model, w, h);
                 return; // مسیر Large تمام شد
             }
 
-            // ===== رندر قدیمی برای انواع معمولی =====
+            // ===== رندر انواع معمولی + Protected با شفافیت پایین =====
             int s = Math.min(w, h);
 
+            // اعمال شفافیت پایین فقط برای بدنه اگر Protected باشد
+            final boolean isProtected = (model instanceof ProtectedPacket);
+            Composite savedComposite = null;
+            if (isProtected) {
+                savedComposite = g2.getComposite();
+                g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+            }
+
+            // رنگ بر اساس نوع
             switch (model.getType()) {
                 case SQUARE:
                     g2.setColor(Config.COLOR_PACKET_SQUARE);
@@ -62,6 +69,7 @@ public class PacketView extends GameObjectView<PacketModel> {
                     g2.setColor(Config.COLOR_PACKET_SQUARE);
             }
 
+            // رسم شکل
             switch (model.getType()) {
                 case SQUARE:
                     g2.fillRect(0, 0, s, s);
@@ -74,6 +82,11 @@ public class PacketView extends GameObjectView<PacketModel> {
                 case CIRCLE:
                     g2.fillOval(0, 0, s, s);
                     break;
+            }
+
+            // بازگرداندن کامپوزیت تا Badgeها واضح بمانند
+            if (savedComposite != null) {
+                g2.setComposite(savedComposite);
             }
 
             // Badgeها برای پکت‌های غیر-Large

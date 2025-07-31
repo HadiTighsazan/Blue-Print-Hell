@@ -1,13 +1,12 @@
 package com.blueprinthell.motion;
 
 import com.blueprinthell.model.PacketModel;
-import com.blueprinthell.model.PacketType;
 import com.blueprinthell.model.ProtectedPacket;
 import com.blueprinthell.model.ConfidentialPacket;
+import com.blueprinthell.model.PacketOps;
 import com.blueprinthell.model.WireModel;
 
 import java.util.*;
-
 
 public final class MotionStrategyFactory {
 
@@ -15,21 +14,38 @@ public final class MotionStrategyFactory {
 
     private MotionStrategyFactory() {}
 
-
     public static MotionStrategy create(PacketModel packet, boolean compatible) {
         Objects.requireNonNull(packet, "packet");
 
-        KinematicsProfile profile = ensureProfile(packet);
-        ProfileParams params      = profile.getParams();
+        // اگر Confidential است، پروفایل را بر اساس VPN-tag ست/تأیید کنیم
+        if (packet instanceof ConfidentialPacket) {
+            KinematicsProfile prof = PacketOps.isConfidentialVpn(packet)
+                    ? KinematicsProfile.CONFIDENTIAL_VPN
+                    : KinematicsProfile.CONFIDENTIAL;
+            KinematicsRegistry.setProfile(packet, prof);
+        }
 
+        // تصادفی‌سازی پروفایل پیام‌رسان برای ProtectedPacket روی هر سیم (بدون ثبت دائمی)
+        if (packet instanceof ProtectedPacket) {
+            KinematicsProfile randomProfile = KinematicsProfile.randomMessenger(RAND);
+            MotionRule rule = profileToRule(randomProfile, compatible);
+            double startMul = packet.consumeStartSpeedMul();
+            if (startMul != 1.0) {
+                rule = scaleStartSpeed(rule, startMul);
+            }
+            return buildStrategyFromRule(rule, randomProfile.getParams());
+        }
+
+        KinematicsProfile profile = ensureProfile(packet);
+        ProfileParams params = profile.getParams();
         MotionRule rule = compatible ? params.compatRule : params.incompatRule;
 
         if (profile == KinematicsProfile.PROTECTED_SHADOW && params.randomMessengerProfile) {
             KinematicsProfile rndProf = KinematicsProfile.randomMessenger(RAND);
             KinematicsRegistry.setProfile(packet, rndProf);
             profile = rndProf;
-            params  = rndProf.getParams();
-            rule    = compatible ? params.compatRule : params.incompatRule;
+            params = rndProf.getParams();
+            rule = compatible ? params.compatRule : params.incompatRule;
         }
 
         double startMul = packet.consumeStartSpeedMul();
@@ -37,31 +53,38 @@ public final class MotionStrategyFactory {
             rule = scaleStartSpeed(rule, startMul);
         }
 
-        return switch (rule.mode) {
-            case CONST           -> new ConstFromRuleStrategy(rule);
-            case ACCEL           -> new LinearAccelStrategy(rule);
-            case DECEL           -> new LinearAccelStrategy(rule);
-            case CURVE_ACCEL     -> new CurveAccelWrapper(rule);
-            case KEEP_DISTANCE   -> new KeepDistanceStrategy(rule, params.keepDistancePx);
-            case DRIFT           -> new DriftStrategy(rule, params.driftStepDistancePx, params.driftOffsetPx);
-            case RANDOM_OF_MESSENGER -> new ConstFromRuleStrategy(rule);
-        };
+        return buildStrategyFromRule(rule, params);
     }
-
-
 
     private static MotionRule scaleStartSpeed(MotionRule rule, double mul) {
         if (mul == 1.0) return rule;
         double s = rule.speedStart * mul;
 
         return switch (rule.mode) {
-            case CONST             -> MotionRule.constSpeed(s);
-            case ACCEL             -> MotionRule.accel(s, rule.accel, rule.minMul, rule.maxMul);
-            case DECEL             -> MotionRule.decel(s, Math.abs(rule.accel), rule.minMul, rule.maxMul);
-            case CURVE_ACCEL       -> MotionRule.curveAccel(s, rule.accel, rule.maxMul);
-            case KEEP_DISTANCE     -> MotionRule.keepDistance(s);
-            case DRIFT             -> MotionRule.drift(s);
+            case CONST -> MotionRule.constSpeed(s);
+            case ACCEL -> MotionRule.accel(s, rule.accel, rule.minMul, rule.maxMul);
+            case DECEL -> MotionRule.decel(s, Math.abs(rule.accel), rule.minMul, rule.maxMul);
+            case CURVE_ACCEL -> MotionRule.curveAccel(s, rule.accel, rule.maxMul);
+            case KEEP_DISTANCE -> MotionRule.keepDistance(s);
+            case DRIFT -> MotionRule.drift(s);
             case RANDOM_OF_MESSENGER -> rule;
+        };
+    }
+
+    private static MotionRule profileToRule(KinematicsProfile profile, boolean compatible) {
+        ProfileParams params = profile.getParams();
+        return compatible ? params.compatRule : params.incompatRule;
+    }
+
+    private static MotionStrategy buildStrategyFromRule(MotionRule rule, ProfileParams params) {
+        return switch (rule.mode) {
+            case CONST -> new ConstFromRuleStrategy(rule);
+            case ACCEL -> new LinearAccelStrategy(rule);
+            case DECEL -> new LinearAccelStrategy(rule);
+            case CURVE_ACCEL -> new CurveAccelWrapper(rule);
+            case KEEP_DISTANCE -> new KeepDistanceStrategy(rule, params.keepDistancePx);
+            case DRIFT -> new DriftStrategy(rule, params.driftStepDistancePx, params.driftOffsetPx);
+            case RANDOM_OF_MESSENGER -> new ConstFromRuleStrategy(rule);
         };
     }
 
@@ -73,22 +96,17 @@ public final class MotionStrategyFactory {
 
         if (p instanceof ProtectedPacket) {
             existing = KinematicsProfile.PROTECTED_SHADOW;
-        }
-        else if (p instanceof ConfidentialPacket) {
+        } else if (p instanceof ConfidentialPacket) {
             existing = KinematicsProfile.CONFIDENTIAL;
-        }
-        else {
+        } else {
             int su = p.getType().sizeUnits;
             if (su == 1) {
                 existing = KinematicsProfile.MSG1;
-            }
-            else if (su == 2) {
+            } else if (su == 2) {
                 existing = KinematicsProfile.MSG2;
-            }
-            else if (su == 3) {
+            } else if (su == 3) {
                 existing = KinematicsProfile.MSG3;
-            }
-            else {
+            } else {
                 existing = KinematicsProfile.MSG2;
             }
         }
@@ -97,14 +115,15 @@ public final class MotionStrategyFactory {
         return existing;
     }
 
-
-
     private static final class ConstFromRuleStrategy implements MotionStrategy {
         private final double speed;
+
         ConstFromRuleStrategy(MotionRule rule) {
             this.speed = Math.max(1.0, rule.speedStart);
         }
-        @Override public void update(PacketModel packet, double dt) {
+
+        @Override
+        public void update(PacketModel packet, double dt) {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
             double len = wire.getLength();
@@ -126,12 +145,13 @@ public final class MotionStrategyFactory {
 
         LinearAccelStrategy(MotionRule rule) {
             this.startSpeed = rule.speedStart;
-            this.accel      = rule.accel;
-            this.minMul     = rule.minMul;
-            this.maxMul     = rule.maxMul;
+            this.accel = rule.accel;
+            this.minMul = rule.minMul;
+            this.maxMul = rule.maxMul;
         }
 
-        @Override public void update(PacketModel packet, double dt) {
+        @Override
+        public void update(PacketModel packet, double dt) {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
             if (!init) {
@@ -139,7 +159,7 @@ public final class MotionStrategyFactory {
                 init = true;
             }
             double base = packet.getBaseSpeed();
-            double spd  = packet.getSpeed() + accel * dt;
+            double spd = packet.getSpeed() + accel * dt;
             double minV = base * minMul;
             double maxV = base * maxMul;
             if (spd < minV) spd = minV;
@@ -155,10 +175,13 @@ public final class MotionStrategyFactory {
 
     private static final class CurveAccelWrapper implements MotionStrategy {
         private final AccelOnCurveStrategy delegate;
+
         CurveAccelWrapper(MotionRule rule) {
             this.delegate = new AccelOnCurveStrategy(rule.accel, rule.maxMul);
         }
-        @Override public void update(PacketModel packet, double dt) {
+
+        @Override
+        public void update(PacketModel packet, double dt) {
             delegate.update(packet, dt);
         }
     }
@@ -169,10 +192,11 @@ public final class MotionStrategyFactory {
 
         KeepDistanceStrategy(MotionRule rule, double gap) {
             this.baseSpeed = rule.speedStart;
-            this.minGapPx  = gap;
+            this.minGapPx = gap;
         }
 
-        @Override public void update(PacketModel packet, double dt) {
+        @Override
+        public void update(PacketModel packet, double dt) {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
             double speed = baseSpeed;
@@ -208,11 +232,12 @@ public final class MotionStrategyFactory {
 
         DriftStrategy(MotionRule rule, double stepDist, double offsetPx) {
             this.baseSpeed = rule.speedStart;
-            this.stepDist  = stepDist;
-            this.offsetPx  = offsetPx;
+            this.stepDist = stepDist;
+            this.offsetPx = offsetPx;
         }
 
-        @Override public void update(PacketModel packet, double dt) {
+        @Override
+        public void update(PacketModel packet, double dt) {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
             double len = wire.getLength();

@@ -56,7 +56,7 @@ public final class PacketOps {
         return dst;
     }
 
-    private static void copyRuntimeState(PacketModel src, PacketModel dst) {
+    static void copyRuntimeState(PacketModel src, PacketModel dst) {
         if (src.getCurrentWire() != null) {
             dst.attachToWire(src.getCurrentWire(), src.getProgress());
         } else {
@@ -85,13 +85,48 @@ public final class PacketOps {
         return conf;
     }
 
+    public static PacketModel toConfidentialVpn(PacketModel original) {
+        Objects.requireNonNull(original, "packet");
+
+        // اگر از قبل Confidential + VPN-tag بود، همان را برگردان
+        if (isConfidentialVpn(original)) return original;
+
+        // اگر از قبل Confidential-4 است، از روی ابعاد فعلی مقیاس 6/4 بدهیم
+        if (isConfidential(original)) {
+            PacketModel conf6 = clonePlain(original);
+            // scale 6/4 نسبت به ابعاد فعلی
+            conf6.setWidth((int) Math.round(original.getWidth()  * (6.0 / 4.0)));
+            conf6.setHeight((int) Math.round(original.getHeight() * (6.0 / 4.0)));
+            tag(conf6, PacketTag.CONFIDENTIAL_VPN);
+            KinematicsRegistry.setProfile(conf6, KinematicsProfile.CONFIDENTIAL_VPN);
+            return conf6;
+        }
+
+        // در غیر این صورت از روی پیام‌رسان/پکت ورودی بسازیم (مثل wrap معمولی، اما 6 واحد)
+        PacketModel conf = ConfidentialPacket.wrap(original);
+
+        int suOrig = Math.max(1, original.getType().sizeUnits);
+        int w = original.getWidth();
+        int h = original.getHeight();
+        if (w > 0 && h > 0) {
+            double pxPerUnitW = (double) w / suOrig;
+            double pxPerUnitH = (double) h / suOrig;
+            conf.setWidth((int) Math.round(pxPerUnitW * 6));
+            conf.setHeight((int) Math.round(pxPerUnitH * 6));
+        }
+
+        tag(conf, PacketTag.CONFIDENTIAL_VPN);
+        KinematicsRegistry.setProfile(conf, KinematicsProfile.CONFIDENTIAL_VPN);
+        return conf;
+    }
+
     public static boolean isMessenger(PacketModel p) {
+        if (p instanceof ProtectedPacket) return true;  // Protected از جنس پیام‌رسان تلقی شود
         KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
         return prof == MSG1
                 || prof == MSG2
                 || prof == MSG3;
     }
-
     /* ---------------- ADDITIONS (Phase-1) ---------------- */
 
     /** Lightweight tagging so VPN can mark confidential variants without new fields on models. */
@@ -122,15 +157,7 @@ public final class PacketOps {
         return isConfidential(p) && hasTag(p, PacketTag.CONFIDENTIAL_VPN);
     }
 
-    /**
-     * Coin value logic according to design:
-     * - Protected: 5
-     * - Confidential (normal): 3
-     * - Confidential (VPN-tagged): 4
-     * - Large: originalSizeUnits (e.g., 8 or 10)
-     * - Messengers by type: MSG1→1, MSG2→2, MSG3→3
-     * - Otherwise: 0
-     */
+
     public static int coinValue(PacketModel p) {
         if (p == null) return 0;
 
@@ -164,4 +191,28 @@ public final class PacketOps {
 
         return 0;
     }
+
+    public static int coinValueOnEntry(PacketModel p) {
+        if (isProtected(p)) return 5;
+        if (isConfidentialVpn(p)) return 4;
+        if (isConfidential(p)) return 3;
+        return 0;
+    }
+
+    public static int coinValueOnConsume(PacketModel p) {
+        if (isProtected(p) || isConfidential(p)) return 0;
+
+        // Large روی مصرف: سکه = اندازهٔ اصلی
+        if (isLarge(p)) {
+            return Math.max(0, ((LargePacket) p).getOriginalSizeUnits());
+        }
+
+        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
+        if (prof == KinematicsProfile.MSG1) return 1;
+        if (prof == KinematicsProfile.MSG2) return 2;
+        if (prof == KinematicsProfile.MSG3) return 3;
+
+        return 0;
+    }
+
 }

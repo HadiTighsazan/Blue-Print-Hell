@@ -14,10 +14,23 @@ public class ConfidentialPacket extends PacketModel implements Serializable {
 
 
     public static ConfidentialPacket wrap(PacketModel original) {
-        Objects.requireNonNull(original, "original packet");
-        ConfidentialPacket cp = new ConfidentialPacket(original.getType(), original.getBaseSpeed());
-        copyRuntimeState(original, cp);
-        return cp;
+        Objects.requireNonNull(original, "packet");
+        ConfidentialPacket out = new ConfidentialPacket(original.getType(), original.getBaseSpeed());
+
+        // کپی state ران‌تایم (سیم/پیشرفت/سرعت/شتاب/نویز)
+        copyRuntimeState(original, out);
+
+        // --- اندازه: 4 واحد مطلق نسبت به واحدِ نوع اولیه ---
+        int suOrig = Math.max(1, original.getType().sizeUnits);
+        int w = original.getWidth();
+        int h = original.getHeight();
+        if (w > 0 && h > 0) {
+            double pxPerUnitW = (double) w / suOrig;
+            double pxPerUnitH = (double) h / suOrig;
+            out.setWidth((int) Math.round(pxPerUnitW * 4));
+            out.setHeight((int) Math.round(pxPerUnitH * 4));
+        }
+        return out;
     }
 
 

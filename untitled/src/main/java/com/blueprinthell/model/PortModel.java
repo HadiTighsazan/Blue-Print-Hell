@@ -2,9 +2,9 @@ package com.blueprinthell.model;
 
 import com.blueprinthell.config.Config;
 import java.io.Serializable;
+import com.blueprinthell.model.PacketOps; // بالای فایل
 
-import static com.blueprinthell.model.PortCompatibility.canConnect;
-import static com.blueprinthell.model.PortCompatibility.portAcceptsPacket;
+
 
 
 public class PortModel extends GameObjectModel implements Serializable {
@@ -33,16 +33,19 @@ public class PortModel extends GameObjectModel implements Serializable {
 
 
     public boolean isCompatible(PacketModel packet) {
+        if (PacketOps.isConfidential(packet)) {
+            return true; // محرمانه‌ها خارج از منطق سازگاری پورت‌ها هستند
+        }
         PacketType t = packet.getType();
         return switch (this.shape) {
             case SQUARE   -> (t == PacketType.SQUARE || t == PacketType.CIRCLE);
             case TRIANGLE -> (t == PacketType.TRIANGLE);
             case CIRCLE   -> (t == PacketType.CIRCLE);
-                    };
-            }
+        };
+    }
     public boolean isCompatibleWith(PortModel other) {
         return !this.input && other.input;
-            }
+    }
 
 
     public void setShape(PortShape newShape){
