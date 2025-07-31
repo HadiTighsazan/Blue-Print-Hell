@@ -1,8 +1,6 @@
 package com.blueprinthell.controller.systems;
 
 
-
-
 public enum SystemKind {
     NORMAL,
     SPY,
@@ -10,5 +8,6 @@ public enum SystemKind {
     VPN,
     ANTI_TROJAN,
     DISTRIBUTOR,
-    MERGER
+    MERGER,
+    PORT_RANDOMIZER
 }

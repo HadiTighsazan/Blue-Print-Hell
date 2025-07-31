@@ -27,6 +27,7 @@ public final class PortRandomizerBehavior implements SystemBehavior {
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (!(packet instanceof LargePacket)) return;
+
         if (enteredPort != null && belongsToBox(enteredPort)) {
             mutateShape(enteredPort);
         } else {
@@ -39,10 +40,10 @@ public final class PortRandomizerBehavior implements SystemBehavior {
     }
 
 
-
     private boolean belongsToBox(PortModel p) {
         return box.getInPorts().contains(p) || box.getOutPorts().contains(p);
     }
+
 
     private void randomizeOnePort() {
         List<PortModel> ins = box.getInPorts();
@@ -56,14 +57,17 @@ public final class PortRandomizerBehavior implements SystemBehavior {
         }
     }
 
+
     private void mutateShape(PortModel port) {
         PortShape current = port.getShape();
         PortShape[] vals = PortShape.values();
         if (vals.length <= 1) return;
+
         PortShape next;
         do {
             next = vals[rnd.nextInt(vals.length)];
         } while (next == current);
+
         port.setShape(next);
     }
 }

@@ -199,6 +199,7 @@ public class SimulationRegistrar {
     }
 
 
+
     private void attachBehaviorsForBox(SystemBoxModel box,
                                        List<SystemBoxModel> allBoxes,
                                        List<WireModel> wires,
@@ -253,6 +254,13 @@ public class SimulationRegistrar {
                 MergerBehavior mb = new MergerBehavior(box, largeGroupRegistry, lossModel);
                 behaviorRegistry.register(box, mb);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, mb);
+                simulation.register(adapter);
+                break;
+            }
+            case PORT_RANDOMIZER: {
+                PortRandomizerBehavior pr = new PortRandomizerBehavior(box);
+                behaviorRegistry.register(box, pr);
+                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, pr);
                 simulation.register(adapter);
                 break;
             }

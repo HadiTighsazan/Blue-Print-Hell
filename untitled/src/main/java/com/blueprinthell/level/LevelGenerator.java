@@ -72,7 +72,8 @@ public final class LevelGenerator {
                     sx, sy, BOX_W, BOX_H,
                     sinkIns, List.of(),
                     false, true));
-        } while (!isConnected(boxes));
+        }
+        while (!isConnected(boxes));
 
         boxes = balancePortCounts(boxes);
         boxes = layoutBoxes(boxes);

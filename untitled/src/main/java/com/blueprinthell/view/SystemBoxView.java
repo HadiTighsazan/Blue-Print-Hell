@@ -94,24 +94,27 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
         return model;
     }
 
-    // --- helper: نگاشت enum به متن نمایشی ---
-    private static String toDisplayName(SystemKind kind) {
-        if (kind == null) return "Normal";
-        switch (kind) {
-            case NORMAL:       return "Normal";
-            case VPN:          return "Vpn";
-            case SPY:          return "Spy";
-            case MALICIOUS:    return "Malicious";
-            case DISTRIBUTOR:  return "Distributor";
-            case MERGER:       return "Merger";
-            case ANTI_TROJAN:  return "Anti‑Trojan";
-            default:           return capitalize(kind.name());
-        }
-    }
+
 
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         s = s.toLowerCase().replace('_', ' ');
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+
+    private static String toDisplayName(SystemKind kind) {
+        if (kind == null) return "Normal";
+        switch (kind) {
+            case NORMAL:           return "Normal";
+            case VPN:              return "Vpn";
+            case SPY:              return "Spy";
+            case MALICIOUS:        return "Malicious";
+            case DISTRIBUTOR:      return "Distributor";
+            case MERGER:           return "Merger";
+            case ANTI_TROJAN:      return "Anti‑Trojan";
+            case PORT_RANDOMIZER:  return "Port‑Randomizer";
+            default:               return capitalize(kind.name());
+        }
     }
 }
