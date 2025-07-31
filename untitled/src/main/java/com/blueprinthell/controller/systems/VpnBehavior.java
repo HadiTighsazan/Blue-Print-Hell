@@ -5,11 +5,14 @@ import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.ProtectedPacket;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.PacketOps;
+import com.blueprinthell.model.PacketOps.PacketTag;
 import com.blueprinthell.model.PortModel;
+import com.blueprinthell.model.ConfidentialPacket;
 import com.blueprinthell.motion.KinematicsProfile;
 import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
+import java.util.Objects;
 
 public final class VpnBehavior implements SystemBehavior {
 
@@ -17,6 +20,7 @@ public final class VpnBehavior implements SystemBehavior {
     private final double shieldCapacity;
 
     private final Map<PacketModel, PacketModel> protectedMap = new WeakHashMap<>();
+    private final VpnRevertHints revertHints = new VpnRevertHints();
 
     public VpnBehavior(SystemBoxModel box) {
         this(box, Config.DEFAULT_SHIELD_CAPACITY);
@@ -38,41 +42,56 @@ public final class VpnBehavior implements SystemBehavior {
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
-        // --- Phase-2 semantics ---
-        // 1) If packet is Protected already: do nothing.
-        if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) return;
+        if (packet == null) return;
 
-        // 2) If packet is Confidential: keep it Confidential but assign VPN profile & tag.
-        if (PacketOps.isConfidential(packet)) {
-            KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
-            // Tag so coinValue=4 applies without further wiring
-            PacketOps.tag(packet, PacketOps.PacketTag.CONFIDENTIAL_VPN);
+        if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
             return;
         }
 
-        // 3) Otherwise (Messenger etc.): convert to Protected with shadow profile and mark mapping for revert.
-        PacketModel prot = PacketOps.toProtected(packet, shieldCapacity);
-        if (prot == packet) return;
+        if (PacketOps.isMessenger(packet)) {
+            PacketModel prot = PacketOps.toProtected(packet, shieldCapacity);
+            revertHints.mark(prot, packet);
+            /* ADD START */ VpnRevertHints.markGlobal(prot, packet); /* ADD END */
+            replaceInBuffer(packet, prot);
+            protectedMap.put(prot, packet);
+            return;
+        }
 
-        replaceInBuffer(packet, prot);
-        protectedMap.put(prot, packet);
-        VpnRevertHints.mark(prot, packet);
+        if (packet instanceof ConfidentialPacket && !PacketOps.isConfidentialVpn(packet)) {
+            PacketModel conf6 = PacketOps.toConfidentialVpn(packet);
+            revertHints.mark(conf6, packet);
+             VpnRevertHints.markGlobal(conf6, packet);
+            replaceInBuffer(packet, conf6);
+            return;
+        }
+
+        if (PacketOps.isConfidential(packet)) {
+            KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
+            PacketOps.tag(packet, PacketTag.CONFIDENTIAL_VPN);
+            return;
+        }
 
     }
 
     @Override
     public void onEnabledChanged(boolean enabled) {
-        if (enabled) return;
+        if (!enabled) {
+            Queue<PacketModel> buf = box.getBuffer();
+            if (buf == null || buf.isEmpty()) return;
 
-        List<Map.Entry<PacketModel, PacketModel>> snapshot = new ArrayList<>(protectedMap.entrySet());
-        for (Map.Entry<PacketModel, PacketModel> e : snapshot) {
-            PacketModel prot = e.getKey();
-            PacketModel orig = e.getValue();
-
-            if (!replaceInBufferIfPresent(box, prot, orig)) {
-                VpnRevertHints.mark(prot, orig);
+            List<PacketModel> toReplace = new ArrayList<>(buf);
+            for (PacketModel p : toReplace) {
+                PacketModel orig = revertHints.consume(p);
+                if (orig != null) {
+                    replaceInBuffer(p, orig);
+                }
+                else {
+                    PacketModel orig2 = VpnRevertHints.consumeGlobal(p);
+                    if (orig2 != null) {
+                        replaceInBuffer(p, orig2);
+                    }
+                }
             }
-            protectedMap.remove(prot);
         }
     }
 
@@ -104,5 +123,6 @@ public final class VpnBehavior implements SystemBehavior {
 
     public void clear() {
         protectedMap.clear();
+        VpnRevertHints.clearAllGlobal();
     }
 }

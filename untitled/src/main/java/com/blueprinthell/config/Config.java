@@ -45,27 +45,19 @@ public final class Config {
 
     public static final double DEFAULT_PACKET_SPEED = 100.0;
 
-    public static final double ACC_TRIANGLE         = 50.0;
-    public static final double ACC_DECEL            = -60.0;
     public static final double MAX_SPEED            = 300.0;
 
     public static final double MAX_NOISE_CAPACITY   = 100.0;
-    public static final double NOISE_SPEED_SMOOTHING = 0.1;
 
-    public static final double PRODUCTION_INTERVAL_SECONDS = 1.0;
 
     public static final double DEFAULT_SHIELD_CAPACITY = 8.0;
 
     public static final double ANTI_TROJAN_RADIUS_PX   = 140.0;
     public static final double ANTI_TROJAN_COOLDOWN_S  = 2.0;
 
-    public static final int MAX_HEAVY_PASSES_PER_WIRE = 3;
 
-    public static final double TROJAN_PROBABILITY_EASY   = 0.08;
     public static final double TROJAN_PROBABILITY_NORMAL = 0.15;
-    public static final double TROJAN_PROBABILITY_HARD   = 0.25;
 
-    public static double TROJAN_PROBABILITY = TROJAN_PROBABILITY_NORMAL;
 
 
 
@@ -102,10 +94,10 @@ public final class Config {
     public static final double L10_DRIFT_STEP_PX   = 200;
     public static final double L10_DRIFT_OFFSET_PX = 6;
 
-    public static final double CIRCLE_RENDER_SCALE = Math.sqrt(2.0)/2;
+
     public static final int   PACKET_SIZE_UNITS_CIRCLE = 1;
     public static final int   PACKET_COINS_CIRCLE      = 1;
-    public static final Color COLOR_PACKET_CIRCLE      = new Color(0x39B54A); // سبز
+    public static final Color COLOR_PACKET_CIRCLE      = new Color(0x39B54A);
 
 
     public static final java.awt.Color COLOR_PACKET_LARGE = new java.awt.Color(0x8E44AD);
@@ -121,5 +113,11 @@ public final class Config {
     public static final int   BADGE_MARGIN_X      = 2;
     public static final int   BADGE_MARGIN_Y      = 2;
     public static final double POLY_INSET         = 0.10;
+
+    public static final int    LONG_WIRE_THRESHOLD_PX = 320;
+    public static final double LONG_WIRE_ACCEL        = 80.0;
+    public static final double LONG_WIRE_MAX_MUL      = 1.8;
+
+    public static final int LARGE_MAX_PASSES_PER_WIRE = 3;
 
 }

@@ -7,6 +7,8 @@ import com.blueprinthell.model.PacketOps;
 import com.blueprinthell.model.WireModel;
 
 import java.util.*;
+import com.blueprinthell.config.Config;
+import com.blueprinthell.model.large.BitPacket;
 
 public final class MotionStrategyFactory {
 
@@ -17,7 +19,6 @@ public final class MotionStrategyFactory {
     public static MotionStrategy create(PacketModel packet, boolean compatible) {
         Objects.requireNonNull(packet, "packet");
 
-        // اگر Confidential است، پروفایل را بر اساس VPN-tag ست/تأیید کنیم
         if (packet instanceof ConfidentialPacket) {
             KinematicsProfile prof = PacketOps.isConfidentialVpn(packet)
                     ? KinematicsProfile.CONFIDENTIAL_VPN
@@ -25,7 +26,6 @@ public final class MotionStrategyFactory {
             KinematicsRegistry.setProfile(packet, prof);
         }
 
-        // تصادفی‌سازی پروفایل پیام‌رسان برای ProtectedPacket روی هر سیم (بدون ثبت دائمی)
         if (packet instanceof ProtectedPacket) {
             KinematicsProfile randomProfile = KinematicsProfile.randomMessenger(RAND);
             MotionRule rule = profileToRule(randomProfile, compatible);
@@ -33,7 +33,8 @@ public final class MotionStrategyFactory {
             if (startMul != 1.0) {
                 rule = scaleStartSpeed(rule, startMul);
             }
-            return buildStrategyFromRule(rule, randomProfile.getParams());
+            MotionStrategy base = buildStrategyFromRule(rule, randomProfile.getParams());
+            return overrideForLongWire(packet, rule, base);
         }
 
         KinematicsProfile profile = ensureProfile(packet);
@@ -53,7 +54,30 @@ public final class MotionStrategyFactory {
             rule = scaleStartSpeed(rule, startMul);
         }
 
-        return buildStrategyFromRule(rule, params);
+        MotionStrategy base = buildStrategyFromRule(rule, params);
+        return overrideForLongWire(packet, rule, base);
+    }
+
+    private static MotionStrategy overrideForLongWire(PacketModel packet, MotionRule rule, MotionStrategy base) {
+        WireModel wire = packet.getCurrentWire();
+        boolean isLongWire = (wire != null) && (wire.getLength() >= Config.LONG_WIRE_THRESHOLD_PX);
+        if (!isLongWire) {
+            return base;
+        }
+        if (packet instanceof ConfidentialPacket && PacketOps.isConfidentialVpn(packet)) {
+            return base;
+        }
+        switch (rule.mode) {
+            case KEEP_DISTANCE:
+            case DRIFT:
+                return base;
+            default:
+                // continue
+        }
+        if (packet instanceof BitPacket) {
+            return base;
+        }
+        return new AccelOnCurveStrategy(Config.LONG_WIRE_ACCEL, Config.LONG_WIRE_MAX_MUL);
     }
 
     private static MotionRule scaleStartSpeed(MotionRule rule, double mul) {
@@ -245,7 +269,6 @@ public final class MotionStrategyFactory {
             double next = packet.getProgress() + dp;
             if (next > 1.0) next = 1.0;
 
-            // track travelled distance
             double deltaPx = baseSpeed * dt;
             traveledPx += deltaPx;
             if (traveledPx >= stepDist) {

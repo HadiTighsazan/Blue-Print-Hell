@@ -41,15 +41,30 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
 
-        // --- Phase-2 addition: revert Protected back to original if mapping exists
+        /* ADD START — revert زودهنگام با نگاشت سراسری (برای سازگاری با consumeGlobal) */
+        if (PacketOps.isProtected(packet)) {
+            PacketModel origGlobal = VpnRevertHints.consumeGlobal(packet);
+            if (origGlobal != null) {
+                replaceInBuffer(packet, origGlobal);
+                return;
+            }
+        }
+        // (اختیاری) اگر می‌خواهید Conf-VPN هم در جاسوس به حالت قبل برگردد:
+        if (PacketOps.isConfidentialVpn(packet)) {
+            PacketModel origGlobal2 = VpnRevertHints.consumeGlobal(packet);
+            if (origGlobal2 != null) {
+                replaceInBuffer(packet, origGlobal2);
+                return;
+            }
+        }
+        /* ADD END */
+
         if (PacketOps.isProtected(packet)) {
             PacketModel orig = VpnRevertHints.consume(packet);
             if (orig != null) {
-                // Replace in this box's buffer to preserve order
                 replaceInBuffer(packet, orig);
-                return; // after revert, no teleport in the same cycle
+                return;
             }
-            // If no mapping, Protected passes unaffected per spec
             return;
         }
 
@@ -63,12 +78,12 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
         }
 
         if (enteredPort == null || !enteredPort.isInput()) {
-            return; // programmatic re-queue or output-side events -> ignore
+            return;
         }
 
         final SystemBoxModel target = chooseAnotherSpy();
         if (target == null) {
-            return; // no other spies -> no-op
+            return;
         }
 
         if (transferToAnotherSpy(packet, target)) {
@@ -122,25 +137,22 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
             }
             return false;
         }
-        return true; // no wire list -> assume usable
+        return true;
     }
 
     private boolean transferToAnotherSpy(PacketModel packet, SystemBoxModel target) {
         if (packet == null || target == null) return false;
-        // Remove from source first; if enqueue at target fails, put it back at the front to preserve order
         if (!box.removeFromBuffer(packet)) {
-            return false; // nothing to do
+            return false;
         }
-        final boolean ok = target.enqueue(packet, null); // programmatic entry; will not retrigger spy teleport
+        final boolean ok = target.enqueue(packet, null);
         if (!ok) {
-            // Restore to source at the front (best-effort)
             box.enqueueFront(packet);
             return false;
         }
         return true;
     }
 
-    // Utility: replace a packet in the current box buffer with another one (preserve ordering)
     private void replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
         Deque<PacketModel> temp = new ArrayDeque<>();
         boolean replaced = false;
@@ -159,6 +171,5 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     }
 
     public void clear() {
-        // no internal collections to clear
     }
 }

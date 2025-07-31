@@ -1,5 +1,6 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.*;
 import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
@@ -7,6 +8,7 @@ import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.view.HudView;
+
 
 import java.util.*;
 
@@ -26,6 +28,9 @@ public class SimulationRegistrar {
     private final SnapshotManager snapshotManager;
     private final HudView hudView;
     private final LevelManager levelManager;
+    private WireRemovalController wireRemover;
+    private WireDurabilityController durability;
+    private PacketDispatcherController dispatcherRef; // نگه می‌داریم تا بعداً Setter را صدا بزنیم
 
     private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
     private final LargeGroupRegistry largeGroupRegistry = new LargeGroupRegistry();
@@ -60,6 +65,13 @@ public class SimulationRegistrar {
 
     public void setCurrentBoxSpecs(List<LevelDefinition.BoxSpec> specs) {
         this.currentBoxSpecs = (specs != null) ? specs : Collections.emptyList();
+    }
+
+    public void setWireRemover(WireRemovalController r) {
+        this.wireRemover = r;
+        if (durability != null) {
+            durability.setWireRemover(r);
+        }
     }
 
 
@@ -135,6 +147,7 @@ public class SimulationRegistrar {
             simulation.register(producer);
         }
         PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
+        this.dispatcherRef = dispatcher;
         simulation.register(dispatcher);
 
         if (sink != null) {
@@ -269,6 +282,17 @@ public class SimulationRegistrar {
 
         WireTimeoutController timeout = new WireTimeoutController(wires, lossModel);
         simulation.register(timeout);
+
+        durability = new WireDurabilityController(wires, lossModel, Config.LARGE_MAX_PASSES_PER_WIRE);
+        if (wireRemover != null) {
+            durability.setWireRemover(wireRemover);
+        }
+        simulation.register(durability);
+
+        // اگر Dispatcher قبلاً ساخته شده، به آن تزریق کن
+        if (dispatcherRef != null) {
+            dispatcherRef.setDurabilityController(durability);
+        }
 
     }
 
