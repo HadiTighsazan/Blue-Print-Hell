@@ -3,6 +3,7 @@ package com.blueprinthell.model;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.SystemBehavior;
 import com.blueprinthell.controller.systems.SystemBehaviorAdapter;
+import com.blueprinthell.controller.systems.SystemKind;
 
 import java.io.Serializable;
 import java.util.*;
@@ -27,6 +28,8 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     private boolean lastEnabledState = true;
 
+    private SystemKind primaryKind = SystemKind.NORMAL;
+
     public static class PacketEntry {
         public final PacketModel packet;
         public final PortModel enteredPort;
@@ -46,12 +49,19 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         createPorts(inShapes, outShapes);
     }
 
+
     public SystemBoxModel(int x, int y, int width, int height,
                           int inCount, PortShape inShape,
                           int outCount, PortShape outShape) {
         this(x, y, width, height,
                 java.util.Collections.nCopies(inCount, inShape),
                 java.util.Collections.nCopies(outCount, outShape));
+    }
+    public SystemKind getPrimaryKind() {
+        return primaryKind;
+    }
+    public void setPrimaryKind(SystemKind kind) {
+        this.primaryKind = (kind != null) ? kind : SystemKind.NORMAL;
     }
 
     private void createPorts(List<PortShape> inShapes, List<PortShape> outShapes) {

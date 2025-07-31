@@ -107,4 +107,19 @@ public final class Config {
     public static final int   PACKET_COINS_CIRCLE      = 1;
     public static final Color COLOR_PACKET_CIRCLE      = new Color(0x39B54A); // سبز
 
+
+    public static final java.awt.Color COLOR_PACKET_LARGE = new java.awt.Color(0x8E44AD);
+
+    public static final java.awt.Color COLOR_BADGE_BG = new java.awt.Color(0x111111);
+    public static final java.awt.Color COLOR_BADGE_FG = java.awt.Color.WHITE;
+
+    public static final java.awt.Font FONT_BADGE = new java.awt.Font("Dialog", java.awt.Font.BOLD, 11);
+    public static final java.awt.Font FONT_SYSTEM_LABEL = new java.awt.Font("Dialog", java.awt.Font.BOLD, 13);
+
+    public static final int   BADGE_CORNER_RADIUS = 8;
+    public static final int   BADGE_PADDING       = 3;
+    public static final int   BADGE_MARGIN_X      = 2;
+    public static final int   BADGE_MARGIN_Y      = 2;
+    public static final double POLY_INSET         = 0.10;
+
 }

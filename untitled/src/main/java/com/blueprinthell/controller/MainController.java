@@ -11,6 +11,7 @@ import com.blueprinthell.model.WireModel;
 
 
 
+
 public class MainController {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {

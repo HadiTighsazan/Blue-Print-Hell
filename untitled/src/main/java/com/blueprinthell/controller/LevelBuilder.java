@@ -66,6 +66,8 @@ public final class LevelBuilder {
             SystemBoxModel box = new SystemBoxModel(
                     spec.x(), spec.y(), spec.width(), spec.height(),
                     spec.inShapes(), spec.outShapes());
+            // [NEW] Set primaryKind from spec
+            box.setPrimaryKind(spec.kind());
             newBoxes.add(box);
         }
 
