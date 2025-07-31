@@ -3,5 +3,6 @@ package com.blueprinthell.model;
 
 public enum PortShape {
     SQUARE,
-    TRIANGLE
+    TRIANGLE,
+    CIRCLE
 }

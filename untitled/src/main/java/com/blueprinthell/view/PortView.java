@@ -18,13 +18,17 @@ public class PortView extends GameObjectView<PortModel> {
         Color baseColor = model.isInput() ? Config.COLOR_PORT_INPUT : Config.COLOR_PORT_OUTPUT;
         g2.setColor(baseColor);
         int s = getWidth();
-        if (model.getShape() == PortShape.SQUARE) {
-            g2.fillRect(0, 0, s, s);
-        } else {
-            int[] xs = {0, s / 2, s};
-            int[] ys = {s, 0, s};
-            g2.fillPolygon(xs, ys, 3);
+
+        switch (model.getShape()) {
+            case SQUARE -> g2.fillRect(0, 0, s, s);
+            case TRIANGLE -> {
+                int[] xs = {0, s / 2, s};
+                int[] ys = {s, 0, s};
+                g2.fillPolygon(xs, ys, 3);
+            }
+            case CIRCLE -> g2.fillOval(0, 0, s, s);
         }
+
         g2.dispose();
     }
 

@@ -11,6 +11,9 @@ import java.awt.event.*;
 import java.util.*;
 import java.util.List;
 
+// ⬇️ اضافه‌شده برای چک صریحِ سازگاری شکل‌ها
+// import com.blueprinthell.model.PortCompatibility; // unused: wiring has no shape restriction
+
 public class WireCreationController {
     private final GameScreenView      gameView;
     private final SimulationController simulation;
@@ -71,7 +74,67 @@ public class WireCreationController {
 
     private void attachToPorts(Container c){for(Component comp:c.getComponents()){if(comp instanceof PortView pv){pv.addMouseListener(new MouseAdapter(){@Override public void mouseClicked(MouseEvent e){handlePortClick(pv);} });} else if(comp instanceof Container inner && comp!=overlay){attachToPorts(inner);} }}
 
-    private void handlePortClick(PortView pv){PortModel pm=pv.getModel(); if(!drawing){if(!pm.isInput()){drawing=true; startPort=pm; Point center=new Point(pv.getWidth()/2,pv.getHeight()/2); startPt=SwingUtilities.convertPoint(pv,center,overlay); overlay.beginPreview(); overlay.updateLine(startPt,startPt); overlay.setVisible(true); area.addMouseMotionListener(previewListener); area.setComponentZOrder(overlay,area.getComponentCount()-1);}} else {if(pm.isInput() && startPort.isCompatibleWith(pm) && !lockedInputs.contains(pm)){WireModel wm=new WireModel(startPort,pm); double len=wm.getLength(); if(!usageModel.useWire(len)){Toolkit.getDefaultToolkit().beep(); cancelPreview(); return;} wires.add(wm); destMap.put(wm,findDestBox(pm)); lockedInputs.add(pm); PortView srcPV=findPortView(area,startPort); WireView wv=new WireView(wm,srcPV,pv); wv.setBounds(0,0,area.getWidth(),area.getHeight()); area.add(wv,0); area.setComponentZOrder(overlay,area.getComponentCount()-1); area.revalidate(); area.repaint(); if(networkChanged!=null) networkChanged.run(); new WireEditorController(area, wm, wv, gameView.getSystemBoxViews(), coinModel, usageModel, networkChanged);} cancelPreview();}}
+    private void handlePortClick(PortView pv){
+        PortModel pm=pv.getModel();
+        if(!drawing){
+            if(!pm.isInput()){
+                drawing=true;
+                startPort=pm;
+                Point center=new Point(pv.getWidth()/2,pv.getHeight()/2);
+                startPt=SwingUtilities.convertPoint(pv,center,overlay);
+                overlay.beginPreview();
+                overlay.updateLine(startPt,startPt);
+                overlay.setVisible(true);
+                area.addMouseMotionListener(previewListener);
+                area.setComponentZOrder(overlay,area.getComponentCount()-1); // مطمئن شویم روی همه دیده می‌شود
+            }
+        }
+        else {
+            // در حالت درحال رسم، فقط کلیک روی ورودی‌ها بررسی شود
+            if(pm.isInput()){
+                // 1) قفل‌بودن ورودی
+                if(lockedInputs.contains(pm)){
+                    Toolkit.getDefaultToolkit().beep();
+                    cancelPreview();
+                    return;
+                }
+                // 2) سازگاری شکل‌ها: خروجیِ شروع → ورودی مقصد
+                // 2) محدودیتی از نظر شکل برای سیم‌کشی وجود ندارد (صرفاً جهت مهم است)
+                boolean shapeOk = true;
+// (no shape-based veto for wiring)
+
+                // 3) شرط قبلی پروژه را هم نگه می‌داریم (خروجی→ورودی + هر منطق اضافی در PortModel)
+                if(startPort.isCompatibleWith(pm)){
+                    WireModel wm=new WireModel(startPort,pm);
+                    double len=wm.getLength();
+                    if(!usageModel.useWire(len)){
+                        Toolkit.getDefaultToolkit().beep();
+                        cancelPreview();
+                        return;
+                    }
+                    wires.add(wm);
+                    destMap.put(wm,findDestBox(pm));
+                    lockedInputs.add(pm);
+                    PortView srcPV=findPortView(area,startPort);
+                    WireView wv=new WireView(wm,srcPV,pv);
+                    wv.setBounds(0,0,area.getWidth(),area.getHeight());
+                    area.add(wv,0);
+                    area.setComponentZOrder(overlay,area.getComponentCount()-1);
+                    area.revalidate();
+                    area.repaint();
+                    if(networkChanged!=null) networkChanged.run();
+                    new WireEditorController(area, wm, wv, gameView.getSystemBoxViews(), coinModel, usageModel, networkChanged);
+                } else {
+                    // اگر به هر دلیل دیگری PortModel اجازه اتصال ندهد
+                    Toolkit.getDefaultToolkit().beep();
+                    cancelPreview();
+                    return;
+                }
+            }
+            // پس از هر تلاش، پیش‌نمایش را ببندیم (مطابق رفتار قبلی)
+            cancelPreview();
+        }
+    }
 
     private void cancelPreview(){drawing=false; overlay.clearLine(); overlay.setVisible(false); area.removeMouseMotionListener(previewListener); overlay.endPreview();}
 

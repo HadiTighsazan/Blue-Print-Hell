@@ -82,7 +82,10 @@ public final class LevelGenerator {
     }
 
     private static PortShape randomShape() {
-        return RND.nextBoolean() ? PortShape.SQUARE : PortShape.TRIANGLE;
+        int r = RND.nextInt(3);
+        return (r == 0) ? PortShape.SQUARE
+                : (r == 1) ? PortShape.TRIANGLE
+                : PortShape.CIRCLE;
     }
 
     private static List<PortShape> randomShapes(int count) {
@@ -101,11 +104,13 @@ public final class LevelGenerator {
             List<PortShape> outs = boxes.get(i).outShapes();
             for (int j = 0; j < n; j++) {
                 if (i == j) continue;
+                int finalJ = j;
                 if (outs.stream().anyMatch(boxes.get(j).inShapes()::contains)) {
                     adj.get(i).add(j);
                 }
             }
         }
+
         int src = -1, sink = -1;
         for (int i = 0; i < n; i++) {
             if (boxes.get(i).isSource()) src = i;
