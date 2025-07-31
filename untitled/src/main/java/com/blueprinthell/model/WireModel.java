@@ -30,6 +30,9 @@ public class WireModel implements Serializable {
 
     private boolean isForPreviousLevels = false;
 
+    private int largePacketPassCount = 0;
+    private static final int MAX_LARGE_PACKET_PASSES = 3;
+
     public static void setSimulationController(SimulationController sc) {
         simulationController = sc;
     }
@@ -186,5 +189,20 @@ public class WireModel implements Serializable {
         return (pts.size() <= 2) ?
                 Collections.emptyList() :
                 Collections.unmodifiableList(pts.subList(1, pts.size() - 1));
+    }
+    public int getLargePacketPassCount() {
+        return largePacketPassCount;
+    }
+
+    public void incrementLargePacketPass() {
+        largePacketPassCount++;
+    }
+
+    public boolean shouldBeDestroyed() {
+        return largePacketPassCount >= MAX_LARGE_PACKET_PASSES;
+    }
+
+    public void resetLargePacketCounter() {
+        largePacketPassCount = 0;
     }
 }

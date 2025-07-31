@@ -147,6 +147,11 @@ public class SimulationRegistrar {
             simulation.register(producer);
         }
         PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
+
+        if (this.wireRemover != null) {
+            dispatcher.setWireRemover(this.wireRemover);
+        }
+
         this.dispatcherRef = dispatcher;
         simulation.register(dispatcher);
 

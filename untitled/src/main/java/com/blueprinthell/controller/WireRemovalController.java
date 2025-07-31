@@ -133,4 +133,32 @@ public class WireRemovalController {
         area.repaint();
         if (networkChanged != null) networkChanged.run();
     }
+
+    public void scheduleRemoval(WireModel wire) {
+        if (wire == null) return;
+
+        wires.remove(wire);
+        destMap.remove(wire);
+        creator.freePortsForWire(wire);
+        usageModel.freeWire(wire.getLength());
+
+        SwingUtilities.invokeLater(() -> {
+            JPanel area = gameView.getGameArea();
+            Component[] comps = area.getComponents();
+
+            for (Component c : comps) {
+                if (c instanceof WireView wv && wv.getModel() == wire) {
+                    area.remove(c);
+                    break;
+                }
+            }
+
+            area.revalidate();
+            area.repaint();
+
+            if (networkChanged != null) {
+                networkChanged.run();
+            }
+        });
+    }
 }
