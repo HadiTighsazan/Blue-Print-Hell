@@ -46,21 +46,20 @@ public class PacketDispatcherController implements Updatable {
 
                 if (packet.getSpeed() > Config.MAX_ALLOWED_SPEED && dest.isEnabled()) {
                     dest.disable();
-                }
+                    packet.setReturning(true);
+                    wire.attachPacket(packet, 1.0);
+                    continue;
+                                    }
 
                 boolean accepted = dest.enqueue(packet, dstPort);
 
                 if (accepted) {
                     int coins = PacketOps.coinValueOnEntry(packet);
 
-                    // --- VPN tweak: اگر مقصد VPN است، سکه را بر اساس تبدیلِ آتی اصلاح کن ---
-                    // تبدیل واقعی همچنان در VpnBehavior انجام می‌شود تا revertHints به‌درستی پر شود.
                     if (dest.getPrimaryKind() == SystemKind.VPN) {
-                        // پیام‌رسان‌ها در VPN → Protected (۵ سکه)
                         if (PacketOps.isMessenger(packet)) {
                             coins = 5;
                         }
-                        // محرمانهٔ ۴ در VPN → محرمانهٔ ۶ (۴ سکه)
                         else if (PacketOps.isConfidential(packet) && !PacketOps.isConfidentialVpn(packet)) {
                             coins = 4;
                         }

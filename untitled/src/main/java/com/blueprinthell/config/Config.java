@@ -120,4 +120,6 @@ public final class Config {
 
     public static final int LARGE_MAX_PASSES_PER_WIRE = 3;
 
+
+    public static final double LONG_WIRE_MAX_SPEED_MUL= 3.5;
 }

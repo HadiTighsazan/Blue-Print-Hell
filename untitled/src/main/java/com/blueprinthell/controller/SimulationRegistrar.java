@@ -30,7 +30,7 @@ public class SimulationRegistrar {
     private final LevelManager levelManager;
     private WireRemovalController wireRemover;
     private WireDurabilityController durability;
-    private PacketDispatcherController dispatcherRef; // نگه می‌داریم تا بعداً Setter را صدا بزنیم
+    private PacketDispatcherController dispatcherRef;
 
     private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
     private final LargeGroupRegistry largeGroupRegistry = new LargeGroupRegistry();
@@ -275,7 +275,6 @@ public class SimulationRegistrar {
     public void registerOptionalControllers(List<WireModel> wires,
                                             List<SystemBoxModel> boxes,
                                             Map<WireModel, SystemBoxModel> destMap) {
-        // Throttle برای Confidential-4
         ConfidentialThrottleController throttle = new ConfidentialThrottleController(wires, destMap);
         throttle.setEnabled(true);
         simulation.register(throttle);
@@ -289,7 +288,6 @@ public class SimulationRegistrar {
         }
         simulation.register(durability);
 
-        // اگر Dispatcher قبلاً ساخته شده، به آن تزریق کن
         if (dispatcherRef != null) {
             dispatcherRef.setDurabilityController(durability);
         }

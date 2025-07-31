@@ -152,7 +152,22 @@ public final class MotionStrategyFactory {
             if (wire == null) return;
             double len = wire.getLength();
             if (len <= 0) return;
-            double dp = (speed * dt) / len;
+
+            double effective = speed;
+                        // Long-wire accel فقط برای پیام‌رسان‌ها
+            if (PacketOps.isMessenger(packet) && len >= Config.LONG_WIRE_THRESHOLD_PX) {
+                double v0      = Math.max(packet.getSpeed(), speed);
+                double vmax    = packet.getBaseSpeed() * Config.LONG_WIRE_MAX_SPEED_MUL;
+                double v1      = Math.min(v0 + Config.LONG_WIRE_ACCEL * dt, vmax);
+                effective      = Math.max(speed, v1);
+                packet.setSpeed(effective);
+                            }
+            else {
+                                // در حالت عادی سرعت ثابت را روی مدل نگه داریم
+                packet.setSpeed(speed);
+                            }
+            double dp = (effective * dt) / len;
+
             double next = packet.getProgress() + dp;
             if (next > 1.0) next = 1.0;
             packet.setProgress(next);
