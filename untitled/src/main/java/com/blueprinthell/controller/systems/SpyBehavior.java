@@ -3,6 +3,7 @@ package com.blueprinthell.controller.systems;
 import com.blueprinthell.model.*;
 
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 public final class SpyBehavior implements SystemBehavior, Updatable {
 
@@ -18,6 +19,12 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     private long teleportCount = 0;
     private long destroyedConfidentialCount = 0;
     private volatile boolean lastEnabledState = true;
+
+    // Thread-safe transfer lock to prevent race conditions
+    private static final ReentrantLock TRANSFER_LOCK = new ReentrantLock();
+
+    // Track packets currently being transferred to avoid double-processing
+    private static final Set<PacketModel> PACKETS_IN_TRANSFER = Collections.newSetFromMap(new WeakHashMap<>());
 
     public SpyBehavior(SystemBoxModel box,
                        BehaviorRegistry registry,
@@ -81,13 +88,38 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
             return;
         }
 
+        // Check if this packet is already being transferred
+        TRANSFER_LOCK.lock();
+        try {
+            if (PACKETS_IN_TRANSFER.contains(packet)) {
+                return; // Already being processed by another spy system
+            }
+            PACKETS_IN_TRANSFER.add(packet);
+        } finally {
+            TRANSFER_LOCK.unlock();
+        }
+
         final SystemBoxModel target = chooseAnotherSpy();
         if (target == null) {
+            TRANSFER_LOCK.lock();
+            try {
+                PACKETS_IN_TRANSFER.remove(packet);
+            } finally {
+                TRANSFER_LOCK.unlock();
+            }
             return;
         }
 
         if (transferToAnotherSpy(packet, target)) {
             teleportCount++;
+        }
+
+        // Clean up tracking after transfer attempt
+        TRANSFER_LOCK.lock();
+        try {
+            PACKETS_IN_TRANSFER.remove(packet);
+        } finally {
+            TRANSFER_LOCK.unlock();
         }
     }
 
@@ -142,34 +174,61 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
 
     private boolean transferToAnotherSpy(PacketModel packet, SystemBoxModel target) {
         if (packet == null || target == null) return false;
-        if (!box.removeFromBuffer(packet)) {
-            return false;
+
+        // Use double-checked locking pattern for thread safety
+        boolean removed = false;
+        boolean enqueued = false;
+
+        // First try to remove from source buffer
+        TRANSFER_LOCK.lock();
+        try {
+            removed = box.removeFromBuffer(packet);
+            if (removed) {
+                // Try to enqueue in target
+                enqueued = target.enqueue(packet, null);
+                if (!enqueued) {
+                    // If enqueue failed, put it back
+                    box.enqueueFront(packet);
+                    removed = false;
+                }
+            }
+        } finally {
+            TRANSFER_LOCK.unlock();
         }
-        final boolean ok = target.enqueue(packet, null);
-        if (!ok) {
-            box.enqueueFront(packet);
-            return false;
-        }
-        return true;
+
+        return removed && enqueued;
     }
 
     private void replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
         Deque<PacketModel> temp = new ArrayDeque<>();
         boolean replaced = false;
         PacketModel p;
-        while ((p = box.pollPacket()) != null) {
-            if (!replaced && p == oldPkt) {
-                temp.addLast(newPkt);
-                replaced = true;
-            } else {
-                temp.addLast(p);
+
+        // Thread-safe buffer manipulation
+        TRANSFER_LOCK.lock();
+        try {
+            while ((p = box.pollPacket()) != null) {
+                if (!replaced && p == oldPkt) {
+                    temp.addLast(newPkt);
+                    replaced = true;
+                } else {
+                    temp.addLast(p);
+                }
             }
-        }
-        for (PacketModel q : temp) {
-            box.enqueue(q);
+            for (PacketModel q : temp) {
+                box.enqueue(q);
+            }
+        } finally {
+            TRANSFER_LOCK.unlock();
         }
     }
 
     public void clear() {
+        TRANSFER_LOCK.lock();
+        try {
+            PACKETS_IN_TRANSFER.clear();
+        } finally {
+            TRANSFER_LOCK.unlock();
+        }
     }
 }

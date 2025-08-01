@@ -41,18 +41,23 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             return;
         }
 
-        List<PacketModel> toRemove = new ArrayList<>();
-        int destroyedCount = 0;
-
-        for (PacketModel p : buffer) {
-            if (p != newLarge) {
-                toRemove.add(p);
-                destroyedCount++;
-            }
+        // جمع‌آوری تمام پکت‌های موجود در بافر
+        List<PacketModel> allPackets = new ArrayList<>();
+        PacketModel p;
+        while ((p = box.pollPacket()) != null) {
+            allPackets.add(p);
         }
 
-        for (PacketModel p : toRemove) {
-            box.removeFromBuffer(p);
+        int destroyedCount = 0;
+
+        // فقط پکت حجیم جدید را نگه می‌داریم
+        for (PacketModel packet : allPackets) {
+            if (packet == newLarge) {
+                box.enqueue(packet);
+            } else {
+                // پکت‌های دیگر حذف می‌شوند
+                destroyedCount++;
+            }
         }
 
         if (destroyedCount > 0) {

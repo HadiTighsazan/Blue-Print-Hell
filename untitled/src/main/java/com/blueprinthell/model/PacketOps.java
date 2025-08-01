@@ -192,30 +192,49 @@ public final class PacketOps {
         return 0;
     }
 
+    /**
+     * سکه‌های دریافتی هنگام ورود به سیستم
+     * طبق سند:
+     * - MSG1 (دایره): 1 سکه
+     * - MSG2 (مربع): 2 سکه
+     * - MSG3 (مثلث): 3 سکه
+     * - Protected: 5 سکه
+     * - Confidential: 3 سکه
+     * - Confidential-VPN: 4 سکه
+     */
     public static int coinValueOnEntry(PacketModel p) {
         if (isProtected(p)) return 5;
         if (isConfidentialVpn(p)) return 4;
         if (isConfidential(p)) return 3;
+
         KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
-        if (prof == KinematicsProfile.MSG1) return 2;
-        if (prof == KinematicsProfile.MSG2) return 3;
-        if (prof == KinematicsProfile.MSG3) return 1;
+        if (prof == KinematicsProfile.MSG1) return 1;  // دایره - تصحیح شد
+        if (prof == KinematicsProfile.MSG2) return 2;  // مربع - تصحیح شد
+        if (prof == KinematicsProfile.MSG3) return 3;  // مثلث - تصحیح شد
+
+        // برای پکت‌های حجیم هنگام ورود سکه‌ای اضافه نمی‌شود
+        if (isLarge(p)) return 0;
+
         return 0;
     }
 
+    /**
+     * سکه‌های دریافتی هنگام رسیدن به مقصد نهایی (مصرف)
+     *
+     * توجه: طبق سند، پکت‌های پیام‌رسان (MSG1/2/3) سکه‌هایشان را هنگام "ورود به سیستم" می‌دهند
+     * نه هنگام "مصرف نهایی". بنابراین اینجا فقط پکت‌های حجیم سکه می‌دهند.
+     *
+     * - Large: به اندازه sizeUnits اصلی (8 یا 10)
+     * - بقیه پکت‌ها: 0 سکه
+     */
     public static int coinValueOnConsume(PacketModel p) {
-        if (isProtected(p) || isConfidential(p)) return 0;
-
-        // Large روی مصرف: سکه = اندازهٔ اصلی
+        // فقط پکت‌های حجیم هنگام مصرف نهایی سکه می‌دهند
         if (isLarge(p)) {
             return Math.max(0, ((LargePacket) p).getOriginalSizeUnits());
         }
 
-        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
-        if (prof == KinematicsProfile.MSG1) return 1;
-        if (prof == KinematicsProfile.MSG2) return 2;
-        if (prof == KinematicsProfile.MSG3) return 3;
-
+        // پکت‌های پیام‌رسان، محافظت‌شده و محرمانه هنگام مصرف سکه نمی‌دهند
+        // (سکه‌هایشان را قبلاً هنگام ورود به سیستم‌ها گرفته‌اند)
         return 0;
     }
 
