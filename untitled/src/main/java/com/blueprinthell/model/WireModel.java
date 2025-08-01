@@ -14,6 +14,9 @@ import com.blueprinthell.controller.SimulationController;
 import java.util.Map;
 
 public class WireModel implements Serializable {
+    private static final double SPAWN_SEPARATION = 0.02;
+    private static final double MAX_SPAWN_SPREAD = 0.10;
+
     private static final long serialVersionUID = 4L;
 
     private final PortModel src;
@@ -43,7 +46,6 @@ public class WireModel implements Serializable {
                 .collect(Collectors.toSet());
     }
 
-    // NEW: تزریق نگاشت پورت→باکس (در Registrar ست کن)
     public static void setPortToBoxMap(Map<PortModel, SystemBoxModel> map) {
         portToBoxMap = (map != null) ? map : Collections.emptyMap();
     }
@@ -99,53 +101,51 @@ public class WireModel implements Serializable {
                     p.setProgress(0.0);
                 }
 
-                if (p.isReturning() && p.getProgress() <= 0.0) {
+                if ((p.isReturning() || destDisabled) && p.getProgress() <= 0.0) {
                     SystemBoxModel srcBox = (portToBoxMap != null) ? portToBoxMap.get(getSrcPort()) : null;
-
-                    // ورود به صف مبدأ/سیستم واسط
                     boolean accepted = false;
+
                     if (srcBox != null) {
-                        if (srcBox.getInPorts().isEmpty()) {
-                            // مبدأ بدون ورودی: جلوی صف بگذار تا همان پکت دوباره خارج شود
-                            accepted = srcBox.enqueueFront(p);
-                        } else {
-                            // سیستم واسط: ورود عادی به صف
-                            accepted = srcBox.enqueue(p);
-                        }
+                        accepted = srcBox.getInPorts().isEmpty()
+                                ? srcBox.enqueueFront(p)
+                                : srcBox.enqueue(p);
                     }
 
                     if (accepted) {
-                        // از سیم جدا و وضعیت بازگشت را خاموش کن
+
                         it.remove();
                         p.attachToWire(null, 0.0);
                         p.setReturning(false);
 
-                        // نکتهٔ کلیدی: برای Messenger/سبز notify نکن تا Producer پکت جدید نسازد
                         if (simulationController != null) {
                             boolean isMessenger = PacketOps.isMessenger(p);
-                            if (!isMessenger) {
+                            if (simulationController != null && !PacketOps.isMessenger(p)) {
                                 simulationController.onPacketReturned();
                             }
                         }
                     } else {
-                        // اگر وارد صف نشد، در ابتدای سیم متوقف بماند
                         p.setProgress(0.0);
                     }
                 }
 
-                // در حالت بازگشت/یا مقصد غیرفعال، حلقه را ادامه بده (بدون advance)
                 continue;
             }
-            // --- END ---
+            double cc = p.getCollisionCooldown();
+            if (cc > 1e-9 && p.isHoldWhileCooldown()) {
+                p.setCollisionCooldown(cc - dt);
+                if (p.getCollisionCooldown() <= 0) {
+                    p.setHoldWhileCooldown(false);
+                }
+                continue;
+            }
 
-            // حالت عادی: استراتژی سرعت/شتاب خودش progress را جلو می‌برد
+
             p.advance(dt);
 
             if (p.getProgress() >= 1.0) {
                 it.remove();
                 arrived.add(p);
 
-                // اگر مقصد یک "ورودیِ سیستم‌های مبدأ" است، اطلاع بده (رفتار موجود قبلی)
                 if (simulationController != null && sourceInputPorts.contains(dst)) {
                     simulationController.onPacketReturned();
                 }
@@ -156,8 +156,22 @@ public class WireModel implements Serializable {
 
 
     public void attachPacket(PacketModel packet, double initialProgress) {
+        double p = initialProgress;
+        if (p <= 0.001) {
+            int count = 0;
+            for (PacketModel q : packets) {
+                if (!q.isReturning() && q.getProgress() <= MAX_SPAWN_SPREAD + 1e-9) count++;
+            }
+            p = Math.min(MAX_SPAWN_SPREAD, Math.max(0.0, count * SPAWN_SEPARATION));
+        } else if (p >= 0.999) {
+            int count = 0;
+            for (PacketModel q : packets) {
+                if (q.isReturning() && q.getProgress() >= 1.0 - MAX_SPAWN_SPREAD - 1e-9) count++;
+            }
+            p = Math.max(1.0 - MAX_SPAWN_SPREAD, 1.0 - count * SPAWN_SEPARATION);
+        }
         packets.add(packet);
-        packet.attachToWire(this, initialProgress);
+        packet.attachToWire(this, p);
     }
 
     public boolean removePacket(PacketModel p) {

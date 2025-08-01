@@ -34,7 +34,7 @@ public final class MotionStrategyFactory {
                 rule = scaleStartSpeed(rule, startMul);
             }
             MotionStrategy base = buildStrategyFromRule(rule, randomProfile.getParams());
-            return overrideForLongWire(packet, rule, base);
+            return new ApproachLimiterWrapper(overrideForLongWire(packet, rule, base));
         }
 
         KinematicsProfile profile = ensureProfile(packet);
@@ -55,7 +55,7 @@ public final class MotionStrategyFactory {
         }
 
         MotionStrategy base = buildStrategyFromRule(rule, params);
-        return overrideForLongWire(packet, rule, base);
+        return new ApproachLimiterWrapper(overrideForLongWire(packet, rule, base));
     }
 
     private static MotionStrategy overrideForLongWire(PacketModel packet, MotionRule rule, MotionStrategy base) {
@@ -77,7 +77,15 @@ public final class MotionStrategyFactory {
         if (packet instanceof BitPacket) {
             return base;
         }
-        return new AccelOnCurveStrategy(Config.LONG_WIRE_ACCEL, Config.LONG_WIRE_MAX_MUL);
+        // Type-aware: for blue (SQUARE => MSG2) use gentler accel/ceiling
+        KinematicsProfile prof = ensureProfile(packet);
+        double accel = Config.LONG_WIRE_ACCEL;
+        double maxMul = Config.LONG_WIRE_MAX_MUL;
+        if (prof == KinematicsProfile.MSG2) {
+            accel = Config.LONG_WIRE_ACCEL_BLUE;
+            maxMul = Config.LONG_WIRE_MAX_MUL_BLUE;
+        }
+        return new AccelOnCurveStrategy(accel, maxMul);
     }
 
     private static MotionRule scaleStartSpeed(MotionRule rule, double mul) {
@@ -154,24 +162,23 @@ public final class MotionStrategyFactory {
             if (len <= 0) return;
 
             double effective = speed;
-                        // Long-wire accel فقط برای پیام‌رسان‌ها
+            // Long-wire accel فقط برای پیام‌رسان‌ها
             if (PacketOps.isMessenger(packet) && len >= Config.LONG_WIRE_THRESHOLD_PX) {
                 double v0      = Math.max(packet.getSpeed(), speed);
                 double vmax    = packet.getBaseSpeed() * Config.LONG_WIRE_MAX_SPEED_MUL;
                 double v1      = Math.min(v0 + Config.LONG_WIRE_ACCEL * dt, vmax);
                 effective      = Math.max(speed, v1);
                 packet.setSpeed(effective);
-                            }
-            else {
-                                // در حالت عادی سرعت ثابت را روی مدل نگه داریم
+            } else {
+                // در حالت عادی سرعت ثابت را روی مدل نگه داریم
                 packet.setSpeed(speed);
-                            }
+            }
             double dp = (effective * dt) / len;
 
             double next = packet.getProgress() + dp;
             if (next > 1.0) next = 1.0;
             packet.setProgress(next);
-            packet.setSpeed(speed);
+            packet.setSpeed(effective);
         }
     }
 
@@ -291,12 +298,38 @@ public final class MotionStrategyFactory {
                 offsetSide = !offsetSide; // flip
             }
 
-            packet.setSpeed(baseSpeed);
             packet.setProgress(next);
 
             int sign = offsetSide ? 1 : -1;
             packet.setX(packet.getX() + (int) (sign * offsetPx));
             packet.setY(packet.getY() + (int) (sign * offsetPx * 0.2));
+        }
+    }
+
+    // Safety wrapper: limit approach speed near destination for all types
+    private static final class ApproachLimiterWrapper implements MotionStrategy {
+        private final MotionStrategy delegate;
+        ApproachLimiterWrapper(MotionStrategy d) { this.delegate = d; }
+        @Override
+        public void update(PacketModel packet, double dt) {
+            if (delegate != null) delegate.update(packet, dt);
+            WireModel wire = packet.getCurrentWire();
+            if (wire == null) return;
+            double prog = packet.getProgress();
+            if (prog >= Config.APPROACH_ZONE_START) {
+                WireModel w = packet.getCurrentWire();
+                boolean isLong = (w != null) && (w.getLength() >= Config.LONG_WIRE_THRESHOLD_PX);
+
+                double base  = packet.getBaseSpeed();
+                double capMul = isLong ? Config.LONG_WIRE_MAX_SPEED_MUL   // مثلاً 3.5
+                        : Config.APPROACH_MAX_MUL;         // مثلاً 1.5
+                double cap = base * capMul;
+
+                if (packet.getSpeed() > cap) {
+                    packet.setSpeed(cap);
+                }
+            }
+
         }
     }
 }

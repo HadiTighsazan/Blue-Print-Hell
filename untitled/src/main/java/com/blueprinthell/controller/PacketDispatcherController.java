@@ -64,20 +64,26 @@ public class PacketDispatcherController implements Updatable {
                     durability.onPacketArrived(packet, wire);
                 }
 
+                // اگر مقصدی برای این سیم ثبت نشده، ادامه نده (از NPE هم جلوگیری می‌کند)
+                if (dest == null) {
+                    continue;
+                }
+
+                // --- خاموشی مقصد بر اثر سرعت بالای ورود (برای همهٔ انواع پکت) ---
+                // این چک باید قبل از هر منطق دیگری (سازگاری پورت/بوست/صف) انجام شود.
+                double entrySpeed = packet.getSpeed();
+                double maxAllowed = getMaxAllowedSpeed(packet); // فعلاً مقدار ثابت از Config
+                if (entrySpeed > maxAllowed + 1e-6 && dest.isEnabled()) {
+                    dest.disable();                 // یا dest.disableFor(Config.DEST_DISABLE_MS) اگر دارید
+                    packet.setReturning(true);      // پکت برگردد از سمت مقصد
+                    wire.attachPacket(packet, 1.0); // progress=1.0 یعنی از انتهای سیم برگردد
+                    continue;
+                }
+                // -------------------------------------------------------------------
+
+                // ناسازگاری پورت → فقط بوست خروجی برای مسنجرها (رفتار قبلی حفظ می‌شود)
                 if (dstPort != null && !dstPort.isCompatible(packet) && PacketOps.isMessenger(packet)) {
                     packet.setExitBoostMultiplier(2.0);
-                }
-
-                if (dest == null) {
-                    // مقصد تعریف نشده؛ از ادامه دادن خودداری کنید
-                    continue;
-                }
-
-                if (packet.getSpeed() > Config.MAX_ALLOWED_SPEED && dest.isEnabled()) {
-                    dest.disable();
-                    packet.setReturning(true);
-                    wire.attachPacket(packet, 1.0);
-                    continue;
                 }
 
                 boolean accepted = dest.enqueue(packet, dstPort);
@@ -96,8 +102,15 @@ public class PacketDispatcherController implements Updatable {
                     if (coins > 0) {
                         coinModel.add(coins);
                     }
-                } else {
-                    lossModel.increment();
+                }
+                else {
+                    if (!dest.isEnabled()) {
+                        packet.setReturning(true);
+                        wire.attachPacket(packet, 1.0);
+                        continue;
+                    } else {
+                        lossModel.increment();
+                    }
                 }
             }
         }
@@ -110,5 +123,11 @@ public class PacketDispatcherController implements Updatable {
             // این کار باید در WireRemovalController انجام شود
         }
         wiresForRemoval.clear();
+    }
+
+    // در صورت نیاز به آستانه‌های متفاوت برای انواع پکت،
+    // این متد را به خواندن از یک Map در Config گسترش دهید.
+    private double getMaxAllowedSpeed(PacketModel p) {
+        return Config.MAX_ALLOWED_SPEED;
     }
 }

@@ -137,8 +137,8 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     public boolean enqueue(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return false;
-        boolean isSink = outPorts.isEmpty();
-        if (!enabled && enteredPort != null && !isSink) {
+
+        if (!enabled && enteredPort != null) {
             return false;
         }
 

@@ -29,6 +29,11 @@ public class PacketModel extends GameObjectModel implements Serializable {
     private boolean returning = false;
 
 
+    // field جدید:
+    private double collisionCooldown = 0.0;
+
+    private boolean holdWhileCooldown = false;
+
     public PacketModel(PacketType type, double baseSpeed) {
         super(0, 0,
                 type.sizeUnits * Config.PACKET_SIZE_MULTIPLIER,
@@ -38,6 +43,8 @@ public class PacketModel extends GameObjectModel implements Serializable {
         this.speed     = baseSpeed;
         this.motion    = new ConstantSpeedStrategy(baseSpeed);
     }
+    public boolean isHoldWhileCooldown() { return holdWhileCooldown; }
+    public void setHoldWhileCooldown(boolean v) { this.holdWhileCooldown = v; }
 
     public PacketType getType()            { return type; }
     public double     getBaseSpeed()       { return baseSpeed; }
@@ -55,6 +62,9 @@ public class PacketModel extends GameObjectModel implements Serializable {
     public MotionStrategy getMotionStrategy()       { return motion; }
 
     public void advance(double dt) {
+        if (collisionCooldown > 0) {
+            collisionCooldown = Math.max(0.0, collisionCooldown - dt);
+        }
         if (motion != null) motion.update(this, dt);
     }
 
@@ -111,4 +121,9 @@ public class PacketModel extends GameObjectModel implements Serializable {
 
     public boolean isReturning() { return returning; }
     public void setReturning(boolean v) { this.returning = v; }
+    // getter/setter
+    public double getCollisionCooldown() { return collisionCooldown; }
+    public void   setCollisionCooldown(double t) { collisionCooldown = Math.max(0.0, t); }
+
+
 }

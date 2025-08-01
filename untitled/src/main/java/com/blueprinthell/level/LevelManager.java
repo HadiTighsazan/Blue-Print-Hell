@@ -44,11 +44,28 @@ public class LevelManager {
 
     public void startNextLevel() {
         levelIndex++;
-        current = LevelGenerator.nextLevel(current);
+        int availableCapacity = gameController.getLevelSessionManager().boxes.stream().mapToInt(b -> com.blueprinthell.config.Config.MAX_OUTPUT_PORTS - b.getOutPorts().size())
+                .sum();
+
+        LevelDefinition candidate;
+        while (true) {
+            candidate = LevelGenerator.nextLevel(current);
+
+            int existingCount = gameController.getLevelSessionManager().boxes.size();
+            int inNew  = candidate.boxes().subList(existingCount, candidate.boxes().size())
+                    .stream().mapToInt(b -> b.inShapes().size()).sum();
+            int outNew = candidate.boxes().subList(existingCount, candidate.boxes().size())
+                    .stream().mapToInt(b -> b.outShapes().size()).sum();
+            int required = Math.max(0, inNew - outNew);
+
+            if (required <= availableCapacity) break;
+                    }
+
+        current = candidate;
         missionReported = false;
         gameController.startLevel(current);
         screenController.showScreen(ScreenController.GAME_SCREEN);
-    }
+            }
 
     public int getLevelIndex()         { return levelIndex; }
     public LevelDefinition getCurrentDefinition() { return current; }

@@ -12,8 +12,8 @@ public final class Config {
 
     public static final PortShape DEFAULT_PORT_SHAPE = PortShape.SQUARE;
     public static final double MAX_TIME_ON_WIRE_SEC = 8.0;
-    public static final double SYSTEM_DISABLE_DURATION =3.0 ;
-    public static final double MAX_ALLOWED_SPEED = 180.0;
+    public static final double SYSTEM_DISABLE_DURATION =2.0 ;
+    public static final double MAX_ALLOWED_SPEED = 150.0;
 
 
     private Config() { /* Prevent instantiation */ }
@@ -78,7 +78,9 @@ public final class Config {
 
     public static final double MSG3_INCOMPAT_A       = 90;
     public static final double MSG3_INCOMPAT_MIN_MUL = 1.0;
-    public static final double MSG3_INCOMPAT_MAX_MUL = 1.6;
+
+
+    public static final double MSG3_INCOMPAT_MAX_MUL = 2;
 
     public static final double CONF_SPEED      = 170;
     public static final double CONF_SLOW_SPEED = 60;
@@ -114,7 +116,7 @@ public final class Config {
     public static final int   BADGE_MARGIN_Y      = 2;
     public static final double POLY_INSET         = 0.10;
 
-    public static final int    LONG_WIRE_THRESHOLD_PX = 320;
+    public static final int    LONG_WIRE_THRESHOLD_PX = 250;
     public static final double LONG_WIRE_ACCEL        = 80.0;
     public static final double LONG_WIRE_MAX_MUL      = 1.8;
 
@@ -122,4 +124,11 @@ public final class Config {
 
 
     public static final double LONG_WIRE_MAX_SPEED_MUL= 3.5;
+    public static final double APPROACH_ZONE_START   = 0.85;
+    public static final double APPROACH_MAX_MUL     = 1.50;
+    public static final double LONG_WIRE_ACCEL_BLUE  = 60.0;
+    public static final double LONG_WIRE_MAX_MUL_BLUE= 1.50;
+
+    public static final double CIRCLE_YIELD_WAIT = 0.30;
+
 }

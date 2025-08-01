@@ -50,12 +50,22 @@ public class LossMonitorController implements Updatable {
         if (ratio >= thresholdRatio) {
             triggered = true;
             simulation.stop();
+
             SwingUtilities.invokeLater(() -> {
                 GameOverView gov = screenCtrl.getGameOverView();
                 gov.getPacketLossLabel().setText("Loss: " + lossModel.getLostCount());
-                gov.getRetryButton().addActionListener(e -> resetLevel.run());
+
+                javax.swing.AbstractButton retryBtn = gov.getRetryButton();
+                if (!java.lang.Boolean.TRUE.equals(retryBtn.getClientProperty("retryBound"))) {
+                    retryBtn.addActionListener(e -> resetLevel.run());
+                    retryBtn.putClientProperty("retryBound", java.lang.Boolean.TRUE);
+                }
+
+
                 screenCtrl.showScreen(ScreenController.GAME_OVER);
             });
+
+
         }
     }
 }

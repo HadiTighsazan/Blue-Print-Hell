@@ -1,5 +1,6 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.media.ResourceManager;
 import com.blueprinthell.model.*;
 import com.blueprinthell.motion.KinematicsProfile;
@@ -10,27 +11,7 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 
-/**
- * CollisionController — revised on 2025-07-29
- *
- * Summary of changes (per discussion):
- * 1) Immediate removals on collision (per design doc):
- *    - Non-green vs non-green  => both are removed immediately (loss += 2).
- *    - Green (MSG1) vs non-green => non-green is removed immediately (loss += 1),
- *      green is bounced back to source (setReturning=true, no removal).
- *    - Green vs Green => both bounce back; no removals.
- *    - Shielded packets remain unaffected as before.
- *    - Removed the old behavior of adding NOISE_INCREMENT to colliding packets at the moment of collision.
- *
- * 2) Tamed impact-wave spillover between wires:
- *    - IMPACT_RADIUS reduced from 100.0 to 45.0
- *    - IMPACT_STRENGTH reduced from 1.0 to 0.35
- *    - Still skips impact noise for green packets that are returning.
- *
- * 3) Kept protections:
- *    - ProtectedPacket (shield>0) is not inserted into broad phase and is not affected by waves.
- *    - Returning green packets are not removed on noise pass.
- */
+
 public class CollisionController implements Updatable {
     private final List<WireModel> wires;
     private final SpatialHashGrid<PacketModel> grid;
@@ -40,18 +21,25 @@ public class CollisionController implements Updatable {
 
     private static final int    CELL_SIZE        = 50;
     private static final double COLLISION_RADIUS = 18.0;
+    static final double SPAWN_COLLISION_GUARD = 0.12;
 
-    // Removed usage at collision time; retained constants for possible future use
+
     private static final double NOISE_INCREMENT = 0.5;
     private static final double MAX_NOISE       = 5.0;
 
     private static final double GREEN_GREEN_COLLISION_NOISE = 0.15;
+    private static final double GREEN_COLLISION_NOISE_PERCENT = 0.10;
+    private static final double MIN_GREEN_COLLISION_NOISE    = 0.10;
     // Tamed wave
-    private static final double IMPACT_RADIUS   = 45.0;   // was 100.0
-    private static final double IMPACT_STRENGTH = 0.35;   // was 1.0
+    private static final double IMPACT_RADIUS   = 45.0;
+    private static final double IMPACT_STRENGTH = 0.35;
 
     private boolean collisionsEnabled = true;
     private boolean impactWaveEnabled = true;
+
+    // بالای کلاس
+    private static final long RETURN_COLLISION_COOLDOWN_MS = 100; // مثلاً 100 میلی‌ثانیه کول‌داون
+    private final Map<PacketModel, Long> returnCollisionCooldowns = new WeakHashMap<>();
 
     public CollisionController(List<WireModel> wires, PacketLossModel lossModel) {
         this(wires, lossModel, null);
@@ -89,7 +77,8 @@ public class CollisionController implements Updatable {
         List<Point> impactPoints = new ArrayList<>();
         grid.clear();
 
-        // Broad phase: insert all unshielded packets into the grid
+        long now = System.currentTimeMillis();
+
         for (WireModel w : wires) {
             for (PacketModel p : w.getPackets()) {
                 if (isShielded(p)) continue;
@@ -100,69 +89,139 @@ public class CollisionController implements Updatable {
 
         Set<PacketModel> processed = new HashSet<>();
 
-        // Narrow phase: detect and resolve collisions
         for (WireModel w : wires) {
             for (PacketModel p : new ArrayList<>(w.getPackets())) {
                 if (processed.contains(p) || p.getProgress() <= 0) continue;
                 if (isShielded(p)) continue;
+
+                // کول‌داونِ برگشت: اگر پکت در حال برگشت است و هنوز کول‌داون دارد، نادیده‌اش بگیر
+                if (p.isReturning()) {
+                    Long cooldownUntil = returnCollisionCooldowns.get(p);
+                    if (cooldownUntil != null && now < cooldownUntil) {
+                        continue;
+                    } else if (cooldownUntil != null && now >= cooldownUntil) {
+                        returnCollisionCooldowns.remove(p);
+                    }
+                }
 
                 Point pPos = w.pointAt(p.getProgress());
                 for (PacketModel other : grid.retrieve(pPos.x, pPos.y)) {
                     if (other == p || processed.contains(other)) continue;
                     if (isShielded(other)) continue;
 
+                    // کول‌داونِ برگشت برای other
+                    if (other.isReturning()) {
+                        Long cooldownUntilOther = returnCollisionCooldowns.get(other);
+                        if (cooldownUntilOther != null && now < cooldownUntilOther) {
+                            continue;
+                        } else if (cooldownUntilOther != null && now >= cooldownUntilOther) {
+                            returnCollisionCooldowns.remove(other);
+                        }
+                    }
+
+                    // اگر هر کدام کول‌دان دارند، برخورد را نادیده بگیر
+                    if (p.getCollisionCooldown() > 0 || other.getCollisionCooldown() > 0) continue;
+
                     WireModel ow = other.getCurrentWire();
                     Point oPos = ow.pointAt(other.getProgress());
                     double dx = pPos.x - oPos.x;
                     double dy = pPos.y - oPos.y;
 
+                    boolean sameWire      = (w == ow);
+                    boolean bothOutward   = !p.isReturning() && !other.isReturning();
+                    boolean bothReturning =  p.isReturning() &&  other.isReturning();
+
+                    boolean nearSrcOutTogether = sameWire && bothOutward &&
+                            (p.getProgress() <= SPAWN_COLLISION_GUARD && other.getProgress() <= SPAWN_COLLISION_GUARD);
+
+                    boolean nearDstRetTogether = sameWire && bothReturning &&
+                            (p.getProgress() >= 1.0 - SPAWN_COLLISION_GUARD && other.getProgress() >= 1.0 - SPAWN_COLLISION_GUARD);
+
+                    // دو حالت متقارنِ جاافتاده:
+                    boolean nearSrcRetTogether = sameWire && bothReturning &&
+                            (p.getProgress() <= SPAWN_COLLISION_GUARD && other.getProgress() <= SPAWN_COLLISION_GUARD);
+
+                    boolean nearDstOutTogether = sameWire && bothOutward &&
+                            (p.getProgress() >= 1.0 - SPAWN_COLLISION_GUARD && other.getProgress() >= 1.0 - SPAWN_COLLISION_GUARD);
+
+                    if (nearSrcOutTogether || nearDstRetTogether || nearSrcRetTogether || nearDstOutTogether) {
+                        continue; // اصلاً بررسی برخورد را رد کن
+                    }
+
                     if (Math.hypot(dx, dy) <= COLLISION_RADIUS) {
                         boolean pIsMsg1     = isMsg1(p);
                         boolean otherIsMsg1 = isMsg1(other);
 
-                        // قبل از if اصلی برای همین برخورد:
                         boolean lossSfxPlayed = false;
 
                         if (pIsMsg1 && !otherIsMsg1) {
-                            // Green vs non-green: bounce green, remove other
                             bounceToSource(p, w);
-                            ow.removePacket(other);
-                            lossModel.increment();
-                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; } // اضافه
+                            // اگر پکت درحال برگشت شد، کول‌داون بگذار
+                            if (p.isReturning()) {
+                                returnCollisionCooldowns.put(p, now + RETURN_COLLISION_COOLDOWN_MS);
+                            }
+                            double inc = Math.max(MIN_GREEN_COLLISION_NOISE, other.getNoise() * GREEN_COLLISION_NOISE_PERCENT);
+                            other.increaseNoise(inc);
                             processed.add(p);
                             processed.add(other);
 
                         } else if (!pIsMsg1 && otherIsMsg1) {
-                            // Non-green vs green
                             bounceToSource(other, ow);
-                            w.removePacket(p);
-                            lossModel.increment();
-                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; } // اضافه
+                            if (other.isReturning()) {
+                                returnCollisionCooldowns.put(other, now + RETURN_COLLISION_COOLDOWN_MS);
+                            }
+                            double inc = Math.max(MIN_GREEN_COLLISION_NOISE, p.getNoise() * GREEN_COLLISION_NOISE_PERCENT);
+                            p.increaseNoise(inc);
                             processed.add(p);
                             processed.add(other);
 
-                        } else if (pIsMsg1 /*&&*/ && otherIsMsg1) {
+                        } else if (pIsMsg1 && otherIsMsg1) {
 
-                            // Green–Green: فقط نویز کم اضافه شود؛ هیچ بازگشتی انجام نشود
-                            p.increaseNoise(GREEN_GREEN_COLLISION_NOISE);
-                            other.increaseNoise(GREEN_GREEN_COLLISION_NOISE);
+                            if (!sameWire) {
+                                // روی دو سیم متفاوت: هر دو به مبدا برگردند
+                                bounceToSource(p, w);
+                                if (p.isReturning()) {
+                                    returnCollisionCooldowns.put(p, now + RETURN_COLLISION_COOLDOWN_MS);
+                                }
+                                bounceToSource(other, ow);
+                                if (other.isReturning()) {
+                                    returnCollisionCooldowns.put(other, now + RETURN_COLLISION_COOLDOWN_MS);
+                                }
+                            } else {
+                                // روی یک سیم: فقط نویز + یکی مکث کند تا دیگری جلو بیفتد
+                                p.increaseNoise(GREEN_GREEN_COLLISION_NOISE);
+                                other.increaseNoise(GREEN_GREEN_COLLISION_NOISE);
+
+                                // رهبر/دنباله‌دار را نسبت به جهت حرکت تعیین کن
+                                double ppPos = p.isReturning() ? (1.0 - p.getProgress()) : p.getProgress();
+                                double ooPos = other.isReturning() ? (1.0 - other.getProgress()) : other.getProgress();
+
+                                PacketModel leader   = (ppPos >= ooPos) ? p     : other;
+                                PacketModel follower = (ppPos >= ooPos) ? other : p;
+
+                                // دنباله‌دار کمی صبر کند
+                                follower.setHoldWhileCooldown(true);
+                                follower.setCollisionCooldown(Config.CIRCLE_YIELD_WAIT); // ~0.30s
+
+                                // نیشگونِ پیشروی برای رفع هم‌پوشانی و جلوگیری از برخورد فوری
+                                double delta = follower.isReturning() ? +0.003 : -0.003;
+                                double np = Math.max(0.0, Math.min(1.0, follower.getProgress() + delta));
+                                follower.setProgress(np);
+                            }
+
+                            // این دو خط برای جلوگیری از رسیدگی دوباره به همین جفت در همین پاس
                             processed.add(p);
                             processed.add(other);
 
                         } else {
-                            // Non-green vs non-green: remove both immediately
                             w.removePacket(p);
                             ow.removePacket(other);
                             lossModel.incrementBy(2);
-                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; } // اضافه
+                            if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; }
                             processed.add(p);
                             processed.add(other);
                         }
 
-
-                        // NOTE: we DO NOT add NOISE_INCREMENT to colliders anymore.
-
-                        // Impact point for wave (still used to give nearby packets mild noise)
                         int ix = (pPos.x + oPos.x) / 2;
                         int iy = (pPos.y + oPos.y) / 2;
                         impactPoints.add(new Point(ix, iy));
@@ -186,9 +245,11 @@ public class CollisionController implements Updatable {
 
     public void bounceToSource(PacketModel p, WireModel w) {
         if (w == null || p == null) return;
-        // Bounce on the same wire: do not detach; let progress run backward via motion strategy
         p.setReturning(true);
         p.setAcceleration(0.0);
+        p.setCollisionCooldown(0.20);      // ~200ms
+        // کمی فاصلهٔ موقعیتی ایجاد کن تا هم‌پوشانی پیکسل-به-پیکسل حذف شود
+        p.setProgress(Math.min(1.0, p.getProgress() + 0.002));
         // Optional: reset noise so it won't get removed while returning
         // p.resetNoise();
     }
@@ -202,7 +263,6 @@ public class CollisionController implements Updatable {
                 double dy = pPos.y - pt.y;
                 double dist = Math.hypot(dx, dy);
                 if (dist <= IMPACT_RADIUS) {
-                    // Do not apply wave to returning green packets
                     if (isMsg1(p) && p.isReturning()) continue;
                     double waveNoise = IMPACT_STRENGTH * (1.0 - dist / IMPACT_RADIUS);
                     p.increaseNoise(waveNoise);
@@ -218,7 +278,6 @@ public class CollisionController implements Updatable {
             List<PacketModel> doomed = new ArrayList<>();
             for (PacketModel p : w.getPackets()) {
                 if (!(p instanceof ProtectedPacket) && p.getNoise() >= MAX_NOISE) {
-                    // Do not remove returning green packets due to noise
                     if (isMsg1(p) && p.isReturning()) {
                         continue;
                     }
@@ -247,14 +306,14 @@ public class CollisionController implements Updatable {
 
     public void setImpactWaveEnabled(boolean enabled) { this.impactWaveEnabled = enabled; }
 
-        private void playLossSfxOnce() {
-                try {
-                       Clip c = ResourceManager.INSTANCE.getClip("impact_thud.wav");
-                       if (c != null) {
-                                c.stop();
-                                c.setFramePosition(0);
-                                c.start();
-                            }
-                    } catch (Exception ignore) {}
+    private void playLossSfxOnce() {
+        try {
+            Clip c = ResourceManager.INSTANCE.getClip("impact_thud.wav");
+            if (c != null) {
+                c.stop();
+                c.setFramePosition(0);
+                c.start();
             }
+        } catch (Exception ignore) {}
+    }
 }

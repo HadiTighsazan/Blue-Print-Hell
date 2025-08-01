@@ -196,6 +196,10 @@ public final class PacketOps {
         if (isProtected(p)) return 5;
         if (isConfidentialVpn(p)) return 4;
         if (isConfidential(p)) return 3;
+        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
+        if (prof == KinematicsProfile.MSG1) return 2;
+        if (prof == KinematicsProfile.MSG2) return 3;
+        if (prof == KinematicsProfile.MSG3) return 1;
         return 0;
     }
 

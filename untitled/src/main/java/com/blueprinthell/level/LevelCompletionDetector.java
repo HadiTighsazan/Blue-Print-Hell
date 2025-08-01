@@ -18,6 +18,8 @@ import java.util.List;
     private final double plannedPackets;
 
             private boolean reported = false;
+        private double stableAcc = 0.0;
+        private static final double STABLE_WINDOW_S = 0.30;
 
             public LevelCompletionDetector(List<WireModel> wires,
                                    List<SystemBoxModel> boxes,
@@ -56,9 +58,14 @@ import java.util.List;
                                : 0.0;
                 boolean okLoss = ratio < lossThreshold;
 
-                        if (wiresEmpty && boxesEmpty && noReturning && okLoss) {
+                if (wiresEmpty && boxesEmpty && noReturning && okLoss) {
+                    stableAcc += dt;
+                    if (stableAcc >= STABLE_WINDOW_S) {
                         reported = true;
-                        SwingUtilities.invokeLater(levelManager::reportLevelCompleted);
+                        javax.swing.SwingUtilities.invokeLater(levelManager::reportLevelCompleted);
                     }
+                } else {
+                    stableAcc = 0.0;
+                }
             }
 }

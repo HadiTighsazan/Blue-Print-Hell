@@ -220,7 +220,24 @@ public class LevelCoreManager {
         if (currentDef == null) {
             throw new IllegalStateException("Cannot retry before a level has been started");
         }
+
         gameController.getSimulation().stop();
+        for (WireModel w : gameController.getWires()) {
+            if (w.isForPreviousLevels()) {
+                w.clearPackets();
+                w.resetLargePacketCounter();
+            }
+        }
+        for (SystemBoxModel b : boxes) {
+            b.clearBuffer();
+        }
+        if (gameController.getPacketRenderer() != null) {
+            gameController.getPacketRenderer().refreshAll();
+                    }
+        if (gameController.getHudController() != null) {
+            gameController.getHudController().refreshOnce();
+                    }
+
         purgeCurrentLevelWires();
         startLevel(currentDef);
     }

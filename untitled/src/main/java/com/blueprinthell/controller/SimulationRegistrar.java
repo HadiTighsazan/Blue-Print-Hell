@@ -220,6 +220,12 @@ public class SimulationRegistrar {
                 behaviorRegistry.register(box, spy);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, spy);
                 simulation.register(adapter);
+
+                // اضافه کردن رفتار پاک‌سازی
+                LargePacketBufferCleaner cleaner = new LargePacketBufferCleaner(box, lossModel);
+                behaviorRegistry.register(box, cleaner);
+                SystemBehaviorAdapter adapterCleaner = new SystemBehaviorAdapter(box, cleaner);
+                simulation.register(adapterCleaner);
                 break;
             }
             case MALICIOUS: {
@@ -227,6 +233,12 @@ public class SimulationRegistrar {
                 behaviorRegistry.register(box, mal);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, mal);
                 simulation.register(adapter);
+
+                // اضافه کردن رفتار پاک‌سازی
+                LargePacketBufferCleaner cleaner = new LargePacketBufferCleaner(box, lossModel);
+                behaviorRegistry.register(box, cleaner);
+                SystemBehaviorAdapter adapterCleaner = new SystemBehaviorAdapter(box, cleaner);
+                simulation.register(adapterCleaner);
                 break;
             }
             case VPN: {
@@ -234,6 +246,12 @@ public class SimulationRegistrar {
                 behaviorRegistry.register(box, vpn);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, vpn);
                 simulation.register(adapter);
+
+                // اضافه کردن رفتار پاک‌سازی
+                LargePacketBufferCleaner cleaner = new LargePacketBufferCleaner(box, lossModel);
+                behaviorRegistry.register(box, cleaner);
+                SystemBehaviorAdapter adapterCleaner = new SystemBehaviorAdapter(box, cleaner);
+                simulation.register(adapterCleaner);
                 break;
             }
             case ANTI_TROJAN: {
@@ -241,6 +259,12 @@ public class SimulationRegistrar {
                 behaviorRegistry.register(box, anti);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, anti);
                 simulation.register(adapter);
+
+                // اضافه کردن رفتار پاک‌سازی
+                LargePacketBufferCleaner cleaner = new LargePacketBufferCleaner(box, lossModel);
+                behaviorRegistry.register(box, cleaner);
+                SystemBehaviorAdapter adapterCleaner = new SystemBehaviorAdapter(box, cleaner);
+                simulation.register(adapterCleaner);
                 break;
             }
             case DISTRIBUTOR: {
@@ -262,14 +286,27 @@ public class SimulationRegistrar {
                 behaviorRegistry.register(box, pr);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, pr);
                 simulation.register(adapter);
+
+                // اضافه کردن رفتار پاک‌سازی
+                LargePacketBufferCleaner cleaner = new LargePacketBufferCleaner(box, lossModel);
+                behaviorRegistry.register(box, cleaner);
+                SystemBehaviorAdapter adapterCleaner = new SystemBehaviorAdapter(box, cleaner);
+                simulation.register(adapterCleaner);
                 break;
             }
             case NORMAL:
             default: {
                 NormalBehavior nb = new NormalBehavior(box);
                 behaviorRegistry.register(box, nb);
-                SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, nb);
-                simulation.register(adapter);
+
+                LargePacketBufferCleaner cleaner = new LargePacketBufferCleaner(box, lossModel);
+                behaviorRegistry.register(box, cleaner);
+
+                SystemBehaviorAdapter adapterNormal = new SystemBehaviorAdapter(box, nb);
+                SystemBehaviorAdapter adapterCleaner = new SystemBehaviorAdapter(box, cleaner);
+
+                simulation.register(adapterNormal);
+                simulation.register(adapterCleaner);
                 break;
             }
         }
