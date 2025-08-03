@@ -46,10 +46,14 @@ import java.util.List;
                                 boolean wiresEmpty = wires.stream()
                                 .allMatch(w -> w.getPackets().isEmpty());
 
-                                boolean boxesEmpty = boxes.stream()
-                               .allMatch(b -> b.getBuffer().isEmpty());
+                boolean boxesEmpty = boxes.stream()
+                        .allMatch(b -> {
+                            com.blueprinthell.model.SystemBoxModel sb = (com.blueprinthell.model.SystemBoxModel) b;
+                            return sb.getBuffer().isEmpty() && !sb.hasUnprocessedEntries();
+                        });
 
-                                boolean noReturning = wires.stream()
+
+                boolean noReturning = wires.stream()
                                 .flatMap(w -> w.getPackets().stream())
                                 .noneMatch(PacketModel::isReturning);
 

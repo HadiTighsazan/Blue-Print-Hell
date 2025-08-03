@@ -134,6 +134,10 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         return Collections.unmodifiableList(behaviors);
     }
 
+    public boolean hasUnprocessedEntries() {
+        return !newEntries.isEmpty();
+    }
+
 
     public boolean enqueue(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return false;
