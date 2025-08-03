@@ -1,26 +1,19 @@
 package com.blueprinthell.controller.systems;
 
 import com.blueprinthell.config.Config;
-import com.blueprinthell.model.PacketModel;
-import com.blueprinthell.model.ProtectedPacket;
-import com.blueprinthell.model.SystemBoxModel;
-import com.blueprinthell.model.PacketOps;
-import com.blueprinthell.model.PacketOps.PacketTag;
-import com.blueprinthell.model.PortModel;
-import com.blueprinthell.model.ConfidentialPacket;
+import com.blueprinthell.model.*;
 import com.blueprinthell.motion.KinematicsProfile;
 import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.*;
-import java.util.Objects;
 
 public final class VpnBehavior implements SystemBehavior {
 
     private final SystemBoxModel box;
     private final double shieldCapacity;
 
-    private final Map<PacketModel, PacketModel> protectedMap = new WeakHashMap<>();
-    private final VpnRevertHints revertHints = new VpnRevertHints();
+    // Track all packets protected by this VPN instance
+    private final Set<PacketModel> myProtectedPackets = Collections.newSetFromMap(new WeakHashMap<>());
 
     public VpnBehavior(SystemBoxModel box) {
         this(box, Config.DEFAULT_SHIELD_CAPACITY);
@@ -33,81 +26,96 @@ public final class VpnBehavior implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-    }
-
-    @Override
-    public void onPacketEnqueued(PacketModel packet) {
-        onPacketEnqueued(packet, null);
+        // No periodic updates needed
     }
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
 
+        // Skip if already protected
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
             return;
         }
 
+        // Handle messenger packets -> Protected
         if (PacketOps.isMessenger(packet)) {
             PacketModel prot = PacketOps.toProtected(packet, shieldCapacity);
-            revertHints.mark(prot, packet);
-            /* ADD START */ VpnRevertHints.markGlobal(prot, packet); /* ADD END */
+
+            // Mark both locally and globally
+            VpnRevertHints.markGlobal(prot, packet);
+            myProtectedPackets.add(prot);
+
             replaceInBuffer(packet, prot);
-            protectedMap.put(prot, packet);
             return;
         }
 
+        // Handle confidential packets -> Confidential-VPN
         if (packet instanceof ConfidentialPacket && !PacketOps.isConfidentialVpn(packet)) {
             PacketModel conf6 = PacketOps.toConfidentialVpn(packet);
-            revertHints.mark(conf6, packet);
-             VpnRevertHints.markGlobal(conf6, packet);
+
+            // Mark both locally and globally
+            VpnRevertHints.markGlobal(conf6, packet);
+            myProtectedPackets.add(conf6);
+
             replaceInBuffer(packet, conf6);
             return;
         }
 
+        // Tag other confidential packets
         if (PacketOps.isConfidential(packet)) {
             KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
-            PacketOps.tag(packet, PacketTag.CONFIDENTIAL_VPN);
-            return;
+            PacketOps.tag(packet, PacketOps.PacketTag.CONFIDENTIAL_VPN);
+            myProtectedPackets.add(packet);
         }
-
     }
 
     @Override
     public void onEnabledChanged(boolean enabled) {
         if (!enabled) {
-            Queue<PacketModel> buf = box.getBuffer();
-            if (buf == null || buf.isEmpty()) return;
+            // VPN disabled - revert all protected packets
+            revertAllProtectedPackets();
+        }
+    }
 
-            List<PacketModel> toReplace = new ArrayList<>(buf);
-            for (PacketModel p : toReplace) {
-                PacketModel orig = revertHints.consume(p);
-                if (orig != null) {
-                    replaceInBuffer(p, orig);
-                }
-                else {
-                    PacketModel orig2 = VpnRevertHints.consumeGlobal(p);
-                    if (orig2 != null) {
-                        replaceInBuffer(p, orig2);
-                    }
-                }
+    /**
+     * Revert all packets protected by this VPN instance
+     * This affects packets in:
+     * 1. This system's buffer
+     * 2. Other systems' buffers
+     * 3. On wires
+     */
+    private void revertAllProtectedPackets() {
+        // 1. Revert packets in our own buffer
+        revertBufferPackets();
+
+        // 2. Clear our tracking (weak references will handle cleanup)
+        myProtectedPackets.clear();
+
+        // Note: Packets on wires or in other systems will be reverted
+        // when they're processed by those systems (via global hints)
+    }
+
+    private void revertBufferPackets() {
+        Queue<PacketModel> buffer = box.getBuffer();
+        if (buffer == null || buffer.isEmpty()) return;
+
+        List<PacketModel> toProcess = new ArrayList<>(buffer);
+        for (PacketModel p : toProcess) {
+            // Try local revert first, then global
+            PacketModel orig = VpnRevertHints.consumeGlobal(p);
+            if (orig != null) {
+                replaceInBuffer(p, orig);
             }
         }
     }
 
     private void replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
-        replaceInBufferGeneric(box, oldPkt, newPkt);
-    }
-
-    private boolean replaceInBufferIfPresent(SystemBoxModel targetBox, PacketModel oldPkt, PacketModel newPkt) {
-        return replaceInBufferGeneric(targetBox, oldPkt, newPkt);
-    }
-
-    private boolean replaceInBufferGeneric(SystemBoxModel targetBox, PacketModel oldPkt, PacketModel newPkt) {
         Deque<PacketModel> temp = new ArrayDeque<>();
         boolean replaced = false;
         PacketModel p;
-        while ((p = targetBox.pollPacket()) != null) {
+
+        while ((p = box.pollPacket()) != null) {
             if (!replaced && p == oldPkt) {
                 temp.addLast(newPkt);
                 replaced = true;
@@ -115,14 +123,19 @@ public final class VpnBehavior implements SystemBehavior {
                 temp.addLast(p);
             }
         }
+
         for (PacketModel q : temp) {
-            targetBox.enqueue(q);
+            box.enqueue(q);
         }
-        return replaced;
     }
 
     public void clear() {
-        protectedMap.clear();
-        VpnRevertHints.clearAllGlobal();
+        myProtectedPackets.clear();
+        // Note: Don't clear global hints here as other VPNs might be using them
+    }
+
+    // For debugging/telemetry
+    public int getProtectedPacketCount() {
+        return myProtectedPackets.size();
     }
 }
