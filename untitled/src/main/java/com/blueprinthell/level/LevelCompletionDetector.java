@@ -53,8 +53,17 @@ public class LevelCompletionDetector implements Updatable {
         boolean wiresEmpty = wires.stream()
                 .allMatch(w -> w.getPackets().isEmpty());
 
+
+
         boolean boxesEmpty = boxes.stream()
-                .allMatch(b -> b.getBuffer().isEmpty() && !b.hasUnprocessedEntries());
+                .allMatch(b -> {
+                    boolean noBacklog = !b.hasUnprocessedEntries();
+                    boolean isSink    = b.getOutPorts().isEmpty();
+                    boolean bufEmpty  = b.getBuffer().isEmpty();
+                    return isSink ? noBacklog : (noBacklog && bufEmpty);
+                });
+
+
 
         boolean noReturning = wires.stream()
                 .flatMap(w -> w.getPackets().stream())
@@ -66,15 +75,7 @@ public class LevelCompletionDetector implements Updatable {
 
         boolean acceptableLoss = lossRatio <= lossThreshold;
 
-        // Debug output
-        if (stableAcc == 0.0) {
-            System.out.println("Level completion check:");
-            System.out.println("  Wires empty: " + wiresEmpty);
-            System.out.println("  Boxes empty: " + boxesEmpty);
-            System.out.println("  No returning: " + noReturning);
-            System.out.println("  Loss ratio: " + String.format("%.2f", lossRatio) + " / " + lossThreshold);
-            System.out.println("  Acceptable loss: " + acceptableLoss);
-        }
+
 
         if (wiresEmpty && boxesEmpty && noReturning) {
             if (acceptableLoss) {
