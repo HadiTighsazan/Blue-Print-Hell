@@ -9,11 +9,12 @@ import java.util.WeakHashMap;
 public final class RouteHints {
     private static final Map<PacketModel, Boolean> FORCE_INCOMPATIBLE = new WeakHashMap<>();
 
-    private RouteHints() {}
+    public static boolean peekForceIncompatible(PacketModel p) {
+        return FORCE_INCOMPATIBLE.getOrDefault(p, false);
+    }
 
-    public static void setForceIncompatible(PacketModel p, boolean v) {
-        if (v) FORCE_INCOMPATIBLE.put(p, Boolean.TRUE);
-        else   FORCE_INCOMPATIBLE.remove(p);
+    public static void clearForceIncompatible(PacketModel p) {
+        FORCE_INCOMPATIBLE.remove(p);
     }
 
     public static boolean consumeForceIncompatible(PacketModel p) {
@@ -23,5 +24,9 @@ public final class RouteHints {
 
     public static void clear() {
         FORCE_INCOMPATIBLE.clear();
+    }
+    public static void setForceIncompatible(PacketModel p, boolean v) {
+        if (v) FORCE_INCOMPATIBLE.put(p, Boolean.TRUE);
+        else   FORCE_INCOMPATIBLE.remove(p);
     }
 }

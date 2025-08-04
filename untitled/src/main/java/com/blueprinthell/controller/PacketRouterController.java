@@ -34,6 +34,11 @@ public class PacketRouterController implements Updatable {
 
     @Override
     public void update(double dt) {
+        // اگر هیچ مسیر خالی نیست، اصلاً پکت از buffer برندار
+        if (!hasAvailableRoute()) {
+            return;
+        }
+
         List<PacketModel> toRoute = new ArrayList<>();
         PacketModel p;
         while ((p = box.pollPacket()) != null) toRoute.add(p);
@@ -41,6 +46,16 @@ public class PacketRouterController implements Updatable {
         for (PacketModel packet : toRoute) {
             routePacket(packet);
         }
+    }
+
+    private boolean hasAvailableRoute() {
+        return box.getOutPorts().stream()
+                .anyMatch(port -> {
+                    WireModel w = findWire(port);
+                    if (w == null) return false;
+                    SystemBoxModel d = destMap.get(w);
+                    return d != null && d.isEnabled() && isWireEmpty(port);
+                });
     }
 
 
@@ -56,15 +71,12 @@ public class PacketRouterController implements Updatable {
                 .collect(Collectors.toList());
 
         if (availableOuts.isEmpty()) {
-            // No available routes - try to re-enqueue or drop
-            if (!box.enqueue(packet)) {
-                drop(packet);
-            }
-            return;
+            // No available routes - keep in buffer
+            return; // پکت در buffer می‌ماند
         }
 
         // Check if packet should be routed incompatibly (from Malicious system)
-        boolean forceIncompat = RouteHints.consumeForceIncompatible(packet);
+        boolean forceIncompat = RouteHints.peekForceIncompatible(packet);
 
         if (forceIncompat) {
             routeIncompatibly(packet, availableOuts);
@@ -73,83 +85,65 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-
-    private void routeIncompatibly(PacketModel packet, List<PortModel> availableOuts) {
-        // Find incompatible ports
-        List<PortModel> incompatPorts = availableOuts.stream()
-                .filter(port -> !port.isCompatible(packet))
-                .collect(Collectors.toList());
-
-        // Prefer empty incompatible wires
-        List<PortModel> emptyIncompat = incompatPorts.stream()
+    private void routeNormally(PacketModel packet, List<PortModel> availableOuts) {
+        // 1. ابتدا پورت‌های سازگار خالی را پیدا کن
+        List<PortModel> emptyCompatPorts = availableOuts.stream()
+                .filter(port -> port.isCompatible(packet))
                 .filter(this::isWireEmpty)
                 .collect(Collectors.toList());
 
-        PortModel chosen = null;
-
-        if (!emptyIncompat.isEmpty()) {
-            // Best case: empty incompatible wire
-            chosen = emptyIncompat.get(rnd.nextInt(emptyIncompat.size()));
-        } else if (!incompatPorts.isEmpty()) {
-            // Second best: any incompatible wire
-            chosen = incompatPorts.get(rnd.nextInt(incompatPorts.size()));
-        } else {
-            // Fallback: route normally if no incompatible ports available
-            routeNormally(packet, availableOuts);
+        if (!emptyCompatPorts.isEmpty()) {
+            // انتخاب تصادفی از بین پورت‌های سازگار خالی
+            PortModel chosen = emptyCompatPorts.get(rnd.nextInt(emptyCompatPorts.size()));
+            sendPacketToPort(packet, chosen);
             return;
         }
 
-        if (chosen != null) {
-            sendPacketToPort(packet, chosen);
-            incompatibleRoutes++;
-        }
-    }
-
-
-    private void routeNormally(PacketModel packet, List<PortModel> availableOuts) {
-        // Categorize ports
-        List<PortModel> compatPorts = availableOuts.stream()
-                .filter(port -> port.isCompatible(packet))
-                .collect(Collectors.toList());
-
-        // Prefer empty compatible wires
-        List<PortModel> emptyCompat = compatPorts.stream()
+        // 2. اگر پورت سازگار خالی نبود، هر پورت خالی را انتخاب کن
+        List<PortModel> emptyPorts = availableOuts.stream()
                 .filter(this::isWireEmpty)
                 .collect(Collectors.toList());
 
-        // Any empty wire as last resort
-        List<PortModel> emptyAny = availableOuts.stream()
+        if (!emptyPorts.isEmpty()) {
+            // انتخاب تصادفی از بین پورت‌های خالی
+            PortModel chosen = emptyPorts.get(rnd.nextInt(emptyPorts.size()));
+            sendPacketToPort(packet, chosen);
+            return;
+        }
+
+        // 3. هیچ پورت خالی نیست - پکت در buffer بماند
+        // (پکت از قبل در buffer است، نیازی به re-enqueue نیست)
+    }
+
+    private void routeIncompatibly(PacketModel packet, List<PortModel> availableOuts) {
+        // 1. ابتدا پورت‌های ناسازگار خالی را پیدا کن
+        List<PortModel> emptyIncompatPorts = availableOuts.stream()
+                .filter(port -> !port.isCompatible(packet))
                 .filter(this::isWireEmpty)
                 .collect(Collectors.toList());
 
-        PortModel chosen = null;
-
-        // Priority order:
-        // 1. Empty compatible wire
-        // 2. Any compatible wire
-        // 3. Any empty wire
-        // 4. Any wire
-
-        if (!emptyCompat.isEmpty()) {
-            chosen = selectBestPort(emptyCompat, packet);
-        } else if (!compatPorts.isEmpty()) {
-            chosen = selectBestPort(compatPorts, packet);
-        } else if (!emptyAny.isEmpty()) {
-            chosen = selectBestPort(emptyAny, packet);
-        } else if (!availableOuts.isEmpty()) {
-            chosen = selectBestPort(availableOuts, packet);
-        }
-
-        if (chosen != null) {
+        if (!emptyIncompatPorts.isEmpty()) {
+            // انتخاب تصادفی از بین پورت‌های ناسازگار خالی
+            PortModel chosen = emptyIncompatPorts.get(rnd.nextInt(emptyIncompatPorts.size()));
             sendPacketToPort(packet, chosen);
-        } else {
-            // No route available - try to re-enqueue or drop
-            if (!box.enqueue(packet)) {
-                drop(packet);
-            }
+            return;
         }
-    }
 
+        // 2. اگر پورت ناسازگار خالی نبود، هر پورت خالی را انتخاب کن
+        List<PortModel> emptyPorts = availableOuts.stream()
+                .filter(this::isWireEmpty)
+                .collect(Collectors.toList());
+
+        if (!emptyPorts.isEmpty()) {
+            // انتخاب تصادفی از بین پورت‌های خالی
+            PortModel chosen = emptyPorts.get(rnd.nextInt(emptyPorts.size()));
+            sendPacketToPort(packet, chosen);
+            return;
+        }
+
+        // 3. هیچ پورت خالی نیست - پکت در buffer بماند
+        // (پکت از قبل در buffer است، نیازی به re-enqueue نیست)
+    }
 
     private PortModel selectBestPort(List<PortModel> ports, PacketModel packet) {
         if (ports.isEmpty()) return null;
@@ -270,6 +264,7 @@ public class PacketRouterController implements Updatable {
 
         wire.attachPacket(packet, 0.0);
         packetsRouted++;
+        RouteHints.clearForceIncompatible(packet);
     }
 
 

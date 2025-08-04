@@ -43,8 +43,11 @@ public final class MaliciousBehavior implements SystemBehavior {
             }
         }
 
-        // Apply malicious effects to non-protected packets
         applyMaliciousEffects(packet);
+        if (!RouteHints.peekForceIncompatible(packet)) {
+            RouteHints.setForceIncompatible(packet, true);
+            forcedIncompatibleRoutes++;
+        }
     }
 
     private void applyMaliciousEffects(PacketModel packet) {
