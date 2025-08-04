@@ -23,7 +23,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     private final List<SystemBehavior> behaviors = new ArrayList<>();
 
-
     private final Queue<PacketEntry> newEntries = new ConcurrentLinkedQueue<>();
 
     private boolean lastEnabledState = true;
@@ -40,7 +39,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
-
     public SystemBoxModel(int x, int y, int width, int height,
                           List<PortShape> inShapes,
                           List<PortShape> outShapes) {
@@ -49,7 +47,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         createPorts(inShapes, outShapes);
     }
 
-
     public SystemBoxModel(int x, int y, int width, int height,
                           int inCount, PortShape inShape,
                           int outCount, PortShape outShape) {
@@ -57,9 +54,11 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
                 java.util.Collections.nCopies(inCount, inShape),
                 java.util.Collections.nCopies(outCount, outShape));
     }
+
     public SystemKind getPrimaryKind() {
         return primaryKind;
     }
+
     public void setPrimaryKind(SystemKind kind) {
         this.primaryKind = (kind != null) ? kind : SystemKind.NORMAL;
     }
@@ -138,7 +137,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         return !newEntries.isEmpty();
     }
 
-
     public boolean enqueue(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return false;
 
@@ -175,7 +173,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         newEntries.clear();
         SystemBehaviorAdapter.EnteredPortTracker.clear();
     }
-
 
     public Queue<PacketModel> getBuffer() {
         return buffer;
@@ -218,6 +215,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
+    /** افزودن پورت خروجی (لبهٔ راست) + به‌روزرسانی چینش پورت‌ها */
     public void addOutputPort(PortShape shape) {
         if (outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
         int portSize = Config.PORT_SIZE;
@@ -238,12 +236,10 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         return true;
     }
 
-
     public boolean removeFromBuffer(PacketModel packet) {
         if (packet == null) return false;
         return buffer.remove(packet);
     }
-
 
     public boolean enqueueFront(PacketModel packet) {
         if (packet == null) return false;
@@ -254,5 +250,17 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
             return true;
         }
         return enqueue(packet, null);
+    }
+
+    /** افزودن پورت ورودی (لبهٔ چپ) + به‌روزرسانی چینش پورت‌ها */
+    public void addInputPort(PortShape shape) {
+        PortModel newPort = new PortModel(
+                getX(),   // left edge
+                getY(),
+                shape,
+                true
+        );
+        inPorts.add(newPort);
+        updatePortsPosition();
     }
 }

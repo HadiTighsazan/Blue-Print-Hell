@@ -33,20 +33,20 @@ public class Level2 extends AbstractLevel {
         PortShape S3 = SHAPES[(ia + 2) % 3];
 
         // --- سیستم‌های قبلی با پورت‌های مورد نظر ---
-        // Source: قبلاً 3 خروجی (S1,S2,S3) داشت. حالا یک خروجی مربعی صریح هم اضافه می‌کنیم.
-        boxes.add(createSource(120, 300, Arrays.asList(S1, S2, S3, PortShape.SQUARE))); // Source: 4 خروجی
+        // Source (قدیمی): 1 خروجی مثل مرحله 1
+        boxes.add(createSource(120, 300, Collections.singletonList(S1)));
 
-        boxes.add(createBox( // Normal0: 1 in (S1) → 2 out (B, S1)
+        boxes.add(createBox(
                 360, 260,
-                Collections.singletonList(S1),
-                Arrays.asList(B, S1),
+                Arrays.asList(S1),
+                Arrays.asList(B, S1, S2),
                 SystemKind.NORMAL
         ));
 
-        // Sink0 (قدیمی): همان ورودی‌های قبلی (مثلاً دو تا B) بدون تغییر باقی می‌ماند
-        boxes.add(createSink(980, 300, Arrays.asList(B, B)));
+        // Sink0 (قدیمی): 1 ورودی مثل مرحله 1
+        boxes.add(createSink(980, 300, Collections.singletonList(B)));
 
-        // --- سه سیستم مرحله 2 ---
+        // --- سه سیستم مرحله 2 (جدید) — بدون تغییر ---
         // 1) MALICIOUS: 2 in (S1, S3) → 2 out (B, SQUARE)
         boxes.add(createBox(
                 560, 200,
@@ -63,7 +63,7 @@ public class Level2 extends AbstractLevel {
                 SystemKind.SPY
         ));
 
-        // 3) Sink1 (جدید): 1 in (S3) بوده → حالا یک ورودی دایره‌ای هم اضافه می‌شه
+        // 3) Sink1 (جدید)
         boxes.add(createSink(820, 440, Arrays.asList(S3, PortShape.CIRCLE)));
 
         return new LevelDefinition(boxes, wireBudget);

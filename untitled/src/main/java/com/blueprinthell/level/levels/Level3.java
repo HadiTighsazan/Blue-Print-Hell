@@ -12,7 +12,7 @@ public class Level3 extends AbstractLevel {
     public Level3() {
         super(3, "Stage 3 — VPN & Anti-Trojan Protection", 800.0);
         this.packetsPerPort = 4;
-        this.maxLossRatio = 0.4;
+        this.maxLossRatio = 0.5;
     }
 
     @Override
@@ -60,8 +60,8 @@ public class Level3 extends AbstractLevel {
         // Spy از مرحله قبل
         boxes.add(createBox(
                 500, 400,
-                Arrays.asList(PortShape.CIRCLE),
-                Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE),  // یک خروجی اضافه
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
+                Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE, PortShape.SQUARE),  // دو خروجی اضافه
                 SystemKind.SPY
         ));
 

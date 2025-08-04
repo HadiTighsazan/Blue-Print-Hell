@@ -136,14 +136,18 @@ public class LevelCoreManager {
         gameController.getHudCoord().wireLevel(gameController.getProducerController());
         gameController.getSimulation().setPacketProducerController(gameController.getProducerController());
 
+
+        double threshold = levelManager.getCurrentLevel().getMaxLossRatio();
+
         LossMonitorController lossCtrl = new LossMonitorController(
                 gameController.getLossModel(),
                 plannedPackets,
-                0.5,
+                threshold,                         // به جای 0.5
                 gameController.getSimulation(),
                 gameController.getScreenController(),
                 gameController::retryStage
         );
+
         gameController.getSimulation().register(lossCtrl);
 
         gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires()));

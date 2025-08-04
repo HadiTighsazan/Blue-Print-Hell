@@ -4,57 +4,135 @@ import com.blueprinthell.level.AbstractLevel;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.controller.systems.SystemKind;
 import com.blueprinthell.model.PortShape;
-import java.util.*;
 
+import java.util.*;
 
 public class Level4 extends AbstractLevel {
 
     public Level4() {
-        super(4, "Malicious Threats", 1000.0);
-        this.packetsPerPort = 6;
-        this.maxLossRatio = 0.4; // Higher tolerance due to malicious activity
+        super(4, "Stage 4 — Spy Network & Teleportation", 900.0);
+        this.packetsPerPort = 5; // افزایش تعداد پکت‌ها برای پیچیدگی بیشتر
+        this.maxLossRatio = 0.45; // تحمل بیشتر به دلیل تله‌پورت
     }
 
     @Override
     public String getDescription() {
-        return "Beware of Malicious systems! Use Anti-Trojan to clean infected packets.";
+        return "Spy systems can teleport packets between each other! Route carefully to avoid data leaks.";
     }
 
     @Override
     public LevelDefinition getDefinition() {
         List<LevelDefinition.BoxSpec> boxes = new ArrayList<>();
 
+        // رندم پایدار برای تنوع پورت
+        Random rng = new Random(20250804L + levelNumber);
 
-        boxes.add(createSource(50, 200, squareTriangle()));
-        boxes.add(createSource(50, 400, circle()));
+        // === سیستم‌های موجود از مراحل قبل (با پورت‌های اضافی) ===
 
-        // Previous systems
-        boxes.add(createBox(200, 250,
-                squareTriangle(),
-                Arrays.asList(PortShape.SQUARE, PortShape.SQUARE, PortShape.TRIANGLE),
-                SystemKind.NORMAL));
+        // Source - اضافه کردن یک خروجی جدید
+        boxes.add(createSource(100, 200, Arrays.asList(
+                PortShape.SQUARE,
+                PortShape.TRIANGLE,
+                PortShape.CIRCLE,
+                PortShape.SQUARE,  // خروجی از مرحله قبل
+                PortShape.TRIANGLE // خروجی جدید برای مرحله 4
+        )));
 
-        boxes.add(createBox(200, 450,
-                circle(),
-                circle(),
-                SystemKind.VPN));
+        // Normal0 از مرحله 1 - اضافه کردن پورت‌های جدید
+        boxes.add(createBox(
+                300, 150,
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE, PortShape.CIRCLE), // 3 ورودی (حداکثر)
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE, PortShape.TRIANGLE), // 3 خروجی (حداکثر)
+                SystemKind.NORMAL
+        ));
 
-        // NEW: Malicious system in the middle path
-        boxes.add(createBox(400, 150,
-                square(),
-                square(),
-                SystemKind.MALICIOUS));
+        // Malicious از مرحله 2
+        boxes.add(createBox(
+                500, 100,
+                Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE),
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
+                SystemKind.MALICIOUS
+        ));
 
-        // NEW: Anti-Trojan for cleaning
-        boxes.add(createBox(400, 350,
-                all(),  // Can accept all types
-                all(),  // Can output all types
-                SystemKind.ANTI_TROJAN));
+        // Spy قدیمی از مرحله 2 - اضافه کردن یک خروجی
+        boxes.add(createBox(
+                500, 250,
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE), // ورودی اضافی
+                Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE, PortShape.SQUARE), // خروجی اضافی
+                SystemKind.SPY
+        ));
 
-        // Sinks
-        boxes.add(createSink(700, 150, square()));
-        boxes.add(createSink(700, 250, triangle()));
-        boxes.add(createSink(700, 350, circle()));
+        // VPN از مرحله 3
+        boxes.add(createBox(
+                300, 400,
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
+                Arrays.asList(PortShape.CIRCLE, PortShape.TRIANGLE),
+                SystemKind.VPN
+        ));
+
+        // Anti-Trojan از مرحله 3
+        boxes.add(createBox(
+                700, 200,
+                all(), // می‌تواند همه انواع را بپذیرد
+                Arrays.asList(PortShape.SQUARE, PortShape.CIRCLE),
+                SystemKind.ANTI_TROJAN
+        ));
+
+        // Normal از مرحله 3
+        boxes.add(createBox(
+                700, 350,
+                Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE),
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE, PortShape.CIRCLE),
+                SystemKind.NORMAL
+        ));
+
+        // === سیستم‌های جدید مرحله 4 ===
+
+        // 1) Spy جدید #1 - موقعیت بالا
+        boxes.add(createBox(
+                500, 500,
+                Arrays.asList(PortShape.TRIANGLE, PortShape.SQUARE), // 2 ورودی متنوع
+                Arrays.asList(PortShape.CIRCLE, PortShape.TRIANGLE), // 2 خروجی
+                SystemKind.SPY
+        ));
+
+        // 2) Spy جدید #2 - موقعیت وسط
+        boxes.add(createBox(
+                300, 600,
+                Arrays.asList(PortShape.CIRCLE, PortShape.TRIANGLE, PortShape.SQUARE), // 3 ورودی (حداکثر)
+                Arrays.asList(PortShape.SQUARE, PortShape.CIRCLE), // 2 خروجی
+                SystemKind.SPY
+        ));
+
+        // 3) Normal جدید #1 - برای مسیریابی بین سیستم‌های جاسوسی
+        boxes.add(createBox(
+                100, 500,
+                Arrays.asList(PortShape.TRIANGLE, PortShape.SQUARE), // 2 ورودی
+                Arrays.asList(PortShape.CIRCLE, PortShape.TRIANGLE, PortShape.SQUARE), // 3 خروجی
+                SystemKind.NORMAL
+        ));
+
+        // 4) Normal جدید #2 - برای اتصال به Sink‌ها
+        boxes.add(createBox(
+                700, 550,
+                Arrays.asList(PortShape.CIRCLE, PortShape.TRIANGLE), // 2 ورودی
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE), // 2 خروجی
+                SystemKind.NORMAL
+        ));
+
+        // === Sink‌های موجود (با پورت اضافی) ===
+
+        // Sink0 قدیمی - اضافه کردن پورت
+        boxes.add(createSink(950, 100, Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE, PortShape.TRIANGLE)));
+
+        // Sink1 قدیمی - اضافه کردن پورت
+        boxes.add(createSink(950, 300, Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE)));
+
+        // Sink2 از مرحله 3
+        boxes.add(createSink(950, 450, Arrays.asList(PortShape.SQUARE, PortShape.CIRCLE)));
+
+        // === Sink جدید مرحله 4 ===
+        boxes.add(createSink(950, 600, Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE)));
 
         return new LevelDefinition(boxes, wireBudget);
     }
