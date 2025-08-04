@@ -27,23 +27,27 @@ public class PortModel extends GameObjectModel implements Serializable {
         return input;
     }
 
+
     public PacketType getType() {
-        return (shape == PortShape.SQUARE) ? PacketType.SQUARE : PacketType.TRIANGLE;
+        return switch (shape) {
+            case SQUARE -> PacketType.SQUARE;
+            case TRIANGLE -> PacketType.TRIANGLE;
+            case CIRCLE -> PacketType.CIRCLE;
+        };
     }
 
 
     public boolean isCompatible(PacketModel packet) {
-        if (PacketOps.isConfidential(packet)) {
-            return true; // محرمانه‌ها خارج از منطق سازگاری پورت‌ها هستند
-        }
-        PacketType t = packet.getType();
-        return switch (this.shape) {
-            case SQUARE   -> (t == PacketType.SQUARE || t == PacketType.CIRCLE);
-            case TRIANGLE -> (t == PacketType.TRIANGLE);
-            case CIRCLE   -> (t == PacketType.CIRCLE);
+        if (this.input) return false;
+        PortShape packetShape = switch (packet.getType()) {
+            case SQUARE -> PortShape.SQUARE;
+            case TRIANGLE -> PortShape.TRIANGLE;
+            case CIRCLE -> PortShape.CIRCLE;
         };
+        return this.shape == packetShape;
     }
-    public boolean isCompatibleWith(PortModel other) {
+
+    public boolean canConnectTo(PortModel other) {
         return !this.input && other.input;
     }
 
@@ -52,6 +56,14 @@ public class PortModel extends GameObjectModel implements Serializable {
         this.shape = newShape;
     }
 
+    public static PortShape shapeForPacket(PacketModel packet) {
+        switch (packet.getType()) {
+            case SQUARE: return PortShape.SQUARE;
+            case TRIANGLE: return PortShape.TRIANGLE;
+            case CIRCLE: return PortShape.CIRCLE;
+            default: throw new IllegalStateException("Unknown packet type");
+        }
+    }
 
 
 }

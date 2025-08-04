@@ -43,9 +43,7 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-    /**
-     * Route a single packet based on system behavior and hints
-     */
+
     private void routePacket(PacketModel packet) {
         // Get available output ports with enabled destinations
         List<PortModel> availableOuts = box.getOutPorts().stream()
@@ -75,9 +73,7 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-    /**
-     * Route packet to an incompatible port (Malicious behavior)
-     */
+
     private void routeIncompatibly(PacketModel packet, List<PortModel> availableOuts) {
         // Find incompatible ports
         List<PortModel> incompatPorts = availableOuts.stream()
@@ -109,9 +105,7 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-    /**
-     * Route packet normally (compatible routing)
-     */
+
     private void routeNormally(PacketModel packet, List<PortModel> availableOuts) {
         // Categorize ports
         List<PortModel> compatPorts = availableOuts.stream()
@@ -156,9 +150,7 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-    /**
-     * Select best port considering load balancing and destination capacity
-     */
+
     private PortModel selectBestPort(List<PortModel> ports, PacketModel packet) {
         if (ports.isEmpty()) return null;
 
@@ -217,9 +209,7 @@ public class PacketRouterController implements Updatable {
         return topPorts.get(0).getKey();
     }
 
-    /**
-     * Get score adjustment based on destination system type
-     */
+
     private int getDestinationTypeScore(SystemBoxModel dest, PacketModel packet) {
         SystemKind kind = dest.getPrimaryKind();
         if (kind == null) return 0;
@@ -260,9 +250,7 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-    /**
-     * Send packet to specified port
-     */
+
     private void sendPacketToPort(PacketModel packet, PortModel port) {
         WireModel wire = findWire(port);
         if (wire == null) {
@@ -280,22 +268,17 @@ public class PacketRouterController implements Updatable {
         MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
         packet.setMotionStrategy(ms);
 
-        // Attach to wire
         wire.attachPacket(packet, 0.0);
         packetsRouted++;
     }
 
-    /**
-     * Check if a wire is empty
-     */
+
     private boolean isWireEmpty(PortModel port) {
         WireModel w = findWire(port);
         return w != null && w.getPackets().isEmpty();
     }
 
-    /**
-     * Find wire connected to a port
-     */
+
     private WireModel findWire(PortModel port) {
         for (WireModel w : wires) {
             if (w.getSrcPort() == port) return w;
@@ -303,15 +286,12 @@ public class PacketRouterController implements Updatable {
         return null;
     }
 
-    /**
-     * Drop a packet and record loss
-     */
+
     private void drop(PacketModel packet) {
         lossModel.increment();
         droppedPackets++;
     }
 
-    // Telemetry getters
     public long getPacketsRouted() { return packetsRouted; }
     public long getIncompatibleRoutes() { return incompatibleRoutes; }
     public long getDroppedPackets() { return droppedPackets; }

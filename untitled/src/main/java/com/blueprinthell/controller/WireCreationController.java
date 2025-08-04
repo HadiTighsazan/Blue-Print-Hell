@@ -104,7 +104,7 @@ public class WireCreationController {
 // (no shape-based veto for wiring)
 
                 // 3) شرط قبلی پروژه را هم نگه می‌داریم (خروجی→ورودی + هر منطق اضافی در PortModel)
-                if(startPort.isCompatibleWith(pm)){
+                if(startPort.canConnectTo(pm)){
                     WireModel wm=new WireModel(startPort,pm);
                     double len=wm.getLength();
                     if(!usageModel.useWire(len)){
