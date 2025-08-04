@@ -6,67 +6,108 @@ import com.blueprinthell.view.screens.MissionPassedView;
 
 
 public class LevelManager {
-    private final GameController    gameController;
-    private final ScreenController  screenController;
+    private final GameController gameController;
+    private final ScreenController screenController;
 
-    private LevelDefinition current;
-    private int levelIndex = -1;
-
+    private Level currentLevel;
+    private int currentLevelNumber = 0;
     private boolean missionReported = false;
 
     public LevelManager(GameController gc, ScreenController sc) {
-        this.gameController  = gc;
+        this.gameController = gc;
         this.screenController = sc;
     }
 
 
     public void startGame() {
-        levelIndex = 0;
-        current = LevelGenerator.firstLevel();
+        currentLevelNumber = 1;
+        loadLevel(currentLevelNumber);
+    }
+
+
+    private void loadLevel(int levelNumber) {
+        if (!LevelRegistry.isValidLevel(levelNumber)) {
+            throw new IllegalStateException("Invalid level number: " + levelNumber);
+        }
+
+        currentLevel = LevelRegistry.getLevel(levelNumber);
+        currentLevelNumber = levelNumber;
         missionReported = false;
-        gameController.startLevel(current);
+
+        gameController.startLevel(currentLevel.getDefinition());
     }
 
 
     public void reportLevelCompleted() {
-
         if (missionReported) return;
         missionReported = true;
+
         gameController.getSimulation().stop();
 
         MissionPassedView mv = screenController.getMissionPassedView();
-        mv.setSummary(levelIndex + 1,
+        mv.setSummary(
+                currentLevelNumber,
                 gameController.getScoreModel().getScore(),
-                gameController.getLossModel().getLostCount());
+                gameController.getLossModel().getLostCount()
+        );
+
         screenController.showScreen(ScreenController.MISSION_PASSED);
     }
 
 
     public void startNextLevel() {
-        levelIndex++;
-        int availableCapacity = gameController.getLevelSessionManager().boxes.stream().mapToInt(b -> com.blueprinthell.config.Config.MAX_OUTPUT_PORTS - b.getOutPorts().size())
-                .sum();
+        if (currentLevelNumber >= LevelRegistry.getTotalLevels()) {
+            // Game completed!
+            showGameCompleteScreen();
+        } else {
+            currentLevelNumber++;
+            loadLevel(currentLevelNumber);
+            screenController.showScreen(ScreenController.GAME_SCREEN);
+        }
+    }
 
-        LevelDefinition candidate;
-        while (true) {
-            candidate = LevelGenerator.nextLevel(current);
 
-            int existingCount = gameController.getLevelSessionManager().boxes.size();
-            int inNew  = candidate.boxes().subList(existingCount, candidate.boxes().size())
-                    .stream().mapToInt(b -> b.inShapes().size()).sum();
-            int outNew = candidate.boxes().subList(existingCount, candidate.boxes().size())
-                    .stream().mapToInt(b -> b.outShapes().size()).sum();
-            int required = Math.max(0, inNew - outNew);
+    public void retryCurrentLevel() {
+        if (currentLevel != null) {
+            missionReported = false;
+            gameController.startLevel(currentLevel.getDefinition());
+        }
+    }
 
-            if (required <= availableCapacity) break;
-                    }
 
-        current = candidate;
-        missionReported = false;
-        gameController.startLevel(current);
-        screenController.showScreen(ScreenController.GAME_SCREEN);
-            }
+    public void jumpToLevel(int levelNumber) {
+        if (LevelRegistry.isValidLevel(levelNumber)) {
+            currentLevelNumber = levelNumber;
+            loadLevel(levelNumber);
+            screenController.showScreen(ScreenController.GAME_SCREEN);
+        }
+    }
 
-    public int getLevelIndex()         { return levelIndex; }
-    public LevelDefinition getCurrentDefinition() { return current; }
+    public int getLevelIndex() {
+        return currentLevelNumber - 1;
+    }
+
+    public Level getCurrentLevel() {
+        return currentLevel;
+    }
+
+    public LevelDefinition getCurrentDefinition() {
+        return currentLevel != null ? currentLevel.getDefinition() : null;
+    }
+
+    public int getCurrentLevelNumber() {
+        return currentLevelNumber;
+    }
+
+    public int getTotalLevels() {
+        return LevelRegistry.getTotalLevels();
+    }
+
+
+    private void showGameCompleteScreen() {
+        // TODO: Implement game complete screen
+        System.out.println("Congratulations! You've completed all levels!");
+        // For now, just go back to main menu
+        screenController.showScreen(ScreenController.MAIN_MENU);
+    }
 }

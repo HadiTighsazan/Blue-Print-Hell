@@ -4,9 +4,10 @@ import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.*;
 import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.controller.systems.VpnRevertHints;
+import com.blueprinthell.level.Level;
 import com.blueprinthell.level.LevelDefinition;
-import com.blueprinthell.level.LevelGenerator;
 import com.blueprinthell.level.LevelManager;
+import com.blueprinthell.level.LevelRegistry;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
@@ -59,12 +60,13 @@ public class LevelCoreManager {
         return currentDef;
     }
 
+
     public void startLevel(int idx) {
-        LevelDefinition def = LevelGenerator.firstLevel();
-        for (int i = 1; i < idx; i++) {
-            def = LevelGenerator.nextLevel(def);
+        if (!LevelRegistry.isValidLevel(idx)) {
+            throw new IllegalArgumentException("Invalid level index: " + idx);
         }
-        startLevel(def);
+        Level level = LevelRegistry.getLevel(idx);
+        startLevel(level.getDefinition());
     }
     public void startLevel(LevelDefinition def) {
         this.currentDef = def;

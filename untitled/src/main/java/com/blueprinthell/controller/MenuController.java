@@ -1,5 +1,6 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.level.LevelRegistry;
 import com.blueprinthell.media.SoundSettings;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.view.screens.*;
@@ -58,14 +59,23 @@ public class MenuController {
                 screenController.showScreen(ScreenController.MAIN_MENU));
 
         LevelSelectView levelSelect = screenController.getLevelSelectView();
-        for (JButton btn : levelSelect.getLevelButtons()) {
-            btn.addActionListener(e -> {
-                int lv = Integer.parseInt(btn.getText().split(" ")[1]);
-                levelManager.startGame();
-                for (int i = 1; i < lv; i++) levelManager.startNextLevel();
-                screenController.showScreen(ScreenController.GAME_SCREEN);
-            });
+        for (int i = 0; i < levelSelect.getLevelButtons().size(); i++) {
+            JButton btn = levelSelect.getLevelButtons().get(i);
+            final int levelNum = i + 1;
+
+            if (LevelRegistry.isValidLevel(levelNum)) {
+                btn.setText("Level " + levelNum + " - " + LevelRegistry.getLevel(levelNum).getName());
+                btn.setEnabled(true);
+                btn.addActionListener(e -> {
+                    levelManager.jumpToLevel(levelNum);
+                    screenController.showScreen(ScreenController.GAME_SCREEN);
+                });
+            } else {
+                btn.setEnabled(false);
+                btn.setText("Level " + levelNum + " (Locked)");
+            }
         }
+
         levelSelect.backButton.addActionListener(e ->
                 screenController.showScreen(ScreenController.MAIN_MENU));
     }

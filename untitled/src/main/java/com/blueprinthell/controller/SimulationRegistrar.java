@@ -2,6 +2,7 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.*;
+import com.blueprinthell.level.Level;
 import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
 import com.blueprinthell.level.LevelDefinition;
@@ -180,9 +181,14 @@ public class SimulationRegistrar {
             simulation.register(lossMonitor);
         }
 
+        Level currentLevel = levelManager.getCurrentLevel();
+        double maxLossRatio = currentLevel != null ? currentLevel.getMaxLossRatio() : 0.5;
+
         if (producer != null) {
             LevelCompletionDetector detector = new LevelCompletionDetector(
-                    wires, boxes, lossModel, producer, levelManager, 0.5, plannedTotal);
+                    wires, boxes, lossModel, producer, levelManager,
+                    maxLossRatio,
+                    plannedTotal);
             simulation.register(detector);
         }
 
