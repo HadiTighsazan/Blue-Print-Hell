@@ -39,12 +39,20 @@ public class PacketRouterController implements Updatable {
             return;
         }
 
-        List<PacketModel> toRoute = new ArrayList<>();
-        PacketModel p;
-        while ((p = box.pollPacket()) != null) toRoute.add(p);
+        // پکت‌ها را یکی‌یکی بردار؛ اگر نتوانستیم مسیربندی کنیم، برشان گردان (و اگر ظرفیت نبود Drop)
+        while (hasAvailableRoute()) {
+            PacketModel packet = box.pollPacket();
+            if (packet == null) break; // بافر خالی
 
-        for (PacketModel packet : toRoute) {
-            routePacket(packet);
+            boolean routed = routePacket(packet);
+            if (!routed) {
+                // نتوانستیم پکتی را مسیربندی کنیم؛ به بافر برگردانیم یا Drop اگر ظرفیت پر بود
+                if (!box.enqueue(packet)) {
+                    drop(packet);
+                }
+                // احتمالاً پورتِ خالی در دسترس نیست؛ اجازه بده حلقه با شرط بالا متوقف شود
+                break;
+            }
         }
     }
 
@@ -58,8 +66,7 @@ public class PacketRouterController implements Updatable {
                 });
     }
 
-
-    private void routePacket(PacketModel packet) {
+    private boolean routePacket(PacketModel packet) {
         // Get available output ports with enabled destinations
         List<PortModel> availableOuts = box.getOutPorts().stream()
                 .filter(port -> {
@@ -72,20 +79,21 @@ public class PacketRouterController implements Updatable {
 
         if (availableOuts.isEmpty()) {
             // No available routes - keep in buffer
-            return; // پکت در buffer می‌ماند
+            return false; // پکت در buffer می‌ماند (با منطق بازگردانی در update)
         }
 
-        // Check if packet should be routed incompatibly (from Malicious system)
+        // Check if packet should be routed incompatibly (from Malicious system or hint)
         boolean forceIncompat = RouteHints.peekForceIncompatible(packet);
+        boolean isMaliciousSource = (box.getPrimaryKind() == SystemKind.MALICIOUS);
 
-        if (forceIncompat) {
-            routeIncompatibly(packet, availableOuts);
+        if (forceIncompat || isMaliciousSource) {
+            return routeIncompatibly(packet, availableOuts);
         } else {
-            routeNormally(packet, availableOuts);
+            return routeNormally(packet, availableOuts);
         }
     }
 
-    private void routeNormally(PacketModel packet, List<PortModel> availableOuts) {
+    private boolean routeNormally(PacketModel packet, List<PortModel> availableOuts) {
         // 1. ابتدا پورت‌های سازگار خالی را پیدا کن
         List<PortModel> emptyCompatPorts = availableOuts.stream()
                 .filter(port -> port.isCompatible(packet))
@@ -96,7 +104,7 @@ public class PacketRouterController implements Updatable {
             // انتخاب تصادفی از بین پورت‌های سازگار خالی
             PortModel chosen = emptyCompatPorts.get(rnd.nextInt(emptyCompatPorts.size()));
             sendPacketToPort(packet, chosen);
-            return;
+            return true;
         }
 
         // 2. اگر پورت سازگار خالی نبود، هر پورت خالی را انتخاب کن
@@ -108,14 +116,14 @@ public class PacketRouterController implements Updatable {
             // انتخاب تصادفی از بین پورت‌های خالی
             PortModel chosen = emptyPorts.get(rnd.nextInt(emptyPorts.size()));
             sendPacketToPort(packet, chosen);
-            return;
+            return true;
         }
 
-        // 3. هیچ پورت خالی نیست - پکت در buffer بماند
-        // (پکت از قبل در buffer است، نیازی به re-enqueue نیست)
+        // 3. هیچ پورت خالی نیست - تلاش ناموفق
+        return false;
     }
 
-    private void routeIncompatibly(PacketModel packet, List<PortModel> availableOuts) {
+    private boolean routeIncompatibly(PacketModel packet, List<PortModel> availableOuts) {
         // 1. ابتدا پورت‌های ناسازگار خالی را پیدا کن
         List<PortModel> emptyIncompatPorts = availableOuts.stream()
                 .filter(port -> !port.isCompatible(packet))
@@ -126,7 +134,7 @@ public class PacketRouterController implements Updatable {
             // انتخاب تصادفی از بین پورت‌های ناسازگار خالی
             PortModel chosen = emptyIncompatPorts.get(rnd.nextInt(emptyIncompatPorts.size()));
             sendPacketToPort(packet, chosen);
-            return;
+            return true;
         }
 
         // 2. اگر پورت ناسازگار خالی نبود، هر پورت خالی را انتخاب کن
@@ -138,11 +146,11 @@ public class PacketRouterController implements Updatable {
             // انتخاب تصادفی از بین پورت‌های خالی
             PortModel chosen = emptyPorts.get(rnd.nextInt(emptyPorts.size()));
             sendPacketToPort(packet, chosen);
-            return;
+            return true;
         }
 
-        // 3. هیچ پورت خالی نیست - پکت در buffer بماند
-        // (پکت از قبل در buffer است، نیازی به re-enqueue نیست)
+        // 3. هیچ پورت خالی نیست - تلاش ناموفق
+        return false;
     }
 
     private PortModel selectBestPort(List<PortModel> ports, PacketModel packet) {
@@ -203,7 +211,6 @@ public class PacketRouterController implements Updatable {
         return topPorts.get(0).getKey();
     }
 
-
     private int getDestinationTypeScore(SystemBoxModel dest, PacketModel packet) {
         SystemKind kind = dest.getPrimaryKind();
         if (kind == null) return 0;
@@ -244,7 +251,6 @@ public class PacketRouterController implements Updatable {
         }
     }
 
-
     private void sendPacketToPort(PacketModel packet, PortModel port) {
         WireModel wire = findWire(port);
         if (wire == null) {
@@ -264,15 +270,14 @@ public class PacketRouterController implements Updatable {
 
         wire.attachPacket(packet, 0.0);
         packetsRouted++;
+        if (!compatible) incompatibleRoutes++;
         RouteHints.clearForceIncompatible(packet);
     }
-
 
     private boolean isWireEmpty(PortModel port) {
         WireModel w = findWire(port);
         return w != null && w.getPackets().isEmpty();
     }
-
 
     private WireModel findWire(PortModel port) {
         for (WireModel w : wires) {
@@ -280,7 +285,6 @@ public class PacketRouterController implements Updatable {
         }
         return null;
     }
-
 
     private void drop(PacketModel packet) {
         lossModel.increment();
