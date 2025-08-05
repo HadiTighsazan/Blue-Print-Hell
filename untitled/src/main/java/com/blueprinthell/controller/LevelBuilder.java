@@ -1,16 +1,18 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
+import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
-import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.view.SystemBoxView;
 import com.blueprinthell.view.screens.GameScreenView;
 
 import java.awt.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
+import java.util.stream.Collectors;
+
 
 public final class LevelBuilder {
 
@@ -26,74 +28,81 @@ public final class LevelBuilder {
         this.usageModel = usageModel;
     }
 
+
     public List<SystemBoxModel> build(LevelDefinition def,
                                       List<SystemBoxModel> existingBoxes) {
-        List<LevelDefinition.BoxSpec> allSpecs = def.boxes();
 
-        // 1) فقط سینک جعبه‌های مراحل قبل با Spec همین مرحله
-        syncExistingBoxes(existingBoxes, allSpecs);
+        // ــ Map برای جست‌وجوی سریع بر اساس شناسهٔ پایدار
+        Map<String, SystemBoxModel> byId = existingBoxes.stream()
+                .collect(Collectors.toMap(SystemBoxModel::getId, box -> box));
 
-        // 2) ساخت جعبه‌های جدید (آن‌هایی که بعدِ existingBoxes می‌آیند)
-        int existingCount = existingBoxes.size();
-        List<LevelDefinition.BoxSpec> newSpecs = existingCount < allSpecs.size()
-                ? allSpecs.subList(existingCount, allSpecs.size())
-                : List.of();
+        List<SystemBoxModel> ordered = new ArrayList<>();     // برای GameView.reset
+        List<SystemBoxModel> newBoxes = new ArrayList<>();    // آماری؛ شاید به درد بخورد
 
-        List<SystemBoxModel> newBoxes = new ArrayList<>();
-        for (LevelDefinition.BoxSpec spec : newSpecs) {
-            SystemBoxModel box = new SystemBoxModel(
-                    spec.x(), spec.y(), spec.width(), spec.height(),
-                    spec.inShapes(), spec.outShapes());
-            box.setPrimaryKind(spec.kind());
-            newBoxes.add(box);
+        for (LevelDefinition.BoxSpec spec : def.boxes()) {
+            SystemBoxModel box = byId.get(spec.id());
+
+            if (box != null) {
+                // جعبه مرحلهٔ قبل را با Spec جدید سینک کن
+                syncBox(box, spec);
+            } else {
+                // این یک جعبهٔ کاملاً تازه است
+                box = new SystemBoxModel(
+                        spec.id(),
+                        spec.x(), spec.y(), spec.width(), spec.height(),
+                        spec.inShapes(), spec.outShapes());
+                box.setPrimaryKind(spec.kind());
+                newBoxes.add(box);
+            }
+            ordered.add(box);   // ترتیب همان ترتیب specs می‌شود
         }
 
-        // 3) نهایی‌سازی و ریست View
-        List<SystemBoxModel> all = new ArrayList<>(existingBoxes);
-        all.addAll(newBoxes);
+        // ــ ریست View با فهرست نهایی
+        gameView.reset(ordered, wires);
 
-        gameView.reset(all, wires);
+        // ــ اتصال دوبارهٔ درگ‌کنترلرها
         for (Component c : gameView.getGameArea().getComponents()) {
             if (c instanceof SystemBoxView sbv) {
                 new SystemBoxDragController(sbv.getModel(), sbv, wires, usageModel);
             }
         }
-        return all;
+
+        // لیست ورودی را هم تازه‌سازی می‌کنیم تا فراخوان بعدی همین مرجع را داشته باشد
+        existingBoxes.clear();
+        existingBoxes.addAll(ordered);
+
+        return ordered;
     }
 
-    /** سینک: نوع سیستم + آپدیت شکل پورت‌های موجود + افزودن ورودی/خروجی تا اندازهٔ Spec (بدون حذف) */
-    private void syncExistingBoxes(List<SystemBoxModel> existing,
-                                   List<LevelDefinition.BoxSpec> specs) {
-        int n = Math.min(existing.size(), specs.size());
-        for (int i = 0; i < n; i++) {
-            SystemBoxModel box = existing.get(i);
-            LevelDefinition.BoxSpec spec = specs.get(i);
 
-            // نوع سیستم
-            box.setPrimaryKind(spec.kind());
+    private void syncBox(SystemBoxModel box, LevelDefinition.BoxSpec spec) {
 
-            // ورودی‌ها: به‌روزرسانی شکل‌های موجود + افزودن ورودی‌های کم
-            var inPorts  = box.getInPorts();
-            var inShapes = spec.inShapes();
-            for (int j = 0; j < Math.min(inPorts.size(), inShapes.size()); j++) {
-                inPorts.get(j).setShape(inShapes.get(j));
-            }
-            for (int j = inPorts.size(); j < inShapes.size(); j++) {
-                box.addInputPort(inShapes.get(j));
-            }
+        // نوع سیستم
+        box.setPrimaryKind(spec.kind());
 
-            // خروجی‌ها: به‌روزرسانی شکل‌های موجود + افزودن خروجی‌های کم (تا سقف MAX_OUTPUT_PORTS)
-            var outPorts  = box.getOutPorts();
-            var outShapes = spec.outShapes();
-            for (int j = 0; j < Math.min(outPorts.size(), outShapes.size()); j++) {
-                outPorts.get(j).setShape(outShapes.get(j));
-            }
-            for (int j = outPorts.size();
-                 j < outShapes.size() && j < Config.MAX_OUTPUT_PORTS;
-                 j++) {
-                box.addOutputPort(outShapes.get(j));
-            }
-            // حذف پورت انجام نمی‌دهیم.
+        /* --------- ورودی‌ها --------- */
+        var inPorts  = box.getInPorts();
+        var inShapes = spec.inShapes();
+        for (int i = 0; i < Math.min(inPorts.size(), inShapes.size()); i++) {
+            inPorts.get(i).setShape(inShapes.get(i));
         }
+        for (int i = inPorts.size(); i < inShapes.size(); i++) {
+            box.addInputPort(inShapes.get(i));
+        }
+
+        /* --------- خروجی‌ها --------- */
+        var outPorts  = box.getOutPorts();
+        var outShapes = spec.outShapes();
+        for (int i = 0; i < Math.min(outPorts.size(), outShapes.size()); i++) {
+            outPorts.get(i).setShape(outShapes.get(i));
+        }
+        for (int i = outPorts.size();
+             i < outShapes.size() && i < Config.MAX_OUTPUT_PORTS;
+             i++) {
+            box.addOutputPort(outShapes.get(i));
+        }
+        // پورت اضافه حذف نمی‌کنیم
     }
+
+
 }

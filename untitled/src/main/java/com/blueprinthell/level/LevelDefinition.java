@@ -32,6 +32,13 @@ public record LevelDefinition(List<BoxSpec> boxes, double totalWireLength) {
         }
     }
 
+    public void validateUniqueIds() {
+        var set = new java.util.HashSet<String>();
+        for (var s : boxes()) {
+            if (!set.add(s.id()))
+                throw new IllegalArgumentException("Duplicate box id: " + s.id());
+        }
+    }
 
 
 }

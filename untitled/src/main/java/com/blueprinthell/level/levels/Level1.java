@@ -3,47 +3,88 @@ package com.blueprinthell.level.levels;
 import com.blueprinthell.level.AbstractLevel;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.controller.systems.SystemKind;
+import com.blueprinthell.model.PortShape;
 
 import java.util.*;
 
 public class Level1 extends AbstractLevel {
 
     public Level1() {
-        super(1, "Getting Started (3 systems, random port shapes)", 400.0);
+        super(1, "Level 1 - Large Packet Management", 600.0);
         this.packetsPerPort = 3;
         this.maxLossRatio = 0.5;
+    }
+
+    @Override
+    public String getDescription() {
+        return "Learn to split and merge large packets using Distributor and Merger systems!";
     }
 
     @Override
     public LevelDefinition getDefinition() {
         List<LevelDefinition.BoxSpec> boxes = new ArrayList<>();
 
-        // رندم پایدار با seed ثابت تا هر اجرا نتیجه یکسان شود
-        Random rng = new Random(20250804L + levelNumber);
-
-        // انتخاب شکل لینک اول (سورس → نرمال)
-        int a = rng.nextInt(3);
-        // انتخاب شکل لینک دوم (نرمال → سینک)
-        int b = rng.nextInt(3);
-
-        // مپ به متدهای کمکی AbstractLevel (square()/triangle()/circle())
-        var shapeA = (a == 0) ? square() : (a == 1) ? triangle() : circle();
-        var shapeB = (b == 0) ? square() : (b == 1) ? triangle() : circle();
-
-        // 1) سورس با یک خروجی از نوع shapeA
-        boxes.add(createSource(150, 300, shapeA));
-
-        // 2) سیستم نرمال با 1 ورودی shapeA و 1 خروجی shapeB
-        boxes.add(createBox(
-                400, 300,
-                shapeA,   // inputs (1)
-                shapeB,   // outputs (1)
-                SystemKind.NORMAL
+        // 1-1: Source با دو خروجی
+        LevelDefinition.BoxSpec _b1 = createSource(100, 250, Arrays.asList(
+                PortShape.SQUARE,    // برای پکت‌های معمولی
+                PortShape.CIRCLE     // برای پکت‌های حجیم
         ));
+        boxes.add(withId("L1-B1-SOURCE", _b1));
 
-        // 3) سینک با یک ورودی shapeB
-        boxes.add(createSink(650, 300, shapeB));
+        // 1-2: Normal system برای مسیر پکت‌های معمولی
+        LevelDefinition.BoxSpec _b2 = createBox(
+                300, 150,
+                Collections.singletonList(PortShape.SQUARE),
+                Collections.singletonList(PortShape.TRIANGLE),
+                SystemKind.NORMAL
+        );
+        boxes.add(withId("L1-B2-NORMAL", _b2));
+
+        // 1-3: Distributor برای تقسیم پکت‌های حجیم
+        LevelDefinition.BoxSpec _b3 = createBox(
+                300, 350,
+                Collections.singletonList(PortShape.CIRCLE),
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
+                SystemKind.DISTRIBUTOR
+        );
+        boxes.add(withId("L1-B3-DISTRIBUTOR", _b3));
+
+        // 1-4: Normal system برای مسیریابی بیت‌ها
+        LevelDefinition.BoxSpec _b4 = createBox(
+                500, 300,
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
+                SystemKind.NORMAL
+        );
+        boxes.add(withId("L1-B4-NORMAL", _b4));
+
+        // 1-5: Merger برای بازسازی پکت حجیم
+        LevelDefinition.BoxSpec _b5 = createBox(
+                700, 350,
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
+                Collections.singletonList(PortShape.TRIANGLE),
+                SystemKind.MERGER
+        );
+        boxes.add(withId("L1-B5-MERGER", _b5));
+
+        // 1-6: Sink با دو ورودی (برابری پورت‌ها)
+        LevelDefinition.BoxSpec _b6 = createSink(900, 250, Arrays.asList(
+                PortShape.TRIANGLE,  // از Normal (1-2)
+                PortShape.TRIANGLE   // از Merger (1-5)
+        ));
+        boxes.add(withId("L1-B6-SINK", _b6));
 
         return new LevelDefinition(boxes, wireBudget);
+    }
+
+    /** یک BoxSpec که با سازنده‌های کمکی ساخته شده را با یک ID پایدار کپی می‌کند. */
+    private static LevelDefinition.BoxSpec withId(String id, LevelDefinition.BoxSpec s) {
+        return new LevelDefinition.BoxSpec(
+                id,
+                s.x(), s.y(), s.width(), s.height(),
+                s.inShapes(), s.outShapes(),
+                s.isSource(), s.isSink(),
+                s.kind()
+        );
     }
 }

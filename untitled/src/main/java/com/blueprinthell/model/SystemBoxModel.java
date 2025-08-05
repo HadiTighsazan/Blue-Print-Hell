@@ -29,6 +29,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     private SystemKind primaryKind = SystemKind.NORMAL;
 
+    private final String id;
     public static class PacketEntry {
         public final PacketModel packet;
         public final PortModel enteredPort;
@@ -39,21 +40,14 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         }
     }
 
-    public SystemBoxModel(int x, int y, int width, int height,
+       public SystemBoxModel(String id, int x, int y, int width, int height,
                           List<PortShape> inShapes,
                           List<PortShape> outShapes) {
-        super(x, y, width, height);
-        this.buffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
-        createPorts(inShapes, outShapes);
-    }
-
-    public SystemBoxModel(int x, int y, int width, int height,
-                          int inCount, PortShape inShape,
-                          int outCount, PortShape outShape) {
-        this(x, y, width, height,
-                java.util.Collections.nCopies(inCount, inShape),
-                java.util.Collections.nCopies(outCount, outShape));
-    }
+                super(x, y, width, height);
+                this.id     = id;
+                this.buffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
+                createPorts(inShapes, outShapes);
+            }
 
     public SystemKind getPrimaryKind() {
         return primaryKind;
@@ -102,7 +96,9 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
             pm.setY(getY() + yOffset);
         }
     }
-
+    public String getId() {
+                return id;
+            }
     public List<PortShape> getInShapes() {
         return inPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
     }
