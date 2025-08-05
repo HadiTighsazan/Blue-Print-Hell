@@ -30,6 +30,7 @@ public class MainController {
 
 
 
+
             SimulationController simController = gameController.getSimulation();
             PacketProducerController producerController = gameController.getProducerController();
             WireModel.setSimulationController(simController);
