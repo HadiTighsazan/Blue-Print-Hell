@@ -67,28 +67,24 @@ public final class SystemBehaviorAdapter implements Updatable {
         }
     }
 
-    /**
-     * Best-effort resolution of the enteredPort for a freshly-enqueued packet.
-     * Resolution order:
-     * <ol>
-     *   <li>Use {@link EnteredPortTracker#consume(PacketModel)} if present (exact, preferred).</li>
-     *   <li>Use packet.getCurrentWire().getDstPort() if it belongs to this box.</li>
-     *   <li>Return null when unknown; behaviors should tolerate null (e.g., use one-shot guards).</li>
-     * </ol>
-     */
+
     public PortModel findEnteredPort(PacketModel packet) {
         if (packet == null) return null;
 
-        // 1) Exact path: tracker populated by SystemBoxModel.enqueue
-        final PortModel tracked = EnteredPortTracker.consume(packet);
-        if (tracked != null) return tracked;
+        // 1) Exact path: از tracker استفاده کن اما consume نکن
+        final PortModel tracked = EnteredPortTracker.peek(packet);
+        if (tracked != null) {
+            System.out.println("[ADAPTER] Found tracked port for packet: " + packet.getType());
+            return tracked;
+        }
 
-        // 2) Heuristic: the packet may still reference its current wire
+        // 2) Heuristic: بررسی wire فعلی پکت
         try {
             final WireModel w = packet.getCurrentWire();
             if (w != null) {
                 final PortModel dst = w.getDstPort();
                 if (dst != null && belongsToBox(dst)) {
+                    System.out.println("[ADAPTER] Found port via wire heuristic");
                     return dst;
                 }
             }
@@ -97,12 +93,10 @@ public final class SystemBehaviorAdapter implements Updatable {
         }
 
         // 3) Unknown
+        System.out.println("[ADAPTER] Could not determine entered port");
         return null;
     }
 
-    /**
-     * Emits onEnabledChanged when the box enable state flips.
-     */
     public void checkEnabledState() {
         final boolean enabled = box.isEnabled();
         if (enabled != lastEnabledState) {
@@ -133,35 +127,38 @@ public final class SystemBehaviorAdapter implements Updatable {
         return (ins != null && ins.contains(p)) || (outs != null && outs.contains(p));
     }
 
-    // --------------------- integration hook ---------------------
 
-    /**
-     * Lightweight tracker for mapping a packet to the port through which it entered a box.
-     * <p>
-     * Usage (recommended): in {@code SystemBoxModel.enqueue(packet, enteredPort)} call
-     * {@code EnteredPortTracker.record(packet, enteredPort);} right before enqueuing.
-     * Then {@link #findEnteredPort(PacketModel)} will return the exact port.
-     * </p>
-     * The map is a WeakHashMap keyed by PacketModel to avoid retaining packets after they leave.
-     */
     public static final class EnteredPortTracker {
         private static final WeakHashMap<PacketModel, PortModel> MAP = new WeakHashMap<>();
 
         private EnteredPortTracker() {}
 
-        /** Record the port a packet entered from (call-site: SystemBoxModel.enqueue). */
+        /** Record the port a packet entered from */
         public static void record(PacketModel p, PortModel port) {
             if (p == null || port == null) return;
             MAP.put(p, port);
+            System.out.println("[TRACKER] Recorded port for packet: " + p.getType() +
+                    ", is input: " + port.isInput());
         }
 
-        /** Fetch and consume the recorded port for a packet. */
+        /** Peek at the recorded port without consuming it */
+        public static PortModel peek(PacketModel p) {
+            if (p == null) return null;
+            return MAP.get(p);
+        }
+
+        /** Fetch and consume the recorded port for a packet */
         public static PortModel consume(PacketModel p) {
             if (p == null) return null;
             return MAP.remove(p);
         }
 
-        /** Clear all hints (e.g., at level resets). */
+        /** Clear specific packet's port info */
+        public static void clearPacket(PacketModel p) {
+            if (p != null) MAP.remove(p);
+        }
+
+        /** Clear all hints (e.g., at level resets) */
         public static void clear() {
             MAP.clear();
         }

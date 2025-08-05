@@ -2,9 +2,14 @@ package com.blueprinthell.controller.systems;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
+import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.MotionStrategyFactory;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * SpyBehavior V2 - با قابلیت تله‌پورت کامل و مسیریابی خودکار
+ */
 public final class SpyBehavior implements SystemBehavior, Updatable {
 
     private final SystemBoxModel box;
@@ -19,9 +24,14 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     private static final ReentrantLock TRANSFER_LOCK = new ReentrantLock();
     private static final Set<PacketModel> PACKETS_IN_TRANSFER = Collections.newSetFromMap(new WeakHashMap<>());
 
+    // Teleported packets tracking
+    private static final Map<SystemBoxModel, Queue<PacketModel>> TELEPORTED_PACKETS = new HashMap<>();
+
     // Telemetry
     private long teleportCount = 0;
     private long destroyedConfidentialCount = 0;
+    private long teleportAttempts = 0;
+    private long teleportFailures = 0;
 
     public SpyBehavior(SystemBoxModel box,
                        BehaviorRegistry registry,
@@ -36,8 +46,16 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     }
 
     @Override
+    public void update(double dt) {
+        // Process any teleported packets waiting to be routed
+        processTeleportedPackets();
+    }
+
+    @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
+
+
 
         // Handle VPN revert if needed
         if (PacketOps.isProtected(packet)) {
@@ -57,26 +75,34 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
             return;
         }
 
-        // Skip if not from input port
         if (enteredPort == null || !enteredPort.isInput()) {
             return;
         }
 
-        // Thread-safe transfer check
         TRANSFER_LOCK.lock();
         try {
             if (PACKETS_IN_TRANSFER.contains(packet)) {
-                return; // Already being processed
+                return;
             }
             PACKETS_IN_TRANSFER.add(packet);
         } finally {
             TRANSFER_LOCK.unlock();
         }
 
-        // Find another spy system
-        final SystemBoxModel target = chooseAnotherSpy();
-        if (target != null && transferToAnotherSpy(packet, target)) {
-            teleportCount++;
+        // Attempt teleport
+        teleportAttempts++;
+
+        final SystemBoxModel target = chooseAnotherSpy(packet);
+
+        if (target == null) {
+            teleportFailures++;
+        } else {
+
+            if (transferToAnotherSpy(packet, target)) {
+                teleportCount++;
+            } else {
+                teleportFailures++;
+            }
         }
 
         // Clean up tracking
@@ -88,58 +114,110 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
         }
     }
 
+    private boolean hasRoutableOutput(SystemBoxModel target, PacketModel packet) {
+        if (target == null || packet == null) return false;
+        for (PortModel out : target.getOutPorts()) {
+            if (!out.isCompatible(packet)) continue;
+            WireModel w = findWireForPort(out);
+            if (w != null) {
+                return true; // at least one compatible wired output exists
+            }
+        }
+        return false;
+    }
     /**
-     * Smart selection of another spy system
-     * Considers: availability, buffer space, and outbound connections
+     * Process teleported packets and route them to output
      */
-    private SystemBoxModel chooseAnotherSpy() {
-        final List<SpyCandidate> candidates = new ArrayList<>();
+    private void processTeleportedPackets() {
+        Queue<PacketModel> teleported = TELEPORTED_PACKETS.get(box);
+        if (teleported == null || teleported.isEmpty()) {
+            return;
+        }
 
-        // Find all spy systems except self
-        for (Map.Entry<SystemBoxModel, List<SystemBehavior>> e : registry.view().entrySet()) {
-            final SystemBoxModel candidate = e.getKey();
-            if (candidate == box) continue;
+        // Process each teleported packet
+        while (!teleported.isEmpty()) {
+            PacketModel packet = teleported.poll();
 
-            final List<SystemBehavior> behaviors = e.getValue();
-            if (behaviors == null) continue;
 
-            for (SystemBehavior b : behaviors) {
-                if (b instanceof SpyBehavior) {
-                    // Check if candidate has usable outbound connections
-                    if (hasUsableOutbound(candidate)) {
-                        int bufferSpace = Config.MAX_BUFFER_CAPACITY - candidate.getBuffer().size();
-                        int score = calculateSpyScore(candidate, bufferSpace);
-                        candidates.add(new SpyCandidate(candidate, score));
+            // Find an available output port
+            PortModel outputPort = findAvailableOutputPort(packet);
+            if (outputPort == null) {
+                // No available output, keep in buffer
+                box.enqueue(packet);
+
+                continue;
+            }
+
+            // Find the wire for this output port
+            WireModel wire = findWireForPort(outputPort);
+            if (wire == null) {
+                // No wire connected, keep in buffer
+                box.enqueue(packet);
+                continue;
+            }
+
+            // Route the packet directly to the wire
+            boolean compatible = outputPort.isCompatible(packet);
+            packet.setStartSpeedMul(1.0);
+
+            MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
+            packet.setMotionStrategy(ms);
+
+            wire.attachPacket(packet, 0.0);
+
+            System.out.println("[SPY] ✓ Routed teleported packet to wire");
+        }
+    }
+       private PortModel findAvailableOutputPort(PacketModel packet) {
+        if (packet == null) return null;
+                PortModel best = null;
+                int bestLoad = Integer.MAX_VALUE;
+                for (PortModel port : box.getOutPorts()) {
+                        if (!port.isCompatible(packet)) continue;
+                        WireModel wire = findWireForPort(port);
+                        if (wire == null) continue;
+                        int q = (wire.getPackets() != null) ? wire.getPackets().size() : 0;
+                        if (q < bestLoad) {
+                                bestLoad = q;
+                                best = port;
+                            }
                     }
-                    break;
-                }
+                return best; // null فقط وقتی برمی‌گردد که هیچ خروجیِ سیم‌کشی‌شدهٔ سازگاری نباشد
+            }
+
+    private WireModel findWireForPort(PortModel port) {
+        for (WireModel wire : wires) {
+            if (wire.getSrcPort() == port) {
+                return wire;
             }
         }
+        return null;
+    }
 
-        if (candidates.isEmpty()) return null;
-
-        // Sort by score (higher is better)
-        candidates.sort((a, b) -> Integer.compare(b.score, a.score));
-
-        // Weighted random selection from top candidates
-        int topCount = Math.min(3, candidates.size());
-        List<SpyCandidate> topCandidates = candidates.subList(0, topCount);
-
-        // Calculate total weight
-        int totalWeight = topCandidates.stream().mapToInt(c -> c.score).sum();
-        if (totalWeight <= 0) return topCandidates.get(0).box;
-
-        // Weighted random selection
-        int random = rnd.nextInt(totalWeight);
-        int cumulative = 0;
-        for (SpyCandidate c : topCandidates) {
-            cumulative += c.score;
-            if (random < cumulative) {
-                return c.box;
-            }
-        }
-
-        return topCandidates.get(0).box;
+    private SystemBoxModel chooseAnotherSpy(PacketModel packet) {
+        final List<SystemBoxModel> spies = new ArrayList<>();
+        for (Map.Entry<SystemBoxModel, List<SystemBehavior>> e : registry.view().entrySet()) {
+            SystemBoxModel candidate = e.getKey();
+            if (candidate == null || candidate == box) continue;
+            try {
+                if (candidate.getPrimaryKind() != SystemKind.SPY) continue;
+            } catch (Throwable t) { /* fallback silently */ }
+            if (!hasRoutableOutput(candidate, packet)) continue;
+            spies.add(candidate);
+                    }
+            if (spies.isEmpty()) {
+                    System.out.println("[SPY] No compatible spy candidates for " + (packet != null ? packet.getType() : "null"));
+                        return null;
+                    }
+                // ساده: کمترین صف تلپورت
+                        SystemBoxModel best = null;
+                int bestLoad = Integer.MAX_VALUE;
+                for (SystemBoxModel s : spies) {
+                        int q = TELEPORTED_PACKETS.getOrDefault(s, new LinkedList<>()).size();
+                        if (q < bestLoad) { bestLoad = q; best = s; }
+                    }
+                System.out.println("[SPY] Found " + spies.size() + " valid spy candidates");
+                return best;
     }
 
     private int calculateSpyScore(SystemBoxModel candidate, int bufferSpace) {
@@ -162,53 +240,60 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
         }
         score += outboundCount * 3;
 
-        // Penalty if disabled
-        if (!candidate.isEnabled()) {
-            score -= 50;
-        }
-
-        return Math.max(0, score);
+        return Math.max(1, score);
     }
 
     private boolean hasUsableOutbound(SystemBoxModel system) {
-        if (system.getOutPorts() == null || system.getOutPorts().isEmpty()) return false;
+        if (system.getOutPorts() == null || system.getOutPorts().isEmpty()) {
+            return false;
+        }
 
         for (WireModel w : wires) {
             if (w == null) continue;
             PortModel src = w.getSrcPort();
             if (src != null && system.getOutPorts().contains(src)) {
-                // Check if destination is reachable
                 SystemBoxModel dest = destMap.get(w);
                 if (dest != null && dest.isEnabled()) {
                     return true;
                 }
             }
         }
+
         return false;
     }
 
+    /**
+     * Transfer packet to another spy system
+     */
     private boolean transferToAnotherSpy(PacketModel packet, SystemBoxModel target) {
-        if (packet == null || target == null) return false;
+        if (packet == null || target == null) {
+            return false;
+        }
 
         boolean removed = false;
-        boolean enqueued = false;
 
         TRANSFER_LOCK.lock();
         try {
+            // Remove from current buffer
             removed = box.removeFromBuffer(packet);
-            if (removed) {
-                enqueued = target.enqueue(packet, null);
-                if (!enqueued) {
-                    // If enqueue failed, put it back
-                    box.enqueueFront(packet);
-                    removed = false;
-                }
+            if (!removed) {
+                System.out.println("[SPY] Failed to remove packet from source buffer");
+                return false;
             }
+
+            // Add to teleported queue of target system
+            Queue<PacketModel> targetQueue = TELEPORTED_PACKETS.computeIfAbsent(
+                    target, k -> new LinkedList<>()
+            );
+            targetQueue.offer(packet);
+
+            System.out.println("[SPY] Packet added to teleport queue of target system");
+
         } finally {
             TRANSFER_LOCK.unlock();
         }
 
-        return removed && enqueued;
+        return true;
     }
 
     private void replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
@@ -235,19 +320,18 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     }
 
     @Override
-    public void update(double dt) {
-        // No periodic updates needed
-    }
-
-    @Override
     public void onEnabledChanged(boolean enabled) {
-        // No special handling needed
+        // Clear teleport queue if disabled
+        if (!enabled) {
+            TELEPORTED_PACKETS.remove(box);
+        }
     }
 
     public void clear() {
         TRANSFER_LOCK.lock();
         try {
             PACKETS_IN_TRANSFER.clear();
+            TELEPORTED_PACKETS.clear();
         } finally {
             TRANSFER_LOCK.unlock();
         }
@@ -267,4 +351,13 @@ public final class SpyBehavior implements SystemBehavior, Updatable {
     // Telemetry getters
     public long getTeleportCount() { return teleportCount; }
     public long getDestroyedConfidentialCount() { return destroyedConfidentialCount; }
+    public long getTeleportAttempts() { return teleportAttempts; }
+    public long getTeleportFailures() { return teleportFailures; }
+
+    public void printStats() {
+        System.out.println("[SPY STATS] Attempts: " + teleportAttempts +
+                ", Success: " + teleportCount +
+                ", Failures: " + teleportFailures +
+                ", Destroyed: " + destroyedConfidentialCount);
+    }
 }
