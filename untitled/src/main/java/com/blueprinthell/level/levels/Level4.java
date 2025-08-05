@@ -11,7 +11,7 @@ import java.util.*;
 public class Level4 extends AbstractLevel {
 
     public Level4() {
-        super(4, "Level 4 - Spy Network & Teleportation", 900.0);
+        super(4, "Level 4 - Spy Network & Teleportation", 99999.0);
         this.packetsPerPort = 5; // افزایش تعداد پکت‌ها برای پیچیدگی بیشتر
         this.maxLossRatio = 0.45; // تحمل بیشتر به دلیل تله‌پورت
     }

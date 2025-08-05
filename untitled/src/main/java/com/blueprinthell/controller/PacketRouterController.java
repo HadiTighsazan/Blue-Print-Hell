@@ -32,29 +32,7 @@ public class PacketRouterController implements Updatable {
         this.lossModel = lossModel;
     }
 
-    @Override
-    public void update(double dt) {
-        // اگر هیچ مسیر خالی نیست، اصلاً پکت از buffer برندار
-        if (!hasAvailableRoute()) {
-            return;
-        }
 
-        // پکت‌ها را یکی‌یکی بردار؛ اگر نتوانستیم مسیربندی کنیم، برشان گردان (و اگر ظرفیت نبود Drop)
-        while (hasAvailableRoute()) {
-            PacketModel packet = box.pollPacket();
-            if (packet == null) break; // بافر خالی
-
-            boolean routed = routePacket(packet);
-            if (!routed) {
-                // نتوانستیم پکتی را مسیربندی کنیم؛ به بافر برگردانیم یا Drop اگر ظرفیت پر بود
-                if (!box.enqueue(packet)) {
-                    drop(packet);
-                }
-                // احتمالاً پورتِ خالی در دسترس نیست؛ اجازه بده حلقه با شرط بالا متوقف شود
-                break;
-            }
-        }
-    }
 
     private boolean hasAvailableRoute() {
         return box.getOutPorts().stream()
@@ -294,4 +272,78 @@ public class PacketRouterController implements Updatable {
     public long getPacketsRouted() { return packetsRouted; }
     public long getIncompatibleRoutes() { return incompatibleRoutes; }
     public long getDroppedPackets() { return droppedPackets; }
+    // اضافه کردن این کد به PacketRouterController.java
+
+    @Override
+    public void update(double dt) {
+        // **NEW: First check for teleported packets that need immediate routing**
+        processTeleportedPackets();
+
+        // Original logic continues...
+        // اگر هیچ مسیر خالی نیست، اصلاً پکت از buffer برندار
+        if (!hasAvailableRoute()) {
+            return;
+        }
+
+        // پکت‌ها را یکی‌یکی بردار؛ اگر نتوانستیم مسیربندی کنیم، برشان گردان
+        while (hasAvailableRoute()) {
+            PacketModel packet = box.pollPacket();
+            if (packet == null) break; // بافر خالی
+
+            boolean routed = routePacket(packet);
+            if (!routed) {
+                // نتوانستیم پکتی را مسیربندی کنیم؛ به بافر برگردانیم یا Drop اگر ظرفیت پر بود
+                if (!box.enqueue(packet)) {
+                    drop(packet);
+                }
+                // احتمالاً پورتِ خالی در دسترس نیست؛ اجازه بده حلقه با شرط بالا متوقف شود
+                break;
+            }
+        }
+    }
+
+    /**
+     * Process packets that were teleported and need immediate routing
+     */
+    private void processTeleportedPackets() {
+        // Check if this is a spy system that received teleported packets
+        if (box.getPrimaryKind() != SystemKind.SPY) {
+            return;
+        }
+
+        // Create a temporary list to avoid concurrent modification
+        List<PacketModel> packetsToRoute = new ArrayList<>();
+        Queue<PacketModel> buffer = box.getBuffer();
+
+        // Check each packet in buffer
+        for (PacketModel packet : buffer) {
+            // Check if packet was teleported here (no associated wire)
+            if (packet.getCurrentWire() == null) {
+                packetsToRoute.add(packet);
+            }
+        }
+
+        // Route teleported packets immediately
+        for (PacketModel packet : packetsToRoute) {
+            // Remove from buffer
+            if (box.removeFromBuffer(packet)) {
+                System.out.println("[ROUTER] Routing teleported packet: " + packet.getType());
+
+                // Try to route it
+                boolean routed = routePacket(packet);
+
+                if (!routed) {
+                    // Put back in buffer if routing failed
+                    if (!box.enqueue(packet)) {
+                        drop(packet);
+                        System.out.println("[ROUTER] Dropped teleported packet (no route)");
+                    } else {
+                        System.out.println("[ROUTER] Returned teleported packet to buffer");
+                    }
+                } else {
+                    System.out.println("[ROUTER] Successfully routed teleported packet");
+                }
+            }
+        }
+    }
 }

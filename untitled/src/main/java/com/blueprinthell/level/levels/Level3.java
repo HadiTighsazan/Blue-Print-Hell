@@ -11,7 +11,7 @@ import java.util.*;
 public class Level3 extends AbstractLevel {
 
     public Level3() {
-        super(3, "Level 3 - Dynamic Networks & Port Randomizer", 800.0);
+        super(3, "Level 3 - Dynamic Networks & Port Randomizer", 99999.0);
         this.packetsPerPort = 4;
         this.maxLossRatio = 0.45;
     }

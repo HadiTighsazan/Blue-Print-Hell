@@ -11,7 +11,7 @@ import java.util.*;
 public class Level5 extends AbstractLevel {
 
     public Level5() {
-        super(5, "Level 5 - Ultimate Network Challenge", 1200.0);
+        super(5, "Level 5 - Ultimate Network Challenge", 99999.0);
         this.packetsPerPort = 6;
         this.maxLossRatio = 0.4; // سخت‌تر - تحمل کمتر برای خطا
     }

@@ -30,6 +30,7 @@ public final class SystemBehaviorAdapter implements Updatable {
         checkEnabledState();
         // 2) Detect newly enqueued packets and emit entry events
         checkNewPackets();
+        try { behavior.update(dt); } catch (Throwable t) { t.printStackTrace(); }
     }
 
     /**
@@ -39,32 +40,31 @@ public final class SystemBehaviorAdapter implements Updatable {
     public void checkNewPackets() {
         final Queue<PacketModel> buf = box.getBuffer();
         if (buf == null || buf.isEmpty()) {
-            // prune all if buffer empty
-            if (!seen.isEmpty()) seen.clear();
+            seen.clear();
             return;
         }
+// snapshot to avoid CME (fail-fast iterator on ArrayDeque)
+        final PacketModel[] snapshot = buf.toArray(new PacketModel[0]);
+        final Set<PacketModel> current = Collections.newSetFromMap(
+                new IdentityHashMap<>(Math.max(16, snapshot.length * 2)));
 
-        // Build a temporary identity set of what is currently in the buffer (no allocations per packet beyond identity map entry)
-        final Set<PacketModel> current = Collections.newSetFromMap(new IdentityHashMap<>(Math.max(16, buf.size() * 2)));
-        for (PacketModel p : buf) {
+        for (PacketModel p : snapshot) {
+            if (p == null) continue;
             current.add(p);
             if (!seen.contains(p)) {
-                // Newly observed in the buffer -> report once
                 final PortModel entered = findEnteredPort(p);
                 try {
                     behavior.onPacketEnqueued(p, entered);
                 } catch (Throwable t) {
-                    // Behaviors are user logic; isolate failures to not break the simulation loop
-                    // Consider logging via your logging facility
-                    // e.g., Logger.warn("Behavior onPacketEnqueued failed", t);
+                    t.printStackTrace(); // حداقل لاگ کن که حلقه‌ی شبیه‌سازی نمیره هوا
                 }
-                seen.add(p);
             }
         }
-        // Prune 'seen' entries that are no longer present in the buffer
-        if (seen.size() != current.size() || !seen.containsAll(current)) {
-            seen.retainAll(current);
-        }
+// پاکسازی دیده‌ها
+        seen.retainAll(current);
+// و سپس هر چی الان توی بافره رو به عنوان دیده‌شده علامت بزن
+        for (PacketModel p : snapshot) if (p != null) seen.add(p);
+
     }
 
 
@@ -133,15 +133,15 @@ public final class SystemBehaviorAdapter implements Updatable {
 
         private EnteredPortTracker() {}
 
-        /** Record the port a packet entered from */
         public static void record(PacketModel p, PortModel port) {
-            if (p == null || port == null) return;
+            if (p == null) return;
+            final PortModel last = MAP.get(p);
+            // بیشتر مدل‌ها هویتی‌اند؛ اگر equals سفارشی داری، می‌تونی Objects.equals(last, port) بذاری
+            if (last == port) return;
             MAP.put(p, port);
-            System.out.println("[TRACKER] Recorded port for packet: " + p.getType() +
-                    ", is input: " + port.isInput());
         }
 
-        /** Peek at the recorded port without consuming it */
+
         public static PortModel peek(PacketModel p) {
             if (p == null) return null;
             return MAP.get(p);

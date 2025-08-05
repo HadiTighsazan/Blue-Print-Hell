@@ -10,7 +10,7 @@ import java.util.*;
 public class Level1 extends AbstractLevel {
 
     public Level1() {
-        super(1, "Level 1 - Large Packet Management", 600.0);
+        super(1, "Level 1 - Large Packet Management", 999999.0);
         this.packetsPerPort = 3;
         this.maxLossRatio = 0.5;
     }
