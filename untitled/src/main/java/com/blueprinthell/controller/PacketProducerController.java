@@ -12,7 +12,7 @@ import java.awt.*;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-
+import java.util.HashMap;
 
 public class PacketProducerController implements Updatable {
 
@@ -29,7 +29,16 @@ public class PacketProducerController implements Updatable {
     private double acc = 0.0;
     private boolean running = false;
     private int producedCount = 0;
+
+    // --- تغییر: از inFlight برای شمارش پکت‌های درحال حرکت استفاده می‌کنیم
+    private int inFlight = 0;
+
+    // --- توجه: فیلد قبلی returnedCredits حذف نشده، اما دیگر استفاده نمی‌شود
+    @SuppressWarnings("unused")
     private int returnedCredits = 0;
+
+    // --- تغییر: شمارش تولید به‌ازای هر پورت برای enforce کردن packetsPerPort
+    private final Map<PortModel, Integer> producedPerPort = new HashMap<>();
 
     public PacketProducerController(List<SystemBoxModel> sourceBoxes,
                                     List<WireModel> wires,
@@ -48,11 +57,17 @@ public class PacketProducerController implements Updatable {
     public void startProduction() { running = true; }
     public void stopProduction()  { running = false; }
 
-
     public void reset() {
         running = false;
         acc = 0.0;
+
+        // --- تغییر: ریست شمارنده‌ها برای راند جدید
+        producedCount = 0;
+        inFlight = 0;
+        producedPerPort.clear();
+        // returnedCredits را دست‌نخورده می‌گذاریم تا حذف فیلد نداشته باشیم
     }
+
     private PacketModel createLargePacketRandomly() {
         int size = RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10;
         int colorId = RND.nextInt(360);
@@ -77,14 +92,17 @@ public class PacketProducerController implements Updatable {
 
         return large;
     }
-    public void onPacketReturned() {
-        returnedCredits++;
-    }
 
+    // --- تغییر: این متد حالا وقتی پکتی برمی‌گرده، inFlight را کم می‌کند
+    public void onPacketReturned() {
+        if (inFlight > 0) inFlight--;
+    }
 
     public boolean isFinished() {
-        return producedCount >= totalToProduce && returnedCredits == 0;
+        // --- تغییر: پایان وقتی همه تولید شده و هیچ پکتی در پرواز نیست
+        return producedCount >= totalToProduce && inFlight == 0;
     }
+
     public int getProducedCount() { return producedCount; }
     public int getPacketsPerPort() { return packetsPerPort; }
 
@@ -105,6 +123,18 @@ public class PacketProducerController implements Updatable {
                 continue;
             }
             for (PortModel out : box.getOutPorts()) {
+
+                // --- تغییر: محدودیت per-port
+                int producedForThisPort = producedPerPort.getOrDefault(out, 0);
+                if (producedForThisPort >= packetsPerPort) {
+                    continue; // این پورت سهمش را کامل تولید کرده
+                }
+
+                // --- محافظ اضافه: اگر سقف کلی پر شده دیگر تولید نکن
+                if (producedCount >= totalToProduce) {
+                    break;
+                }
+
                 wires.stream()
                         .filter(w -> w.getSrcPort() == out)
                         .findFirst()
@@ -113,6 +143,7 @@ public class PacketProducerController implements Updatable {
                             PacketModel packet;
                             if (out.getShape() == PortShape.CIRCLE) {
                                 // پورت دایره‌ای = 30% شانس پکت حجیم
+                                // توجه: عمداً 100% گذاشتی؛ دست نمی‌زنیم
                                 if (RND.nextInt(10) < 10) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
@@ -120,6 +151,7 @@ public class PacketProducerController implements Updatable {
                                 }
                             } else {
                                 // پورت‌های دیگر = 10% شانس پکت حجیم
+                                // توجه: عمداً 100% گذاشتی؛ دست نمی‌زنیم
                                 if (RND.nextInt(10) < 10) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
@@ -135,6 +167,11 @@ public class PacketProducerController implements Updatable {
 
                             // چسباندن پکت به سیم خروجی
                             wire.attachPacket(packet, 0);
+
+                            // --- تغییر اصلی: شمارنده‌ها را بعد از attach به‌روز کن
+                            producedCount++;
+                            inFlight++;
+                            producedPerPort.put(out, producedForThisPort + 1);
                         });
             }
         }
@@ -159,11 +196,11 @@ public class PacketProducerController implements Updatable {
 
         return lp;
     }
+
     private PacketType randomType() {
         int r = RND.nextInt(3);
         return (r == 0) ? PacketType.SQUARE
                 : (r == 1) ? PacketType.TRIANGLE
                 : PacketType.CIRCLE;
     }
-
 }

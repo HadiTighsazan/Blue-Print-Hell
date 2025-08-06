@@ -1,6 +1,7 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.LargePacket;
 
 import java.util.*;
 
@@ -29,17 +30,48 @@ public class WireDurabilityController implements Updatable {
 
     public void onPacketArrived(PacketModel packet, WireModel wire) {
         if (packet == null || wire == null) return;
-        if (PacketOps.isLarge(packet)) {
-            recordHeavyPass(wire);
+
+        // فقط پکت‌های حجیم اصلی را بشمار، نه بیت‌پکت‌ها
+        if (packet instanceof LargePacket lp) {
+            // فقط پکت‌های حجیم با سایز 8 یا 10 را بشمار
+            // پکت‌های سایز 4 (که از ادغام بیت‌ها ساخته می‌شوند) را نادیده بگیر
+            if (lp.getOriginalSizeUnits() >= 8) {
+                recordHeavyPass(wire);
+                System.out.println("Wire durability: Large packet size " +
+                        lp.getOriginalSizeUnits() + " passed. Wire passes: " +
+                        getPasses(wire) + "/" + maxPasses);
+            }
         }
     }
 
     public void recordHeavyPass(WireModel wire) {
         if (wire == null || removed.contains(wire)) return;
+
         int c = passCount.getOrDefault(wire, 0) + 1;
         passCount.put(wire, c);
+
         if (c >= maxPasses) {
+            // قبل از حذف سیم، پکت‌های روی آن را ذخیره کن
+            savePacketsBeforeRemoval(wire);
             toRemove.add(wire);
+        }
+    }
+
+    private void savePacketsBeforeRemoval(WireModel wire) {
+        if (wire == null) return;
+
+        List<PacketModel> packetsOnWire = new ArrayList<>(wire.getPackets());
+        if (!packetsOnWire.isEmpty()) {
+            System.out.println("Warning: Removing wire with " + packetsOnWire.size() +
+                    " packets on it. Moving them to loss.");
+
+            // پکت‌ها را به عنوان loss ثبت کن
+            for (PacketModel p : packetsOnWire) {
+                lossModel.increment();
+            }
+
+            // پاک کردن پکت‌ها از سیم
+            wire.clearPackets();
         }
     }
 
@@ -52,7 +84,8 @@ public class WireDurabilityController implements Updatable {
     }
 
     public void destroyWire(WireModel wire) {
-        if (wire != null) {
+        if (wire != null && !removed.contains(wire)) {
+            savePacketsBeforeRemoval(wire);
             toRemove.add(wire);
         }
     }
@@ -68,10 +101,13 @@ public class WireDurabilityController implements Updatable {
         while (!toRemove.isEmpty()) {
             WireModel w = toRemove.poll();
             if (w == null || removed.contains(w)) continue;
+
             removed.add(w);
+
             if (remover != null) {
                 remover.removeWire(w);
             } else {
+                System.err.println("WireRemovalController not set!");
             }
         }
     }
