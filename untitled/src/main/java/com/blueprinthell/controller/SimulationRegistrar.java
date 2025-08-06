@@ -78,13 +78,19 @@ public class SimulationRegistrar {
 
     public LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
         if (box == null || currentBoxSpecs == null) return null;
+
+        // 1) بهترین و پایدارترین: بر اساس ID
         for (var spec : currentBoxSpecs) {
-            try {
-                if (spec.x() == box.getX() && spec.y() == box.getY()
-                        && spec.width() == box.getWidth() && spec.height() == box.getHeight()) {
-                    return spec;
-                }
-            } catch (Throwable ignore) {
+            if (spec.id().equals(box.getId())) {
+                return spec;
+            }
+        }
+
+        // 2) در صورت نیاز: براساس مختصات/اندازه (سازگاری عقب‌رو)
+        for (var spec : currentBoxSpecs) {
+            if (spec.x() == box.getX() && spec.y() == box.getY()
+                    && spec.width() == box.getWidth() && spec.height() == box.getHeight()) {
+                return spec;
             }
         }
         return null;

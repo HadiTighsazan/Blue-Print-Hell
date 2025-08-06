@@ -1,6 +1,8 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
+import com.blueprinthell.controller.systems.SystemBehaviorAdapter;
+import com.blueprinthell.controller.systems.TeleportTracking;
 import com.blueprinthell.model.*;
 import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.MotionStrategyFactory;
@@ -247,6 +249,8 @@ public class PacketRouterController implements Updatable {
         packet.setMotionStrategy(ms);
 
         wire.attachPacket(packet, 0.0);
+        TeleportTracking.clearTeleported(packet);
+
         packetsRouted++;
         if (!compatible) incompatibleRoutes++;
         RouteHints.clearForceIncompatible(packet);
@@ -274,39 +278,13 @@ public class PacketRouterController implements Updatable {
     public long getDroppedPackets() { return droppedPackets; }
     // اضافه کردن این کد به PacketRouterController.java
 
-    @Override
-    public void update(double dt) {
-        // **NEW: First check for teleported packets that need immediate routing**
-        processTeleportedPackets();
-
-        // Original logic continues...
-        // اگر هیچ مسیر خالی نیست، اصلاً پکت از buffer برندار
-        if (!hasAvailableRoute()) {
-            return;
-        }
-
-        // پکت‌ها را یکی‌یکی بردار؛ اگر نتوانستیم مسیربندی کنیم، برشان گردان
-        while (hasAvailableRoute()) {
-            PacketModel packet = box.pollPacket();
-            if (packet == null) break; // بافر خالی
-
-            boolean routed = routePacket(packet);
-            if (!routed) {
-                // نتوانستیم پکتی را مسیربندی کنیم؛ به بافر برگردانیم یا Drop اگر ظرفیت پر بود
-                if (!box.enqueue(packet)) {
-                    drop(packet);
-                }
-                // احتمالاً پورتِ خالی در دسترس نیست؛ اجازه بده حلقه با شرط بالا متوقف شود
-                break;
-            }
-        }
-    }
+    // در PacketRouterController.java - اضافه/تغییر این متدها:
 
     /**
-     * Process packets that were teleported and need immediate routing
+     * Enhanced processTeleportedPackets - better detection
      */
     private void processTeleportedPackets() {
-        // Check if this is a spy system that received teleported packets
+        // Check if this is a spy system
         if (box.getPrimaryKind() != SystemKind.SPY) {
             return;
         }
@@ -317,8 +295,12 @@ public class PacketRouterController implements Updatable {
 
         // Check each packet in buffer
         for (PacketModel packet : buffer) {
-            // Check if packet was teleported here (no associated wire)
-            if (packet.getCurrentWire() == null) {
+            // CRITICAL: A teleported packet won't have a current wire
+            // AND won't have an entered port tracked
+            boolean noWire = (packet.getCurrentWire() == null);
+            boolean noTrackedPort = (SystemBehaviorAdapter.EnteredPortTracker.peek(packet) == null);
+
+            if (noWire && noTrackedPort) {
                 packetsToRoute.add(packet);
             }
         }
@@ -327,23 +309,84 @@ public class PacketRouterController implements Updatable {
         for (PacketModel packet : packetsToRoute) {
             // Remove from buffer
             if (box.removeFromBuffer(packet)) {
-                System.out.println("[ROUTER] Routing teleported packet: " + packet.getType());
 
                 // Try to route it
-                boolean routed = routePacket(packet);
+                boolean routed = routePacketDirect(packet);
 
                 if (!routed) {
                     // Put back in buffer if routing failed
                     if (!box.enqueue(packet)) {
                         drop(packet);
-                        System.out.println("[ROUTER] Dropped teleported packet (no route)");
                     } else {
-                        System.out.println("[ROUTER] Returned teleported packet to buffer");
                     }
                 } else {
-                    System.out.println("[ROUTER] Successfully routed teleported packet");
                 }
             }
         }
     }
+
+    /**
+     * New method: Route packet directly to wire without normal routing logic
+     */
+    private boolean routePacketDirect(PacketModel packet) {
+        // Get available output ports with enabled destinations
+        List<PortModel> availableOuts = box.getOutPorts().stream()
+                .filter(port -> {
+                    WireModel w = findWire(port);
+                    if (w == null) return false;
+                    SystemBoxModel d = destMap.get(w);
+                    // Check destination is enabled and wire is not full
+                    return d != null && d.isEnabled() && w.getPackets().size() < 3;
+                })
+                .collect(Collectors.toList());
+
+        if (availableOuts.isEmpty()) {
+            return false;
+        }
+
+        // Choose random port for teleported packet
+        PortModel chosen = availableOuts.get(rnd.nextInt(availableOuts.size()));
+        sendPacketToPort(packet, chosen);
+        return true;
+    }
+
+    @Override
+    public void update(double dt) {
+        // CRITICAL: Process teleported packets FIRST, before normal routing
+        processTeleportedPackets();
+
+        // Original logic continues...
+        if (!hasAvailableRoute()) {
+            return;
+        }
+
+        while (hasAvailableRoute()) {
+            PacketModel packet = box.pollPacket();
+            if (packet == null) break;
+
+            // Skip if this is a teleported packet we missed
+            boolean noWire = (packet.getCurrentWire() == null);
+            boolean noTrackedPort = (SystemBehaviorAdapter.EnteredPortTracker.peek(packet) == null);
+
+            if (box.getPrimaryKind() == SystemKind.SPY && noWire && noTrackedPort) {
+                boolean routed = routePacketDirect(packet);
+                if (!routed) {
+                    if (!box.enqueue(packet)) {
+                        drop(packet);
+                    }
+                }
+                continue;
+            }
+
+            boolean routed = routePacket(packet);
+            if (!routed) {
+                if (!box.enqueue(packet)) {
+                    drop(packet);
+                }
+                break;
+            }
+        }
+    }
+
+
 }
