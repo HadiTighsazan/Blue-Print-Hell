@@ -113,14 +113,14 @@ public class PacketProducerController implements Updatable {
                             PacketModel packet;
                             if (out.getShape() == PortShape.CIRCLE) {
                                 // پورت دایره‌ای = 30% شانس پکت حجیم
-                                if (RND.nextInt(10) < 1) {
+                                if (RND.nextInt(10) < 10) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
                             } else {
                                 // پورت‌های دیگر = 10% شانس پکت حجیم
-                                if (RND.nextInt(10) < 1) {
+                                if (RND.nextInt(10) < 10) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);

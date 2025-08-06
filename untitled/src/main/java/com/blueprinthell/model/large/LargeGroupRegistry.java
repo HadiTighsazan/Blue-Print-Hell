@@ -5,9 +5,7 @@ import com.blueprinthell.model.PacketModel;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-
 public final class LargeGroupRegistry {
-
 
     public static final class GroupState {
         public final int  groupId;
@@ -15,9 +13,11 @@ public final class LargeGroupRegistry {
         public final int  expectedBits;
         public final int  colorId;
         private int       receivedBits = 0;
+        private int       mergedBits = 0;  // تعداد بیت‌هایی که ادغام شده‌اند
         private int       lostBits = 0;
         private boolean   closed   = false;
         private final List<PacketModel> collectedPackets = new ArrayList<>();
+        private final List<Integer> partialMerges = new ArrayList<>(); // سایز پکت‌های ادغام شده
 
         GroupState(int id, int originalSize, int expectedBits, int colorId) {
             this.groupId = id;
@@ -27,27 +27,37 @@ public final class LargeGroupRegistry {
         }
 
         public int  getReceivedBits() { return receivedBits; }
+        public int  getMergedBits()   { return mergedBits; }
         public int  getMissingBits()  { return Math.max(0, expectedBits - receivedBits); }
         public int  getLostBits()     { return lostBits; }
         public boolean isComplete()   { return receivedBits >= expectedBits; }
         public boolean isClosed()     { return closed; }
         public List<PacketModel> getCollectedPackets() {return Collections.unmodifiableList(collectedPackets);}
+        public List<Integer> getPartialMerges() { return Collections.unmodifiableList(partialMerges); }
 
         void addPacket(PacketModel p) {
             collectedPackets.add(p);
             receivedBits++;
         }
+
+        void markMerged(int bitCount) {
+            mergedBits += bitCount;
+        }
+
+        void addPartialMerge(int packetSize) {
+            partialMerges.add(packetSize);
+        }
+
         void markLost(int cnt)  { lostBits += Math.max(0, cnt); }
         void close()            { closed = true; }
     }
-
 
     private final AtomicInteger idSeq  = new AtomicInteger(1);
     private final Map<Integer, GroupState> groups = new HashMap<>();
 
     private int totalBitsProduced = 0;
     private int totalBitsLost     = 0;
-
+    private int totalBitsMerged   = 0;
 
     public int createGroup(int originalSizeUnits, int expectedBits, int colorId) {
         int id = idSeq.getAndIncrement();
@@ -63,12 +73,27 @@ public final class LargeGroupRegistry {
         });
     }
 
-
     public boolean registerArrival(int groupId, PacketModel bit) {
         GroupState st = groups.get(groupId);
         if (st == null || st.closed) return false;
         st.addPacket(bit);
         return st.isComplete();
+    }
+
+    /**
+     * ثبت ادغام partial (برای پکت‌های سایز 4)
+     */
+    public void registerPartialMerge(int groupId, int bitCount, int mergedPacketSize) {
+        GroupState st = groups.get(groupId);
+        if (st == null || st.closed) return;
+
+        st.markMerged(bitCount);
+        st.addPartialMerge(mergedPacketSize);
+        totalBitsMerged += bitCount;
+
+        System.out.println("Group " + groupId + ": Merged " + bitCount +
+                " bits into size-" + mergedPacketSize + " packet. " +
+                "Total merged: " + st.getMergedBits() + "/" + st.expectedBits);
     }
 
     public void registerSplit(int groupId, PacketModel bit) {
@@ -93,24 +118,57 @@ public final class LargeGroupRegistry {
 
     public void removeGroup(int groupId) { groups.remove(groupId); }
 
-    public void clear() { groups.clear(); totalBitsLost = 0; totalBitsProduced = 0; }
+    public void clear() {
+        groups.clear();
+        totalBitsLost = 0;
+        totalBitsProduced = 0;
+        totalBitsMerged = 0;
+    }
 
     public Map<Integer, GroupState> view() { return Collections.unmodifiableMap(groups); }
 
-
-    public int computeSimpleLoss(int groupId) {
+    /**
+     * محاسبه loss براساس تعداد بیت‌های ادغام شده
+     */
+    public int computeLossForGroup(int groupId) {
         GroupState st = groups.get(groupId);
-        return (st == null) ? 0 : Math.max(0, st.originalSizeUnits - st.getReceivedBits());
+        if (st == null) return 0;
+
+        // محاسبه loss = تعداد بیت‌های اصلی - تعداد بیت‌های ادغام شده
+        return Math.max(0, st.originalSizeUnits - st.getMergedBits());
     }
 
-    public static int computePartialLoss(int N, List<Integer> parts) {
-        int k = parts.size();
-        double product = 1.0;
-        for (int p : parts) {
-            product *= p;
+    /**
+     * محاسبه loss با در نظر گرفتن partial merges
+     */
+    public int computePartialLoss(int groupId) {
+        GroupState st = groups.get(groupId);
+        if (st == null) return 0;
+
+        List<Integer> merges = st.getPartialMerges();
+        if (merges.isEmpty()) {
+            return st.originalSizeUnits;
         }
-        double kthRoot = Math.pow(product, 1.0 / k);
-        int restored = (int) Math.floor(kthRoot);
-        return N - restored;
+
+        // محاسبه بر اساس فرمول پیچیده‌تر (اگر نیاز است)
+        int totalRecovered = merges.stream().mapToInt(Integer::intValue).sum();
+        return Math.max(0, st.originalSizeUnits - totalRecovered);
+    }
+
+    // Telemetry methods
+    public int getTotalBitsProduced() { return totalBitsProduced; }
+    public int getTotalBitsLost() { return totalBitsLost; }
+    public int getTotalBitsMerged() { return totalBitsMerged; }
+
+    /**
+     * گزارش وضعیت یک گروه
+     */
+    public String getGroupStatus(int groupId) {
+        GroupState st = groups.get(groupId);
+        if (st == null) return "Group not found";
+
+        return String.format("Group %d: Original=%d, Received=%d, Merged=%d, Lost=%d, Merges=%s",
+                groupId, st.originalSizeUnits, st.getReceivedBits(),
+                st.getMergedBits(), st.getLostBits(), st.getPartialMerges());
     }
 }

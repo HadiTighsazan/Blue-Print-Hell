@@ -3,6 +3,8 @@ package com.blueprinthell.controller;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.media.ResourceManager;
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.BitPacket;
+import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.motion.KinematicsProfile;
 import com.blueprinthell.motion.KinematicsRegistry;
 
@@ -108,6 +110,26 @@ public class CollisionController implements Updatable {
                 for (PacketModel other : grid.retrieve(pPos.x, pPos.y)) {
                     if (other == p || processed.contains(other)) continue;
                     if (isShielded(other)) continue;
+
+
+
+
+
+
+
+                    if (p instanceof BitPacket || p instanceof LargePacket
+                            || other instanceof BitPacket || other instanceof LargePacket) {
+                        continue;
+                    }
+
+
+
+
+
+
+
+
+
                     // کول‌داونِ برگشت برای other
                     if (other.isReturning()) {
                         Long cooldownUntilOther = returnCollisionCooldowns.get(other);
