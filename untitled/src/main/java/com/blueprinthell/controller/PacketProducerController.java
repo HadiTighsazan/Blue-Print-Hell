@@ -59,7 +59,14 @@ public class PacketProducerController implements Updatable {
         Color color = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
 
         LargePacket large = new LargePacket(PacketType.CIRCLE, Config.DEFAULT_PACKET_SPEED, size, color);
-        large.setGroupInfo(-1, size, colorId); // گروه بعداً در Distributor تنظیم می‌شود
+
+        // مشکل: سایز ویژوال ست نمی‌شود!
+        // باید اضافه کنیم:
+        int visualSize = size * Config.PACKET_SIZE_MULTIPLIER;
+        large.setWidth(visualSize);
+        large.setHeight(visualSize);
+
+        large.setGroupInfo(-1, size, colorId);
 
         // تنظیم پروفایل حرکتی
         if (size == 8) {
@@ -70,7 +77,6 @@ public class PacketProducerController implements Updatable {
 
         return large;
     }
-
     public void onPacketReturned() {
         returnedCredits++;
     }
@@ -103,57 +109,56 @@ public class PacketProducerController implements Updatable {
                         .filter(w -> w.getSrcPort() == out)
                         .findFirst()
                         .ifPresent(wire -> {
+                            // تولید پکت بر اساس شکل پورت
                             PacketModel packet;
-                            if (returnedCredits > 0) {
-                                // 10% احتمال تولید پکت حجیم
-                                if (RND.nextInt(10) <= 10) {
+                            if (out.getShape() == PortShape.CIRCLE) {
+                                // پورت دایره‌ای = 30% شانس پکت حجیم
+                                if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
-                                    packet = new PacketModel(randomType(), baseSpeed);
+                                    packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
-                                returnedCredits--;
-                            } else if (producedCount < totalToProduce) {
-                                // 10% احتمال تولید پکت حجیم
-                                if (RND.nextInt(10) <= 10) {
-                                    packet = createLargePacketForPort(out.getType(), baseSpeed);
-                                } else {
-                                    packet = new PacketModel(randomType(), baseSpeed);
-                                }
-                                producedCount++;
                             } else {
-                                return;
+                                // پورت‌های دیگر = 10% شانس پکت حجیم
+                                if (RND.nextInt(10) < 1) {
+                                    packet = createLargePacketForPort(out.getType(), baseSpeed);
+                                } else {
+                                    packet = new PacketModel(randomType(), baseSpeed);
+                                }
                             }
 
-                            boolean compatible = wire.getSrcPort().isCompatible(packet);
-
+                            // تنظیم سرعت اولیه و پیکربندی استراتژی حرکت
                             packet.setStartSpeedMul(1.0);
+                            boolean compatible = wire.getSrcPort().isCompatible(packet);
                             MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
                             packet.setMotionStrategy(ms);
 
+                            // چسباندن پکت به سیم خروجی
                             wire.attachPacket(packet, 0);
                         });
             }
         }
     }
 
-    // imports بالاست: java.awt.Color و ... را داری
     private LargePacket createLargePacketForPort(PacketType portType, double baseSpeed) {
         int units = (RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10);
 
-        // نوع پکت را مطابق پورت می‌دهیم
         LargePacket lp = new LargePacket(portType, baseSpeed, units);
 
-        // رنگ داینامیک (تا واقعا رنگ‌های متنوع ببینی)
+        // اضافه کنید: تنظیم سایز ویژوال
+        int visualSize = units * Config.PACKET_SIZE_MULTIPLIER;
+        lp.setWidth(visualSize);
+        lp.setHeight(visualSize);
+
         lp.setCustomColor(Color.getHSBColor(RND.nextFloat(), 0.8f, 0.9f));
 
-        // پروفایل کینماتیکی مناسب سایز
         KinematicsRegistry.setProfile(
                 lp,
                 (units == Config.LARGE_PACKET_SIZE_8) ? KinematicsProfile.LARGE_8 : KinematicsProfile.LARGE_10
         );
+
         return lp;
     }
-
     private PacketType randomType() {
         int r = RND.nextInt(3);
         return (r == 0) ? PacketType.SQUARE

@@ -6,10 +6,8 @@ import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.view.draw.ShapeUtils;
 
-import javax.swing.*;
 import java.awt.*;
 
-import static com.blueprinthell.controller.systems.SystemKind.*;
 
 public class SystemBoxView extends GameObjectView<SystemBoxModel> {
 

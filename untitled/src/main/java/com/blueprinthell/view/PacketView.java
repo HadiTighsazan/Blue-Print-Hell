@@ -29,59 +29,74 @@ public class PacketView extends GameObjectView<PacketModel> {
             final int w = getWidth();
             final int h = getHeight();
 
-            // خط 36-47 که در مرحله قبل تغییر دادیم را دوباره اصلاح کنید:
             if (model instanceof LargePacket lp) {
                 final int sizeUnits = lp.getOriginalSizeUnits();
                 final int sides = (sizeUnits == 8) ? 8 : 10;
 
+                // اطمینان از سایز صحیح
+                int expectedWidth = sizeUnits * Config.PACKET_SIZE_MULTIPLIER;
+                if (model.getWidth() != expectedWidth) {
+                    model.setWidth(expectedWidth);
+                    model.setHeight(expectedWidth);
+                    setBounds(model.getX(), model.getY(), expectedWidth, expectedWidth);
+                }
+
                 // استفاده از رنگ دینامیک
                 g2.setColor(lp.getCustomColor());
-                Polygon poly = ShapeUtils.regularPolygon(sides, w, h, Config.POLY_INSET);
+                Polygon poly = ShapeUtils.regularPolygon(sides, getWidth(), getHeight(), Config.POLY_INSET);
                 g2.fillPolygon(poly);
 
-                // حاشیه متفاوت برای تمایز
+                // حاشیه و برچسب
                 g2.setStroke(new BasicStroke(sizeUnits == 8 ? 2f : 3f));
                 g2.setColor(sizeUnits == 8 ? Color.WHITE : Color.YELLOW);
                 g2.drawPolygon(poly);
 
-                // نمایش عدد اندازه در مرکز
+                // نمایش عدد در مرکز
                 g2.setColor(Color.WHITE);
-                g2.setFont(new Font("Arial", Font.BOLD, 14));
+                g2.setFont(new Font("Arial", Font.BOLD, 16)); // فونت بزرگتر
                 String sizeStr = String.valueOf(sizeUnits);
                 FontMetrics fm = g2.getFontMetrics();
-                int tx = (w - fm.stringWidth(sizeStr)) / 2;
-                int ty = (h + fm.getAscent()) / 2 - 2;
+                int tx = (getWidth() - fm.stringWidth(sizeStr)) / 2;
+                int ty = (getHeight() + fm.getAscent()) / 2 - 2;
                 g2.drawString(sizeStr, tx, ty);
 
-                drawPacketBadges(g2, model, w, h);
+                drawPacketBadges(g2, model, getWidth(), getHeight());
                 return;
             }
 
             if (model instanceof BitPacket bp) {
-                // رنگ بر اساس گروه
-                g2.setColor(bp.getColor());
+                // سایز صحیح برای BitPacket
+                int expectedSize = Config.PACKET_SIZE_UNITS_CIRCLE * Config.PACKET_SIZE_MULTIPLIER;
 
-                // رسم دایره کوچک‌تر برای بیت‌پکت
-                int margin = 3;
-                g2.fillOval(margin, margin, w - 2*margin, h - 2*margin);
+                // اطمینان از سایز صحیح
+                if (model.getWidth() != expectedSize) {
+                    model.setWidth(expectedSize);
+                    model.setHeight(expectedSize);
+                    setBounds(model.getX(), model.getY(), expectedSize, expectedSize);
+                }
 
-                // حاشیه سفید برای تمایز
+                // رنگ از گروه
+                Color bitColor = bp.getColor();
+                g2.setColor(bitColor);
+
+                // رسم مربع (چون نوع SQUARE است)
+                int margin = 2;
+                g2.fillRect(margin, margin, getWidth() - 2*margin, getHeight() - 2*margin);
+
+                // حاشیه سفید نازک
                 g2.setColor(Color.WHITE);
                 g2.setStroke(new BasicStroke(1f));
-                g2.drawOval(margin, margin, w - 2*margin, h - 2*margin);
+                g2.drawRect(margin, margin, getWidth() - 2*margin, getHeight() - 2*margin);
 
-                // نمایش شماره index کوچک
+                // نمایش شماره index کوچک در گوشه
                 g2.setFont(new Font("Arial", Font.PLAIN, 8));
                 String idx = String.valueOf(bp.getIndexInGroup());
                 FontMetrics fm = g2.getFontMetrics();
-                int tx = (w - fm.stringWidth(idx)) / 2;
-                int ty = (h + fm.getAscent()) / 2 - 2;
-                g2.setColor(Color.BLACK);
-                g2.drawString(idx, tx, ty);
+                g2.setColor(Color.WHITE);
+                g2.drawString(idx, 3, 10);
 
                 return;
             }
-
             // ===== رندر انواع معمولی + Protected با شفافیت پایین =====
             int s = Math.min(w, h);
 

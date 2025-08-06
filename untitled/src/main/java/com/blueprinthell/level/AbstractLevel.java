@@ -1,6 +1,7 @@
 // فایل جدید: untitled/src/main/java/com/blueprinthell/level/AbstractLevel.java
 package com.blueprinthell.level;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.SystemKind;
 import com.blueprinthell.model.PortShape;
 import java.util.*;
@@ -53,7 +54,7 @@ public abstract class AbstractLevel implements Level {
                                                 SystemKind kind) {
         return new LevelDefinition.BoxSpec(
                 "box-" + UUID.randomUUID().toString().substring(0, 8),
-                x, y, 96, 96,
+                x, y, Config.BOX_SIZE, Config.BOX_SIZE,
                 new ArrayList<>(inShapes),
                 new ArrayList<>(outShapes),
                 false, false,
@@ -65,7 +66,7 @@ public abstract class AbstractLevel implements Level {
     protected LevelDefinition.BoxSpec createSource(int x, int y, List<PortShape> outShapes) {
         return new LevelDefinition.BoxSpec(
                 "source-" + UUID.randomUUID().toString().substring(0, 8),
-                x, y, 96, 96,
+                x, y, Config.BOX_SIZE, Config.BOX_SIZE,
                 List.of(),
                 new ArrayList<>(outShapes),
                 true, false,
@@ -77,7 +78,7 @@ public abstract class AbstractLevel implements Level {
     protected LevelDefinition.BoxSpec createSink(int x, int y, List<PortShape> inShapes) {
         return new LevelDefinition.BoxSpec(
                 "sink-" + UUID.randomUUID().toString().substring(0, 8),
-                x, y, 96, 96,
+                x, y, Config.BOX_SIZE, Config.BOX_SIZE,
                 new ArrayList<>(inShapes),
                 List.of(),
                 false, true,

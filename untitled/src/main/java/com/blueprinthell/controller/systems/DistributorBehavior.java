@@ -41,7 +41,7 @@ public final class DistributorBehavior implements SystemBehavior {
     @Override public void onEnabledChanged(boolean enabled) {  }
 
     private void splitLarge(LargePacket large) {
-        int parentSize   = large.getOriginalSizeUnits();
+        int parentSize = large.getOriginalSizeUnits();
         int expectedBits = parentSize;
 
         int groupId;
@@ -50,7 +50,7 @@ public final class DistributorBehavior implements SystemBehavior {
 
         if (!large.hasGroup()) {
             colorId = rnd.nextInt(360);
-            groupColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f); // اضافه شود
+            groupColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
             groupId = registry.createGroup(parentSize, expectedBits, colorId);
             large.setGroupInfo(groupId, expectedBits, colorId);
             large.setCustomColor(groupColor);
@@ -67,15 +67,20 @@ public final class DistributorBehavior implements SystemBehavior {
 
         int lostBits = 0;
         for (int i = 0; i < expectedBits; i++) {
+            // تغییر مهم: BitPacket باید نوع SQUARE باشد و سایز 1
             BitPacket bit = new BitPacket(
-                    large.getType(),
+                    PacketType.SQUARE,  // تغییر به SQUARE به جای large.getType()
                     Config.DEFAULT_PACKET_SPEED,
                     groupId,
                     parentSize,
                     i,
                     colorId);
 
-            // Phase-3: assign a random messenger profile to each bit
+            // تنظیم سایز صحیح (مثل پیام‌رسان سایز 1)
+            bit.setWidth(Config.PACKET_SIZE_UNITS_CIRCLE * Config.PACKET_SIZE_MULTIPLIER);
+            bit.setHeight(Config.PACKET_SIZE_UNITS_CIRCLE * Config.PACKET_SIZE_MULTIPLIER);
+
+            // اختصاص پروفایل پیام‌رسان تصادفی
             KinematicsRegistry.setProfile(bit, randomMessengerProfile());
 
             boolean accepted = box.enqueue(bit);
@@ -91,7 +96,6 @@ public final class DistributorBehavior implements SystemBehavior {
             registry.markBitLost(groupId, lostBits);
         }
     }
-
     private void removeFromBuffer(PacketModel target) {
         Deque<PacketModel> tmp = new ArrayDeque<>();
         PacketModel p;

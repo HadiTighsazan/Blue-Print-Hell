@@ -26,18 +26,22 @@ public class LargePacket extends PacketModel implements Serializable {
 
 
 
+
     public LargePacket(PacketType type, double baseSpeed, int originalSizeUnits) {
         super(type, baseSpeed);
         this.originalSizeUnits = originalSizeUnits;
         this.expectedBits = originalSizeUnits;
-    }
-    public LargePacket(PacketType type, double baseSpeed, int originalSizeUnits, Color customColor) {
-        super(type, baseSpeed);
-        this.originalSizeUnits = originalSizeUnits;
-        this.expectedBits = originalSizeUnits;
-        this.customColor = customColor;
+
+        // تنظیم سایز در سازنده
+        int visualSize = originalSizeUnits * Config.PACKET_SIZE_MULTIPLIER;
+        setWidth(visualSize);
+        setHeight(visualSize);
     }
 
+    public LargePacket(PacketType type, double baseSpeed, int originalSizeUnits, Color customColor) {
+        this(type, baseSpeed, originalSizeUnits);
+        this.customColor = customColor;
+    }
     public LargePacket(PacketType type, double baseSpeed,
                        int originalSizeUnits,
                        int groupId,

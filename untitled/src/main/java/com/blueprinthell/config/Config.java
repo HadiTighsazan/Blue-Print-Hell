@@ -24,7 +24,7 @@ public final class Config {
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
     public static final int PACKET_COINS_SQUARE        = 2;
-    public static final int BIT_PACKET_SIZE_MULTIPLIER = 4;
+    public static final int BIT_PACKET_SIZE_MULTIPLIER = 8;
     public static final int PACKET_SIZE_UNITS_TRIANGLE = 3;
     public static final int PACKET_COINS_TRIANGLE      = 3;
 
@@ -38,6 +38,7 @@ public final class Config {
     public static final Color COLOR_BOX_FILL        = new Color(0x888888);
     public static final Color COLOR_BOX_BORDER      = Color.WHITE;
 
+    public static final int BOX_SIZE = 120;
     public static final float STROKE_WIDTH_WIRE = 2f;
 
 

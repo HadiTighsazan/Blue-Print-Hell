@@ -1,5 +1,6 @@
 package com.blueprinthell.controller.systems;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.PortModel;
@@ -58,37 +59,41 @@ public final class MergerBehavior implements SystemBehavior {
     private void mergeGroup(GroupState st) {
         int gid = st.groupId;
 
-        // Extract all group's bits currently buffered in this box
         List<BitPacket> bits = extractBitsFromBuffer(gid);
         int collected = bits.size();
+
         if (collected < st.expectedBits) {
-            // Defensive: registry says complete, but buffer doesn't hold all bits yet
-            // Put them back at the front to preserve order and retry later
-            for (int i = bits.size() - 1; i >= 0; i--) box.enqueueFront(bits.get(i));
+            for (int i = bits.size() - 1; i >= 0; i--)
+                box.enqueueFront(bits.get(i));
             return;
         }
 
-        // Create merged large packet with size = number of bits collected
+        // ساخت پکت حجیم بازسازی شده
         PacketModel sample = bits.get(0);
         LargePacket large = LargePacket.fromSample(sample,
-                st.originalSizeUnits,  // اندازه = تعداد بیت‌های جمع‌آوری شده
+                st.originalSizeUnits,
                 gid,
                 st.expectedBits,
                 st.colorId,
                 true);
+
+        // تنظیم رنگ و سایز
         Color mergedColor = Color.getHSBColor(st.colorId / 360.0f, 0.8f, 0.9f);
         large.setCustomColor(mergedColor);
+
+        // تنظیم سایز صحیح پکت حجیم بازسازی شده
+        int visualSize = st.originalSizeUnits * Config.PACKET_SIZE_MULTIPLIER;
+        large.setWidth(visualSize);
+        large.setHeight(visualSize);
+
         KinematicsRegistry.copyProfile(sample, large);
 
-        // Try to enqueue rebuilt large
         if (!box.enqueue(large)) {
             lossModel.incrementBy(collected);
         } else {
-            // Track this merged packet size for loss calculation
             groupToMergedSizes.computeIfAbsent(gid, k -> new ArrayList<>()).add(collected);
         }
 
-        // Check if all bits have been processed
         boolean allBitsProcessed = checkAllBitsProcessed(st);
 
         if (allBitsProcessed) {
