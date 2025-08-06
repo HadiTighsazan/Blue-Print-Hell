@@ -66,7 +66,7 @@ public class PacketView extends GameObjectView<PacketModel> {
 
             if (model instanceof BitPacket bp) {
                 // سایز صحیح برای BitPacket
-                int expectedSize = Config.PACKET_SIZE_UNITS_CIRCLE * Config.PACKET_SIZE_MULTIPLIER;
+                int expectedSize = Config.BIT_PACKET_SIZE * Config.PACKET_SIZE_MULTIPLIER;
 
                 // اطمینان از سایز صحیح
                 if (model.getWidth() != expectedSize) {

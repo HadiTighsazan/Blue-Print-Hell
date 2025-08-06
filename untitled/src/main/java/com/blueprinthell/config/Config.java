@@ -24,7 +24,6 @@ public final class Config {
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
     public static final int PACKET_COINS_SQUARE        = 2;
-    public static final int BIT_PACKET_SIZE_MULTIPLIER = 8;
     public static final int PACKET_SIZE_UNITS_TRIANGLE = 3;
     public static final int PACKET_COINS_TRIANGLE      = 3;
 
@@ -108,7 +107,7 @@ public final class Config {
     public static final int   PACKET_COINS_CIRCLE      = 1;
     public static final Color COLOR_PACKET_CIRCLE      = new Color(0x39B54A);
 
-
+    public static final int BIT_PACKET_SIZE = 2;
     public static final java.awt.Color COLOR_PACKET_LARGE = new java.awt.Color(0x8E44AD);
 
     public static final java.awt.Color COLOR_BADGE_BG = new java.awt.Color(0x111111);

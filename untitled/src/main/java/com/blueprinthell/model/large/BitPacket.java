@@ -35,7 +35,7 @@ public class BitPacket extends PacketModel implements Serializable {
         this.colorId = colorId;
 
         // تنظیم سایز مثل پیام‌رسان معمولی سایز 1
-        int visualSize = Config.PACKET_SIZE_UNITS_CIRCLE * Config.PACKET_SIZE_MULTIPLIER;
+        int visualSize = Config.BIT_PACKET_SIZE * Config.PACKET_SIZE_MULTIPLIER;
         this.setWidth(visualSize);
         this.setHeight(visualSize);
     }

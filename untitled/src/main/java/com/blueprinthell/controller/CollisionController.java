@@ -108,7 +108,6 @@ public class CollisionController implements Updatable {
                 for (PacketModel other : grid.retrieve(pPos.x, pPos.y)) {
                     if (other == p || processed.contains(other)) continue;
                     if (isShielded(other)) continue;
-
                     // کول‌داونِ برگشت برای other
                     if (other.isReturning()) {
                         Long cooldownUntilOther = returnCollisionCooldowns.get(other);
