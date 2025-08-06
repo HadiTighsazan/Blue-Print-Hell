@@ -19,7 +19,7 @@ public final class Config {
     private Config() { /* Prevent instantiation */ }
 
     public static final int    PACKET_SIZE_MULTIPLIER   = 8;
-    public static final int    MAX_BUFFER_CAPACITY      = 8;
+    public static final int    MAX_BUFFER_CAPACITY      = 10000;
     public static final int    PORT_SIZE                = 14;
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
@@ -120,7 +120,7 @@ public final class Config {
     public static final int   BADGE_PADDING       = 3;
     public static final int   BADGE_MARGIN_X      = 2;
     public static final int   BADGE_MARGIN_Y      = 2;
-    public static final double POLY_INSET         = 0.10;
+    public static final double POLY_INSET         = 0.03;
 
     public static final int    LONG_WIRE_THRESHOLD_PX = 250;
     public static final double LONG_WIRE_ACCEL        = 80.0;

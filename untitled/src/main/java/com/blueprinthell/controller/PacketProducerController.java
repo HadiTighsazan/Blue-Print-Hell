@@ -106,16 +106,16 @@ public class PacketProducerController implements Updatable {
                             PacketModel packet;
                             if (returnedCredits > 0) {
                                 // 10% احتمال تولید پکت حجیم
-                                if (RND.nextInt(10) == 0) {
-                                    packet = createLargePacketRandomly();
+                                if (RND.nextInt(10) <= 10) {
+                                    packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
                                 }
                                 returnedCredits--;
                             } else if (producedCount < totalToProduce) {
                                 // 10% احتمال تولید پکت حجیم
-                                if (RND.nextInt(10) == 0) {
-                                    packet = createLargePacketRandomly();
+                                if (RND.nextInt(10) <= 10) {
+                                    packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
                                 }
@@ -130,12 +130,29 @@ public class PacketProducerController implements Updatable {
                             MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
                             packet.setMotionStrategy(ms);
 
-                            wire.attachPacket(packet, 0.0);
+                            wire.attachPacket(packet, 0);
                         });
             }
         }
     }
 
+    // imports بالاست: java.awt.Color و ... را داری
+    private LargePacket createLargePacketForPort(PacketType portType, double baseSpeed) {
+        int units = (RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10);
+
+        // نوع پکت را مطابق پورت می‌دهیم
+        LargePacket lp = new LargePacket(portType, baseSpeed, units);
+
+        // رنگ داینامیک (تا واقعا رنگ‌های متنوع ببینی)
+        lp.setCustomColor(Color.getHSBColor(RND.nextFloat(), 0.8f, 0.9f));
+
+        // پروفایل کینماتیکی مناسب سایز
+        KinematicsRegistry.setProfile(
+                lp,
+                (units == Config.LARGE_PACKET_SIZE_8) ? KinematicsProfile.LARGE_8 : KinematicsProfile.LARGE_10
+        );
+        return lp;
+    }
 
     private PacketType randomType() {
         int r = RND.nextInt(3);
