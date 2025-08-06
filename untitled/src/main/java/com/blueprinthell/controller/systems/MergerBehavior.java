@@ -10,7 +10,9 @@ import com.blueprinthell.model.large.LargeGroupRegistry.GroupState;
 import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.motion.KinematicsRegistry;
 
+import java.awt.*;
 import java.util.*;
+import java.util.List;
 
 public final class MergerBehavior implements SystemBehavior {
 
@@ -69,11 +71,13 @@ public final class MergerBehavior implements SystemBehavior {
         // Create merged large packet with size = number of bits collected
         PacketModel sample = bits.get(0);
         LargePacket large = LargePacket.fromSample(sample,
-                collected,  // اندازه = تعداد بیت‌های جمع‌آوری شده
+                st.originalSizeUnits,  // اندازه = تعداد بیت‌های جمع‌آوری شده
                 gid,
                 st.expectedBits,
                 st.colorId,
                 true);
+        Color mergedColor = Color.getHSBColor(st.colorId / 360.0f, 0.8f, 0.9f);
+        large.setCustomColor(mergedColor);
         KinematicsRegistry.copyProfile(sample, large);
 
         // Try to enqueue rebuilt large

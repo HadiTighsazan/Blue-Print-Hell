@@ -9,6 +9,7 @@ import com.blueprinthell.model.WireModel;
 import java.util.*;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.large.BitPacket;
+import com.blueprinthell.model.large.LargePacket;
 
 public final class MotionStrategyFactory {
 
@@ -35,6 +36,18 @@ public final class MotionStrategyFactory {
             }
             MotionStrategy base = buildStrategyFromRule(rule, randomProfile.getParams());
             return new ApproachLimiterWrapper(overrideForLongWire(packet, rule, base));
+        }
+
+        if (packet instanceof LargePacket lp) {
+            if (lp.getOriginalSizeUnits() == 10) {
+                // حرکت drift برای پکت 10
+                return new DriftMotionStrategy(Config.L10_BASE_SPEED,
+                        Config.L10_DRIFT_STEP_PX,
+                        Config.L10_DRIFT_OFFSET_PX);
+            } else if (lp.getOriginalSizeUnits() == 8) {
+                // حرکت با شتاب در انحنا برای پکت 8
+                return new AccelOnCurveStrategy(Config.L8_CURVE_ACCEL, Config.L8_MAX_MUL);
+            }
         }
 
         KinematicsProfile profile = ensureProfile(packet);

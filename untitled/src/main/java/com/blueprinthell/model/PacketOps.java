@@ -6,19 +6,17 @@ import com.blueprinthell.motion.KinematicsProfile;
 import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.util.Objects;
-/* ADD START */
+
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.WeakHashMap;
 
 import static com.blueprinthell.motion.KinematicsProfile.*;
-/* ADD END */
 
 public final class PacketOps {
 
     private PacketOps() { /* static only */ }
 
-    /* ---------------- Existing helpers ---------------- */
 
     public static boolean isTrojan(PacketModel p)        { return p instanceof TrojanPacket; }
     public static boolean isProtected(PacketModel p)     { return p instanceof ProtectedPacket; }
@@ -192,16 +190,7 @@ public final class PacketOps {
         return 0;
     }
 
-    /**
-     * سکه‌های دریافتی هنگام ورود به سیستم
-     * طبق سند:
-     * - MSG1 (دایره): 1 سکه
-     * - MSG2 (مربع): 2 سکه
-     * - MSG3 (مثلث): 3 سکه
-     * - Protected: 5 سکه
-     * - Confidential: 3 سکه
-     * - Confidential-VPN: 4 سکه
-     */
+
     public static int coinValueOnEntry(PacketModel p) {
         if (isProtected(p)) return 5;
         if (isConfidentialVpn(p)) return 4;
@@ -213,28 +202,22 @@ public final class PacketOps {
         if (prof == KinematicsProfile.MSG3) return 3;  // مثلث - تصحیح شد
 
         // برای پکت‌های حجیم هنگام ورود سکه‌ای اضافه نمی‌شود
-        if (isLarge(p)) return 0;
+        if (isLarge(p)) {
+            LargePacket lp = (LargePacket) p;
+            return lp.getOriginalSizeUnits(); // 8 یا 10 سکه
+        }
 
         return 0;
     }
 
-    /**
-     * سکه‌های دریافتی هنگام رسیدن به مقصد نهایی (مصرف)
-     *
-     * توجه: طبق سند، پکت‌های پیام‌رسان (MSG1/2/3) سکه‌هایشان را هنگام "ورود به سیستم" می‌دهند
-     * نه هنگام "مصرف نهایی". بنابراین اینجا فقط پکت‌های حجیم سکه می‌دهند.
-     *
-     * - Large: به اندازه sizeUnits اصلی (8 یا 10)
-     * - بقیه پکت‌ها: 0 سکه
-     */
+
     public static int coinValueOnConsume(PacketModel p) {
         // فقط پکت‌های حجیم هنگام مصرف نهایی سکه می‌دهند
         if (isLarge(p)) {
             return Math.max(0, ((LargePacket) p).getOriginalSizeUnits());
         }
 
-        // پکت‌های پیام‌رسان، محافظت‌شده و محرمانه هنگام مصرف سکه نمی‌دهند
-        // (سکه‌هایشان را قبلاً هنگام ورود به سیستم‌ها گرفته‌اند)
+
         return 0;
     }
 

@@ -1,9 +1,14 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.LargePacket;
+import com.blueprinthell.motion.KinematicsProfile;
+import com.blueprinthell.motion.KinematicsRegistry;
 import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.MotionStrategyFactory;
 
+import java.awt.*;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -48,7 +53,23 @@ public class PacketProducerController implements Updatable {
         running = false;
         acc = 0.0;
     }
+    private PacketModel createLargePacketRandomly() {
+        int size = RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10;
+        int colorId = RND.nextInt(360);
+        Color color = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
 
+        LargePacket large = new LargePacket(PacketType.CIRCLE, Config.DEFAULT_PACKET_SPEED, size, color);
+        large.setGroupInfo(-1, size, colorId); // گروه بعداً در Distributor تنظیم می‌شود
+
+        // تنظیم پروفایل حرکتی
+        if (size == 8) {
+            KinematicsRegistry.setProfile(large, KinematicsProfile.LARGE_8);
+        } else {
+            KinematicsRegistry.setProfile(large, KinematicsProfile.LARGE_10);
+        }
+
+        return large;
+    }
 
     public void onPacketReturned() {
         returnedCredits++;
@@ -84,10 +105,20 @@ public class PacketProducerController implements Updatable {
                         .ifPresent(wire -> {
                             PacketModel packet;
                             if (returnedCredits > 0) {
-                                packet = new PacketModel(randomType(), baseSpeed);
+                                // 10% احتمال تولید پکت حجیم
+                                if (RND.nextInt(10) == 0) {
+                                    packet = createLargePacketRandomly();
+                                } else {
+                                    packet = new PacketModel(randomType(), baseSpeed);
+                                }
                                 returnedCredits--;
                             } else if (producedCount < totalToProduce) {
-                                packet = new PacketModel(randomType(), baseSpeed);
+                                // 10% احتمال تولید پکت حجیم
+                                if (RND.nextInt(10) == 0) {
+                                    packet = createLargePacketRandomly();
+                                } else {
+                                    packet = new PacketModel(randomType(), baseSpeed);
+                                }
                                 producedCount++;
                             } else {
                                 return;
@@ -104,6 +135,7 @@ public class PacketProducerController implements Updatable {
             }
         }
     }
+
 
     private PacketType randomType() {
         int r = RND.nextInt(3);

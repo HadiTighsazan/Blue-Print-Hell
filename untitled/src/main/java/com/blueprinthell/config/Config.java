@@ -24,6 +24,7 @@ public final class Config {
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;
     public static final int PACKET_COINS_SQUARE        = 2;
+    public static final int BIT_PACKET_SIZE_MULTIPLIER = 4;
     public static final int PACKET_SIZE_UNITS_TRIANGLE = 3;
     public static final int PACKET_COINS_TRIANGLE      = 3;
 
@@ -59,6 +60,11 @@ public final class Config {
     public static final double TROJAN_PROBABILITY_NORMAL = 0.15;
 
 
+    public static final int LARGE_PACKET_SIZE_8 = 8;
+    public static final int LARGE_PACKET_SIZE_10 = 10;
+
+    public static final double L10_DRIFT_INTERVAL_MS = 200.0; // هر 200ms یک انحراف
+    public static final double L10_DRIFT_AMOUNT_PX = 5.0;     // مقدار انحراف
 
 
     public static final double MSG1_COMPAT_V0       = 80;

@@ -1,9 +1,11 @@
 package com.blueprinthell.model.large;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.PacketType;
 import com.blueprinthell.model.WireModel;
 
+import java.awt.*;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -20,7 +22,7 @@ public class LargePacket extends PacketModel implements Serializable {
     private int colorId;
 
     private boolean rebuiltFromBits;
-
+    private Color customColor;
 
 
 
@@ -28,6 +30,12 @@ public class LargePacket extends PacketModel implements Serializable {
         super(type, baseSpeed);
         this.originalSizeUnits = originalSizeUnits;
         this.expectedBits = originalSizeUnits;
+    }
+    public LargePacket(PacketType type, double baseSpeed, int originalSizeUnits, Color customColor) {
+        super(type, baseSpeed);
+        this.originalSizeUnits = originalSizeUnits;
+        this.expectedBits = originalSizeUnits;
+        this.customColor = customColor;
     }
 
     public LargePacket(PacketType type, double baseSpeed,
@@ -42,6 +50,7 @@ public class LargePacket extends PacketModel implements Serializable {
         this.expectedBits = expectedBits;
         this.colorId = colorId;
         this.rebuiltFromBits = rebuiltFromBits;
+        this.customColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
     }
 
     public static LargePacket fromSample(PacketModel sample,
@@ -94,5 +103,14 @@ public class LargePacket extends PacketModel implements Serializable {
         if (src.getNoise() > 0) {
             dst.increaseNoise(src.getNoise());
         }
+    }
+    public Color getCustomColor() {
+        if (customColor != null) return customColor;
+        if (colorId > 0) return Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
+        return Config.COLOR_PACKET_LARGE;
+    }
+
+    public void setCustomColor(Color color) {
+        this.customColor = color;
     }
 }

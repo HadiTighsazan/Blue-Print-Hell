@@ -1,9 +1,11 @@
 package com.blueprinthell.model.large;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.PacketType;
 import com.blueprinthell.model.WireModel;
 
+import java.awt.*;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -31,6 +33,8 @@ public class BitPacket extends PacketModel implements Serializable {
         this.parentSizeUnits = parentSizeUnits;
         this.indexInGroup = indexInGroup;
         this.colorId = colorId;
+        this.setWidth(Config.BIT_PACKET_SIZE_MULTIPLIER);
+        this.setHeight(Config.BIT_PACKET_SIZE_MULTIPLIER);
     }
 
 
@@ -46,7 +50,9 @@ public class BitPacket extends PacketModel implements Serializable {
         return bp;
     }
 
-
+    public Color getColor() {
+        return Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
+    }
 
     public int getGroupId()            { return groupId; }
     public int getParentSizeUnits()    { return parentSizeUnits; }

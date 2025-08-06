@@ -8,6 +8,7 @@ import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.motion.KinematicsProfile;
 import com.blueprinthell.motion.KinematicsRegistry;
 
+import java.awt.*;
 import java.util.*;
 
 public final class DistributorBehavior implements SystemBehavior {
@@ -45,13 +46,18 @@ public final class DistributorBehavior implements SystemBehavior {
 
         int groupId;
         int colorId;
+        Color groupColor;
+
         if (!large.hasGroup()) {
             colorId = rnd.nextInt(360);
+            groupColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f); // اضافه شود
             groupId = registry.createGroup(parentSize, expectedBits, colorId);
             large.setGroupInfo(groupId, expectedBits, colorId);
+            large.setCustomColor(groupColor);
         } else {
             groupId = large.getGroupId();
             colorId = large.getColorId();
+            groupColor = large.getCustomColor();
             if (registry.get(groupId) == null) {
                 registry.createGroupWithId(groupId, parentSize, expectedBits, colorId);
             }
