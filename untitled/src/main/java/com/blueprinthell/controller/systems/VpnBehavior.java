@@ -29,47 +29,39 @@ public final class VpnBehavior implements SystemBehavior {
         // No periodic updates needed
     }
 
+    // در VpnBehavior.java - متد onPacketEnqueued را جایگزین کنید:
+
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
 
-        // Skip if already protected
+        // اگر قبلاً محافظت شده، نادیده بگیر
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
             return;
         }
 
-        // Handle messenger packets -> Protected
+        // پیام‌رسان‌ها → Protected
         if (PacketOps.isMessenger(packet)) {
             PacketModel prot = PacketOps.toProtected(packet, shieldCapacity);
-
-            // Mark both locally and globally
             VpnRevertHints.markGlobal(prot, packet);
             myProtectedPackets.add(prot);
-
             replaceInBuffer(packet, prot);
             return;
         }
 
-        // Handle confidential packets -> Confidential-VPN
+        // پکت محرمانه عادی → پکت محرمانه VPN (سایز 4 به 6)
         if (packet instanceof ConfidentialPacket && !PacketOps.isConfidentialVpn(packet)) {
             PacketModel conf6 = PacketOps.toConfidentialVpn(packet);
 
-            // Mark both locally and globally
+            // مهم: تنظیم پروفایل حرکتی برای keep-distance
+            KinematicsRegistry.setProfile(conf6, KinematicsProfile.CONFIDENTIAL_VPN);
+
             VpnRevertHints.markGlobal(conf6, packet);
             myProtectedPackets.add(conf6);
-
             replaceInBuffer(packet, conf6);
             return;
         }
-
-        // Tag other confidential packets
-        if (PacketOps.isConfidential(packet)) {
-            KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
-            PacketOps.tag(packet, PacketOps.PacketTag.CONFIDENTIAL_VPN);
-            myProtectedPackets.add(packet);
-        }
     }
-
     @Override
     public void onEnabledChanged(boolean enabled) {
         if (!enabled) {

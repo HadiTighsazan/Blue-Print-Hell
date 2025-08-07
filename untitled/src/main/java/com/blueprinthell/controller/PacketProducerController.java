@@ -120,18 +120,19 @@ public class PacketProducerController implements Updatable {
                         .ifPresent(wire -> {
                             // تولید پکت بر اساس شکل پورت
                             PacketModel packet;
+                            if (RND.nextInt(10) < 10) {
+                                packet = PacketOps.toConfidential(new PacketModel(randomType(), baseSpeed));
+                            }
                             if (out.getShape() == PortShape.CIRCLE) {
-                                // پورت دایره‌ای = 30% شانس پکت حجیم
-                                // توجه: عمداً 100% گذاشتی؛ دست نمی‌زنیم
-                                if (RND.nextInt(10) < 10) {
+
+                                if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
                             } else {
-                                // پورت‌های دیگر = 10% شانس پکت حجیم
-                                // توجه: عمداً 100% گذاشتی؛ دست نمی‌زنیم
-                                if (RND.nextInt(10) < 0) {
+
+                                if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);

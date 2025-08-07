@@ -93,18 +93,24 @@ public class PacketDispatcherController implements Updatable {
 
                     // برای پکت‌های حجیم
                     if (packet instanceof LargePacket lp) {
-                        coins = lp.getOriginalSizeUnits(); // 8 یا 10 سکه
+                        coins = lp.getOriginalSizeUnits();
                     }
-                    // برای سایر پکت‌ها
-                    else {
+                    // برای پکت‌های محرمانه
+                    else if (PacketOps.isConfidential(packet)) {
+                        if (PacketOps.isConfidentialVpn(packet)) {
+                            coins = 4; // پکت محرمانه VPN
+                        } else {
+                            coins = 3; // پکت محرمانه عادی
+                        }
+                    }
+                    // برای پکت‌های پیام‌رسان
+                    else if (PacketOps.isMessenger(packet)) {
                         coins = PacketOps.coinValueOnEntry(packet);
-
-                        if (dest.getPrimaryKind() == SystemKind.VPN) {
-                            if (PacketOps.isMessenger(packet)) {
-                                coins = 5;
-                            } else if (PacketOps.isConfidential(packet) && !PacketOps.isConfidentialVpn(packet)) {
-                                coins = 4;
-                            }
+                    }
+                    // برای سیستم VPN با پکت‌های خاص
+                    else if (dest.getPrimaryKind() == SystemKind.VPN) {
+                        if (PacketOps.isMessenger(packet)) {
+                            coins = 5;
                         }
                     }
 

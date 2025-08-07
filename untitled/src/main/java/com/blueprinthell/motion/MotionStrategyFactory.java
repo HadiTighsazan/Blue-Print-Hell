@@ -20,11 +20,18 @@ public final class MotionStrategyFactory {
     public static MotionStrategy create(PacketModel packet, boolean compatible) {
         Objects.requireNonNull(packet, "packet");
 
-        if (packet instanceof ConfidentialPacket) {
-            KinematicsProfile prof = PacketOps.isConfidentialVpn(packet)
-                    ? KinematicsProfile.CONFIDENTIAL_VPN
-                    : KinematicsProfile.CONFIDENTIAL;
-            KinematicsRegistry.setProfile(packet, prof);
+        if (PacketOps.isConfidentialVpn(packet)) {
+            KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
+            return new KeepDistanceStrategy(
+                    new MotionRule(MotionMode.KEEP_DISTANCE, Config.CONF_VPN_SPEED, 0, 1.0, 1.0),
+                    Config.CONF_VPN_KEEP_DIST_PX
+            );
+        }
+
+        // برای پکت‌های محرمانه عادی
+        if (packet instanceof ConfidentialPacket && !PacketOps.isConfidentialVpn(packet)) {
+            KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL);
+            return new ConstantSpeedStrategy(Config.CONF_SPEED);
         }
 
         if (packet instanceof ProtectedPacket) {
@@ -245,6 +252,8 @@ public final class MotionStrategyFactory {
         }
     }
 
+    // در MotionStrategyFactory.java - کلاس KeepDistanceStrategy را بهبود دهید:
+
     private static final class KeepDistanceStrategy implements MotionStrategy {
         private final double baseSpeed;
         private final double minGapPx;
@@ -258,21 +267,33 @@ public final class MotionStrategyFactory {
         public void update(PacketModel packet, double dt) {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
+
             double speed = baseSpeed;
             double myProg = packet.getProgress();
             double len = wire.getLength();
 
+            // بررسی فاصله با سایر پکت‌ها روی همین سیم
             for (PacketModel other : wire.getPackets()) {
                 if (other == packet) continue;
-                double dProg = other.getProgress() - myProg;
-                if (dProg > 0) {
-                    double pxDist = dProg * len;
-                    if (pxDist < minGapPx) {
-                        speed *= pxDist / minGapPx;
+
+                double dProg = Math.abs(other.getProgress() - myProg);
+                double pxDist = dProg * len;
+
+                // اگر خیلی نزدیک هستیم
+                if (pxDist < minGapPx) {
+                    // اگر جلوتر هستیم، سرعت کم کن
+                    if (other.getProgress() > myProg && !packet.isReturning()) {
+                        speed *= 0.5; // کاهش 50% سرعت
+                    }
+                    // اگر عقب‌تر هستیم، سرعت زیاد کن
+                    else if (other.getProgress() < myProg && !packet.isReturning()) {
+                        speed *= 1.5; // افزایش 50% سرعت
                     }
                 }
             }
-            if (speed < 10) speed = 10;
+
+            // محدودیت‌های سرعت
+            speed = Math.max(10, Math.min(speed, baseSpeed * 2));
 
             double dp = (speed * dt) / len;
             double next = myProg + dp;
@@ -281,7 +302,6 @@ public final class MotionStrategyFactory {
             packet.setProgress(next);
         }
     }
-
     private static final class DriftStrategy implements MotionStrategy {
         private final double baseSpeed;
         private final double stepDist;

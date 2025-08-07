@@ -1,11 +1,7 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
-import com.blueprinthell.model.ConfidentialPacket;
-import com.blueprinthell.model.PacketModel;
-import com.blueprinthell.model.SystemBoxModel;
-import com.blueprinthell.model.Updatable;
-import com.blueprinthell.model.WireModel;
+import com.blueprinthell.model.*;
 
 import java.util.*;
 
@@ -32,6 +28,8 @@ public class ConfidentialThrottleController implements Updatable {
         this.destMap = Objects.requireNonNull(destMap, "destMap");
     }
 
+    // در فایل ConfidentialThrottleController.java - خط 42 به بعد را جایگزین کنید:
+
     @Override
     public void update(double dt) {
         if (!enabled) return;
@@ -40,28 +38,30 @@ public class ConfidentialThrottleController implements Updatable {
             SystemBoxModel dest = destMap.get(w);
             if (dest == null) continue;
 
+            // بررسی وضعیت بافر مقصد
             boolean congested = !dest.getBuffer().isEmpty();
 
             for (PacketModel p : w.getPackets()) {
+                // فقط پکت‌های محرمانه را بررسی کن
                 if (!(p instanceof ConfidentialPacket)) continue;
 
-                if (congested) {
-                    // Slow down to configured min; remember base speed once
-                    baseSpeed.putIfAbsent(p, p.getSpeed());
-                    double slow = Config.CONF_SLOW_SPEED;
-                    if (p.getSpeed() > slow) {
-                        p.setSpeed(slow);
-                    }
-                } else {
-                    // Restore original/base speed if we had slowed it before
-                    Double orig = baseSpeed.remove(p);
-                    if (orig != null && orig > 0) {
-                        p.setSpeed(orig);
+                // پکت‌های VPN variant را نادیده بگیر (آن‌ها منطق خودشان را دارند)
+                if (PacketOps.isConfidentialVpn(p)) continue;
+
+                // اگر در حال نزدیک شدن به مقصد هستیم (پیشرفت > 70%)
+                if (p.getProgress() > 0.7 && !p.isReturning()) {
+                    if (congested) {
+                        // ذخیره سرعت اصلی و کاهش سرعت
+                        baseSpeed.putIfAbsent(p, p.getSpeed());
+                        double slow = Config.CONF_SLOW_SPEED;
+                        if (p.getSpeed() > slow) {
+                            p.setSpeed(slow);
+                        }
                     } else {
-                        // Fallback: if no remembered speed, at least ensure not below base
-                        double min = Math.max(0, p.getBaseSpeed());
-                        if (p.getSpeed() < min) {
-                            p.setSpeed(min);
+                        // بازگردانی سرعت اصلی
+                        Double orig = baseSpeed.remove(p);
+                        if (orig != null && orig > 0) {
+                            p.setSpeed(orig);
                         }
                     }
                 }

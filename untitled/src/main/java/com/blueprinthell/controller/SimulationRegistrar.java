@@ -69,7 +69,6 @@ public class SimulationRegistrar {
     // *** متد جدید برای تنظیم WireRemovalController ***
     public void setWireRemover(WireRemovalController r) {
         this.wireRemover = r;
-        System.out.println("SimulationRegistrar: WireRemovalController set: " + (r != null ? "OK" : "NULL"));
 
         // اگر durability قبلاً ایجاد شده، آن را هم به‌روزرسانی کن
         if (durability != null) {
@@ -347,22 +346,18 @@ public class SimulationRegistrar {
         // *** تغییر مهم: ایجاد WireDurabilityController با کانکشن به WireRemovalController ***
         durability = new WireDurabilityController(wires, lossModel, Config.LARGE_MAX_PASSES_PER_WIRE);
         if (wireRemover != null) {
-            System.out.println("SimulationRegistrar: Connecting WireDurabilityController to WireRemovalController");
             durability.setWireRemover(wireRemover);
         } else {
-            System.out.println("SimulationRegistrar: WARNING - No WireRemovalController available!");
         }
         simulation.register(durability);
 
         // *** کانکشن PacketDispatcherController به WireDurabilityController ***
         if (dispatcherRef != null) {
             dispatcherRef.setDurabilityController(durability);
-            System.out.println("SimulationRegistrar: Connected PacketDispatcher to WireDurability");
 
             // همچنین کانکشن به WireRemovalController
             if (wireRemover != null) {
                 dispatcherRef.setWireRemover(wireRemover);
-                System.out.println("SimulationRegistrar: Connected PacketDispatcher to WireRemovalController");
             }
         }
     }
