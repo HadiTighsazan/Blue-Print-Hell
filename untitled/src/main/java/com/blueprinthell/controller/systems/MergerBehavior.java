@@ -16,16 +16,7 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 
-/**
- * Simplified, single‑path implementation of the original MergerBehavior **with bug‑fixes**.
- * <p>
- *     – Collect BitPacket instances per group.<br>
- *     – Merge every 4 bits into a LargePacket (size = 4).<br>
- *     – Track statistics & close groups in LargeGroupRegistry.<br>
- * <p>
- * All mutable state for a group is encapsulated in {@link GroupContext};
- * a single map (<code>groups</code>) is the only data‑store.
- */
+
 public final class MergerBehavior implements SystemBehavior {
 
     /* === Constants ======================================================= */

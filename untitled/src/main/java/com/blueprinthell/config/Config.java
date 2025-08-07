@@ -19,7 +19,7 @@ public final class Config {
     private Config() { /* Prevent instantiation */ }
 
     public static final int    PACKET_SIZE_MULTIPLIER   = 8;
-    public static final int    MAX_BUFFER_CAPACITY      = 10000;
+    public static final int    MAX_BUFFER_CAPACITY      = 6;
     public static final int    PORT_SIZE                = 14;
 
     public static final int PACKET_SIZE_UNITS_SQUARE   = 2;

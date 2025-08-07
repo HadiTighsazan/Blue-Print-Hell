@@ -33,19 +33,20 @@ public class PacketConsumerController implements Updatable {
     }
 
 
+    // خط 36-45 را با این کد جایگزین کنید:
     public static void applyConsumeLogic(PacketModel packet,
                                          ScoreModel scoreModel,
                                          CoinModel coinModel,
                                          PacketLossModel lossModel) {
         if (packet == null) return;
 
+
         if (packet instanceof BitPacket) {
-            if (lossModel != null) {
-                lossModel.increment();
-            }
+            // هیچ کاری نکن - BitPacket به تنهایی ارزشی ندارد
             return;
         }
 
+        // برای پکت‌های حجیم و سایر پکت‌ها
         int coins = PacketOps.coinValueOnConsume(packet);
         if (coins > 0) {
             if (coinModel != null) coinModel.add(coins);

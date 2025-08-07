@@ -160,6 +160,7 @@ public final class LargeGroupRegistry {
 
         List<Integer> merges = st.getPartialMerges();
         if (merges.isEmpty()) {
+            // اگر هیچ ادغامی نشده، کل سایز اصلی Loss است
             return st.originalSizeUnits;
         }
 
@@ -173,14 +174,12 @@ public final class LargeGroupRegistry {
         int k = merges.size();
         double kthRoot = Math.pow(product, 1.0 / k);
 
-        // محاسبه مقدار بازیابی شده
+        // محاسبه مقدار بازیابی شده: floor(k * kth_root)
         int recovered = (int) Math.floor(k * kthRoot);
 
-        // محاسبه Loss
+        // محاسبه Loss = سایز اصلی - مقدار بازیابی شده
         return Math.max(0, st.originalSizeUnits - recovered);
     }
-
-    // Telemetry methods
     public int getTotalBitsProduced() { return totalBitsProduced; }
     public int getTotalBitsLost() { return totalBitsLost; }
     public int getTotalBitsMerged() { return totalBitsMerged; }

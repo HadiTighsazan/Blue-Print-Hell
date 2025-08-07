@@ -315,6 +315,13 @@ public class SimulationRegistrar {
                 break;
             }
         }
+        if (!box.getInPorts().isEmpty() && !box.getOutPorts().isEmpty()) {
+            // فقط برای سیستم‌هایی که هم ورودی و هم خروجی دارند
+            LargePacketPortRandomizer lppr = new LargePacketPortRandomizer(box);
+            behaviorRegistry.register(box, lppr);
+            SystemBehaviorAdapter adapterRandomizer = new SystemBehaviorAdapter(box, lppr);
+            simulation.register(adapterRandomizer);
+        }
     }
 
     private double estimatePlannedTotal(PacketProducerController producer, List<SystemBoxModel> sources) {

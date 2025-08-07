@@ -39,6 +39,12 @@ public class PortModel extends GameObjectModel implements Serializable {
 
     public boolean isCompatible(PacketModel packet) {
         if (this.input) return false;
+
+        if (packet instanceof com.blueprinthell.model.large.LargePacket ||
+                packet instanceof com.blueprinthell.model.large.BitPacket) {
+            return true; // یا false - بستگی به منطق شما دارد
+        }
+
         PortShape packetShape = switch (packet.getType()) {
             case SQUARE -> PortShape.SQUARE;
             case TRIANGLE -> PortShape.TRIANGLE;
