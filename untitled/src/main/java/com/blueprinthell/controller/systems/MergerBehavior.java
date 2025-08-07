@@ -35,6 +35,8 @@ public final class MergerBehavior implements SystemBehavior {
     private static final int BITS_PER_MERGE = 4;
     private static final int MERGED_PACKET_SIZE = 4;
 
+    // مجموعه‌ی گروه‌هایی که برای merge آماده‌اند
+    private final Set<Integer> readyToMerge = new LinkedHashSet<>();
     // برای ردیابی BitPacket‌هایی که در انتظار merge هستند
     private final Map<Integer, Set<BitPacket>> pendingMergeBits = new HashMap<>();
 
@@ -48,23 +50,37 @@ public final class MergerBehavior implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-        checkAndMergePendingBits();
-
+        // 1) میل کردن بیت‌های جدید
         checkBufferForBitPackets();
+        // 2) تلاش مجدد برای merge معلق‌ها
         retryPendingMerges();
 
+            // 3) یک‌بار sweep کن روی همه گروه‌ها – چه در لیست بیت‌ها، چه در pending
+                    Set<Integer> allGs = new HashSet<>();
+            allGs.addAll(groupBitCollections.keySet());
+            allGs.addAll(pendingMergeBits.keySet());
+            for (Integer gid : allGs) {
+                   List<BitPacket> bits = groupBitCollections.getOrDefault(gid, Collections.emptyList());
+                   if (bits.size() >= BITS_PER_MERGE) {
+                            readyToMerge.add(gid);
+                        }
+                }
+
+        // 4) حالا همه‌شان را merge کن
+        drainMerges();
+
+        // 5) (اختیاری) برای اطمینان دوباره sweep کن
+        // checkAndMergePendingBits();
     }
+
+
     private void retryPendingMerges() {
         if (pendingMergeBits.isEmpty()) return;
-
-        // کپی از کلیدها برای جلوگیری از ConcurrentModificationException
         Set<Integer> groupIds = new HashSet<>(pendingMergeBits.keySet());
-
         for (Integer groupId : groupIds) {
-            // بررسی اینکه آیا می‌توانیم دوباره تلاش کنیم
             List<BitPacket> bits = groupBitCollections.get(groupId);
             if (bits != null && bits.size() >= BITS_PER_MERGE) {
-                tryMergeGroup(groupId);
+                readyToMerge.add(groupId);
             }
         }
     }
@@ -72,17 +88,12 @@ public final class MergerBehavior implements SystemBehavior {
     private void checkBufferForBitPackets() {
         Queue<PacketModel> buffer = box.getBuffer();
         if (buffer == null || buffer.isEmpty()) return;
-
         List<BitPacket> bitsToProcess = new ArrayList<>();
-
-        // جمع‌آوری بیت‌پکت‌های پردازش نشده
         for (PacketModel p : buffer) {
             if (p instanceof BitPacket bp && !processedBits.contains(bp)) {
                 bitsToProcess.add(bp);
             }
         }
-
-        // پردازش هر بیت‌پکت
         for (BitPacket bp : bitsToProcess) {
             processBitPacket(bp);
             processedBits.add(bp);
@@ -92,114 +103,82 @@ public final class MergerBehavior implements SystemBehavior {
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (!(packet instanceof BitPacket bp)) return;
-
-        // بررسی که آیا این بیت قبلاً پردازش شده و منتظر merge است
         int groupId = bp.getGroupId();
         Set<BitPacket> pending = pendingMergeBits.get(groupId);
-        if (pending != null && pending.contains(bp)) {
-            // این بیت در انتظار merge است، دوباره پردازش نمی‌کنیم
-            return;
-        }
-
-        // جلوگیری از پردازش دوباره بیت‌های پردازش شده
+        if (pending != null && pending.contains(bp)) return;
         if (processedBits.contains(bp)) return;
-
         processBitPacket(bp);
         processedBits.add(bp);
     }
 
     private void processBitPacket(BitPacket bp) {
-        System.out.println("Merger: Processing BitPacket #" + bp.getIndexInGroup() +
-                " from group " + bp.getGroupId());
 
-        // حذف فوری از بافر و انتقال به مپ
         if (!removeFromBufferSafely(bp)) {
-            System.err.println("Failed to remove BitPacket from buffer!");
             return;
         }
-
-        // اضافه به کلکسیون گروه
         int groupId = bp.getGroupId();
-        groupBitCollections.computeIfAbsent(groupId, k -> new ArrayList<>()).add(bp);
-
-        // ثبت در registry
-        registry.registerArrival(groupId, bp);
-
-        // اطمینان از وجود گروه در registry
+        groupBitCollections
+                .computeIfAbsent(groupId, k -> new ArrayList<>())
+                .add(bp);
         GroupState st = registry.get(groupId);
         if (st == null) {
-            registry.createGroupWithId(groupId, bp.getParentSizeUnits(),
-                    bp.getParentSizeUnits(), bp.getColorId());
+            registry.createGroupWithId(
+                    groupId,
+                    bp.getParentSizeUnits(),
+                    bp.getParentSizeUnits(),
+                    bp.getColorId()
+            );
+            st = registry.get(groupId);
         }
+        registry.registerArrival(groupId, bp);
 
-        System.out.println("  Group " + groupId + " now has " +
-                groupBitCollections.get(groupId).size() + " bits collected");
+        // نیز اگر ≥4 بیت داریم آماده‌سازی
+        if (groupBitCollections.get(groupId).size() >= BITS_PER_MERGE) {
+            readyToMerge.add(groupId);
+        }
+    }
 
-        // تلاش برای ادغام
-        tryMergeGroup(groupId);
+    /**
+     * تا وقتی گروه‌های آماده داریم، merge یا flush‌شان کن
+     */
+    private void drainMerges() {
+        Iterator<Integer> it = readyToMerge.iterator();
+        while (it.hasNext()) {
+            int gid = it.next();
+            tryMergeGroup(gid);
+            it.remove();
+        }
     }
 
     private void tryMergeGroup(int groupId) {
         List<BitPacket> bits = groupBitCollections.get(groupId);
-        if (bits == null || bits.size() < BITS_PER_MERGE) {
-            return;
-        }
+        if (bits == null) return;
 
-        System.out.println("Merger: Attempting merge for group " + groupId +
-                " with " + bits.size() + " bits");
-
-        boolean mergedAny = false;
-
+        // صرفا بر اساس تعداد بیت‌ها merge
         while (bits.size() >= BITS_PER_MERGE) {
-            // برداشتن 4 بیت اول
-            List<BitPacket> bitsToMerge = new ArrayList<>(bits.subList(0, BITS_PER_MERGE));
-
-            // ساخت پکت حجیم سایز 4
-            LargePacket mergedPacket = createMergedPacket(bitsToMerge);
-
-            if (mergedPacket != null) {
-                // تلاش برای اضافه کردن به بافر
-                boolean enqueued = box.enqueue(mergedPacket);
-
-                if (enqueued) {
-                    // موفقیت - حذف بیت‌های استفاده شده
-                    bits.subList(0, BITS_PER_MERGE).clear();
-
-                    // حذف از pending اگر بودند
-                    Set<BitPacket> pending = pendingMergeBits.get(groupId);
-                    if (pending != null) {
-                        bitsToMerge.forEach(pending::remove);
-                        if (pending.isEmpty()) {
-                            pendingMergeBits.remove(groupId);
-                        }
-                    }
-
-                    // ثبت آمار
-                    groupMergeCount.merge(groupId, 1, Integer::sum);
-                    mergedAny = true;
-
-                    System.out.println("  Successfully merged 4 bits into size-4 packet");
-                    System.out.println("  Remaining bits: " + bits.size());
-                } else {
-                    // بافر پر است - نگه داریم برای بعد
-                    System.err.println("  Buffer full, marking bits as pending for later merge");
-
-                    // اضافه کردن به pending list
-                    pendingMergeBits.computeIfAbsent(groupId, k -> new HashSet<>())
-                            .addAll(bitsToMerge);
-
-                    // خروج از حلقه ولی نگه داشتن بیت‌ها
-                    break;
-                }
-            } else {
-                // خطا در ساخت پکت
-                System.err.println("  Failed to create merged packet");
+            List<BitPacket> toMerge = new ArrayList<>(bits.subList(0, BITS_PER_MERGE));
+            LargePacket mergedPkt = createMergedPacket(toMerge);
+            if (mergedPkt == null) {
                 lossModel.incrementBy(BITS_PER_MERGE);
                 bits.subList(0, BITS_PER_MERGE).clear();
+                continue;
+            }
+            if (box.enqueue(mergedPkt)) {
+                bits.subList(0, BITS_PER_MERGE).clear();
+                Set<BitPacket> pending = pendingMergeBits.get(groupId);
+                if (pending != null) {
+                    toMerge.forEach(pending::remove);
+                    if (pending.isEmpty()) pendingMergeBits.remove(groupId);
+                }
+                groupMergeCount.merge(groupId, 1, Integer::sum);
+            } else {
+                pendingMergeBits
+                        .computeIfAbsent(groupId, k -> new HashSet<>())
+                        .addAll(toMerge);
+                break;
             }
         }
-
-        // بررسی تکمیل گروه
+        // جمع باقیمانده (<4) صرفا نگهداری می‌شود
         if (bits.isEmpty() && !pendingMergeBits.containsKey(groupId)) {
             groupBitCollections.remove(groupId);
             checkAndCloseGroup(groupId);
@@ -207,101 +186,57 @@ public final class MergerBehavior implements SystemBehavior {
     }
 
     private LargePacket createMergedPacket(List<BitPacket> bits) {
-        if (bits == null || bits.size() != BITS_PER_MERGE) {
-            return null;
-        }
-
-        // اطلاعات از اولین بیت
-        BitPacket firstBit = bits.get(0);
-        int groupId = firstBit.getGroupId();
-        int colorId = firstBit.getColorId();
-        Color mergedColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
-
-        System.out.println("  Creating merged packet from bits of group " + groupId);
-
-        // ساخت پکت حجیم سایز 4
+        if (bits == null || bits.size() != BITS_PER_MERGE) return null;
+        BitPacket first = bits.get(0);
+        Color mergedColor = Color.getHSBColor(first.getColorId() / 360.0f, 0.8f, 0.9f);
         LargePacket merged = new LargePacket(
-                PacketType.SQUARE,  // نوع مربع برای پکت ادغام شده
+                PacketType.SQUARE,
                 Config.DEFAULT_PACKET_SPEED,
                 MERGED_PACKET_SIZE
         );
-
-        // تنظیم رنگ گروه
         merged.setCustomColor(mergedColor);
-
-        // تنظیم سایز ویژوال
-        int visualSize = MERGED_PACKET_SIZE * Config.PACKET_SIZE_MULTIPLIER;
-        merged.setWidth(visualSize);
-        merged.setHeight(visualSize);
-
-        // اطلاعات گروه
-        merged.setGroupInfo(groupId, BITS_PER_MERGE, colorId);
-
-        // کپی پروفایل حرکتی
-        KinematicsRegistry.copyProfile(firstBit, merged);
-
+        int visual = MERGED_PACKET_SIZE * Config.PACKET_SIZE_MULTIPLIER;
+        merged.setWidth(visual);
+        merged.setHeight(visual);
+        merged.setGroupInfo(first.getGroupId(), BITS_PER_MERGE, first.getColorId());
+        KinematicsRegistry.copyProfile(first, merged);
         return merged;
-    }
-
-    private void checkAndMergePendingBits() {
-        // کپی برای جلوگیری از ConcurrentModificationException
-        Set<Integer> groupIds = new HashSet<>(groupBitCollections.keySet());
-
-        for (Integer groupId : groupIds) {
-            tryMergeGroup(groupId);
-        }
     }
 
     private void checkAndCloseGroup(int groupId) {
         GroupState st = registry.get(groupId);
         if (st == null) return;
-
         int mergeCount = groupMergeCount.getOrDefault(groupId, 0);
-        int totalProcessedBits = mergeCount * BITS_PER_MERGE;
-
+        int totalBits = mergeCount * BITS_PER_MERGE;
         if (mergeCount > 0) {
-            int alreadyReported = groupReportedMerged.getOrDefault(groupId, 0);
-            int delta = totalProcessedBits - alreadyReported;
+            int reported = groupReportedMerged.getOrDefault(groupId, 0);
+            int delta = totalBits - reported;
             if (delta > 0) {
                 registry.registerPartialMerge(groupId, delta, MERGED_PACKET_SIZE);
-                groupReportedMerged.put(groupId, totalProcessedBits);
+                groupReportedMerged.put(groupId, totalBits);
             }
         }
-
-        // بررسی تکمیل
-        if (totalProcessedBits >= st.expectedBits) {
+        if (totalBits >= st.expectedBits) {
             registry.closeGroup(groupId);
             registry.removeGroup(groupId);
             groupMergeCount.remove(groupId);
-
-            System.out.println("Group " + groupId + " fully processed. " +
-                    "Created " + mergeCount + " size-4 packets from " +
-                    totalProcessedBits + " bits.");
         }
     }
 
     private boolean removeFromBufferSafely(PacketModel target) {
         Queue<PacketModel> buffer = box.getBuffer();
         if (buffer == null) return false;
-
-        List<PacketModel> temp = new ArrayList<>();
+        List<PacketModel> tmp = new ArrayList<>();
         boolean removed = false;
-
-        // خالی کردن بافر
         PacketModel p;
         while ((p = box.pollPacket()) != null) {
             if (!removed && p == target) {
-                removed = true; // حذف این پکت
+                removed = true;
             } else {
-                temp.add(p);
+                tmp.add(p);
             }
         }
-
-        // بازگرداندن بقیه
-        for (PacketModel q : temp) {
-            box.enqueue(q);
-        }
-
+        for (PacketModel q : tmp) box.enqueue(q);
         return removed;
     }
 
@@ -310,7 +245,6 @@ public final class MergerBehavior implements SystemBehavior {
         if (!enabled) {
             // ذخیره موقت داده‌ها
         } else {
-            // بازیابی داده‌ها
             processedBits.clear();
         }
     }
@@ -321,7 +255,7 @@ public final class MergerBehavior implements SystemBehavior {
         groupReportedMerged.clear();
         processedBits.clear();
         pendingMergeBits.clear();
+        readyToMerge.clear();
     }
-
 
 }

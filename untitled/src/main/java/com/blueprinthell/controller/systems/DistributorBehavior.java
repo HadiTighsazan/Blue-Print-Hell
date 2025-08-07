@@ -77,7 +77,6 @@ public final class DistributorBehavior implements SystemBehavior {
         int parentSize = large.getOriginalSizeUnits();
         int expectedBits = parentSize;
 
-        System.out.println("Distributor: Splitting large packet size " + parentSize);
 
         int groupId;
         int colorId;
@@ -103,7 +102,6 @@ public final class DistributorBehavior implements SystemBehavior {
 
         // حذف ایمن از بافر
         if (!removeFromBuffer(large)) {
-            System.err.println("Failed to remove large packet from buffer!");
             return;
         }
 
@@ -135,14 +133,11 @@ public final class DistributorBehavior implements SystemBehavior {
             if (accepted) {
                 registry.registerSplit(groupId, bit);
                 successfulBits++;
-                System.out.println("  Created BitPacket #" + i + " for group " + groupId);
             } else {
                 lostBits++;
-                System.err.println("  Failed to enqueue BitPacket #" + i);
             }
         }
 
-        System.out.println("Distributor: Created " + successfulBits + " bits, lost " + lostBits);
 
         if (lostBits > 0) {
             lossModel.incrementBy(lostBits);

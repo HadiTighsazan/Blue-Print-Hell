@@ -4,9 +4,7 @@ import javax.swing.*;
 import com.blueprinthell.view.HudView;
 
 import java.awt.*;
-import java.util.List;
-import com.blueprinthell.controller.SimulationController;
-import com.blueprinthell.controller.PacketProducerController;
+
 import com.blueprinthell.model.WireModel;
 
 

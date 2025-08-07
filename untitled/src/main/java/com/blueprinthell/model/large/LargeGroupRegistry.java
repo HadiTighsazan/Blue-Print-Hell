@@ -91,9 +91,7 @@ public final class LargeGroupRegistry {
         st.addPartialMerge(mergedPacketSize);
         totalBitsMerged += bitCount;
 
-        System.out.println("Group " + groupId + ": Merged " + bitCount +
-                " bits into size-" + mergedPacketSize + " packet. " +
-                "Total merged: " + st.getMergedBits() + "/" + st.expectedBits);
+
     }
 
     public void registerSplit(int groupId, PacketModel bit) {
@@ -160,15 +158,5 @@ public final class LargeGroupRegistry {
     public int getTotalBitsLost() { return totalBitsLost; }
     public int getTotalBitsMerged() { return totalBitsMerged; }
 
-    /**
-     * گزارش وضعیت یک گروه
-     */
-    public String getGroupStatus(int groupId) {
-        GroupState st = groups.get(groupId);
-        if (st == null) return "Group not found";
 
-        return String.format("Group %d: Original=%d, Received=%d, Merged=%d, Lost=%d, Merges=%s",
-                groupId, st.originalSizeUnits, st.getReceivedBits(),
-                st.getMergedBits(), st.getLostBits(), st.getPartialMerges());
-    }
 }
