@@ -32,6 +32,9 @@ public class LevelCoreManager {
 
     public LevelDefinition currentDef;
 
+    // اضافه کردن فیلد برای WireRemovalController
+    private WireRemovalController wireRemovalController;
+
     public LevelCoreManager(GameController gameController) {
         this.gameController = gameController;
     }
@@ -60,6 +63,10 @@ public class LevelCoreManager {
         return currentDef;
     }
 
+    // متد برای دسترسی به WireRemovalController
+    public WireRemovalController getWireRemovalController() {
+        return wireRemovalController;
+    }
 
     public void startLevel(int idx) {
         if (!LevelRegistry.isValidLevel(idx)) {
@@ -74,7 +81,6 @@ public class LevelCoreManager {
         if (levelManager == null) {
             throw new IllegalStateException("LevelManager must be set before starting level");
         }
-
 
         if (levelManager.getLevelIndex() == 0) {
             boxes.clear();
@@ -132,10 +138,10 @@ public class LevelCoreManager {
         gameController.setProducerController(new PacketProducerController(
                 sources, gameController.getWires(), destMap,
                 Config.DEFAULT_PACKET_SPEED,
-                perPortCount));
+                perPortCount));  // حذف PacketLossModel - loss فقط هنگام از دست رفتن واقعی پکت اضافه می‌شود
+
         gameController.getHudCoord().wireLevel(gameController.getProducerController());
         gameController.getSimulation().setPacketProducerController(gameController.getProducerController());
-
 
         double threshold = levelManager.getCurrentLevel().getMaxLossRatio();
 
@@ -168,25 +174,35 @@ public class LevelCoreManager {
 
         List<Updatable> systemControllers = new ArrayList<Updatable>();
         systemControllers.add(gameController.getHudController());
+
+        // *** تغییر مهم: پاس کردن WireRemovalController به SimulationRegistrar ***
+        if (wireRemovalController != null) {
+            gameController.getRegistrar().setWireRemover(wireRemovalController);
+        }
+
         gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
 
         updateStartEnabled();
     }
+
     public void buildWireControllers() {
         WireCreationController creator = new WireCreationController(
                 gameController.getGameView(), gameController.getSimulation(), boxes, gameController.getWires(), destMap, usageModel, gameController.getCoinModel(), gameController::updateStartEnabled);
         gameController.setWireCreator(creator);
 
-        new WireRemovalController(
+        // *** تغییر مهم: ذخیره کردن مرجع WireRemovalController ***
+        this.wireRemovalController = new WireRemovalController(
                 gameController.getGameView(), gameController.getWires(), destMap, creator, usageModel, gameController::updateStartEnabled);
+
+        System.out.println("WireRemovalController created and stored: " + wireRemovalController);
     }
+
     public void updateStartEnabled() {
         boolean allConnected = boxes.stream().allMatch(b ->
                 b.getInPorts().stream().allMatch(gameController::isPortConnected) &&
                         b.getOutPorts().stream().allMatch(gameController::isPortConnected));
         gameController.getHudCoord().setStartEnabled(allConnected);
     }
-
 
     public void purgeCurrentLevelWires() {
         JPanel area = gameController.getGameView().getGameArea();
@@ -221,7 +237,6 @@ public class LevelCoreManager {
         if (gameController.getHudController() != null) gameController.getHudController().refreshOnce();
     }
 
-
     public void retryStage() {
         if (currentDef == null) {
             throw new IllegalStateException("Cannot retry before a level has been started");
@@ -239,15 +254,14 @@ public class LevelCoreManager {
         }
         if (gameController.getPacketRenderer() != null) {
             gameController.getPacketRenderer().refreshAll();
-                    }
+        }
         if (gameController.getHudController() != null) {
             gameController.getHudController().refreshOnce();
-                    }
+        }
 
         purgeCurrentLevelWires();
         startLevel(currentDef);
     }
-
 
     @Deprecated
     public void retryLevel(LevelDefinition def) {

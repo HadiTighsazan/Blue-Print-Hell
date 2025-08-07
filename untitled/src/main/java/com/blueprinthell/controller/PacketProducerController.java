@@ -68,8 +68,6 @@ public class PacketProducerController implements Updatable {
         // returnedCredits را دست‌نخورده می‌گذاریم تا حذف فیلد نداشته باشیم
     }
 
-
-
     // --- تغییر: این متد حالا وقتی پکتی برمی‌گرده، inFlight را کم می‌کند
     public void onPacketReturned() {
         if (inFlight > 0) inFlight--;

@@ -10,9 +10,7 @@ import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.view.HudView;
 
-
 import java.util.*;
-
 
 public class SimulationRegistrar {
 
@@ -29,6 +27,8 @@ public class SimulationRegistrar {
     private final SnapshotManager snapshotManager;
     private final HudView hudView;
     private final LevelManager levelManager;
+
+    // اضافه کردن فیلدهای WireRemovalController و WireDurabilityController
     private WireRemovalController wireRemover;
     private WireDurabilityController durability;
     private PacketDispatcherController dispatcherRef;
@@ -62,19 +62,20 @@ public class SimulationRegistrar {
         this.levelManager = Objects.requireNonNull(levelManager, "levelManager");
     }
 
-
-
     public void setCurrentBoxSpecs(List<LevelDefinition.BoxSpec> specs) {
         this.currentBoxSpecs = (specs != null) ? specs : Collections.emptyList();
     }
 
+    // *** متد جدید برای تنظیم WireRemovalController ***
     public void setWireRemover(WireRemovalController r) {
         this.wireRemover = r;
+        System.out.println("SimulationRegistrar: WireRemovalController set: " + (r != null ? "OK" : "NULL"));
+
+        // اگر durability قبلاً ایجاد شده، آن را هم به‌روزرسانی کن
         if (durability != null) {
             durability.setWireRemover(r);
         }
     }
-
 
     public LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
         if (box == null || currentBoxSpecs == null) return null;
@@ -99,7 +100,6 @@ public class SimulationRegistrar {
     public BehaviorRegistry getBehaviorRegistry() {
         return behaviorRegistry;
     }
-
 
     public void registerAll(List<SystemBoxModel> boxes,
                             List<WireModel> wires,
@@ -153,12 +153,8 @@ public class SimulationRegistrar {
         if (producer != null) {
             simulation.register(producer);
         }
+
         PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
-
-        if (this.wireRemover != null) {
-            dispatcher.setWireRemover(this.wireRemover);
-        }
-
         this.dispatcherRef = dispatcher;
         simulation.register(dispatcher);
 
@@ -207,10 +203,7 @@ public class SimulationRegistrar {
 
         simulation.register(packetRenderer);
         simulation.register(collisionController);
-
     }
-
-
 
     private void attachBehaviorsForBox(SystemBoxModel box,
                                        List<SystemBoxModel> allBoxes,
@@ -344,17 +337,26 @@ public class SimulationRegistrar {
         WireTimeoutController timeout = new WireTimeoutController(wires, lossModel);
         simulation.register(timeout);
 
+        // *** تغییر مهم: ایجاد WireDurabilityController با کانکشن به WireRemovalController ***
         durability = new WireDurabilityController(wires, lossModel, Config.LARGE_MAX_PASSES_PER_WIRE);
         if (wireRemover != null) {
+            System.out.println("SimulationRegistrar: Connecting WireDurabilityController to WireRemovalController");
             durability.setWireRemover(wireRemover);
+        } else {
+            System.out.println("SimulationRegistrar: WARNING - No WireRemovalController available!");
         }
         simulation.register(durability);
 
+        // *** کانکشن PacketDispatcherController به WireDurabilityController ***
         if (dispatcherRef != null) {
             dispatcherRef.setDurabilityController(durability);
+            System.out.println("SimulationRegistrar: Connected PacketDispatcher to WireDurability");
+
+            // همچنین کانکشن به WireRemovalController
+            if (wireRemover != null) {
+                dispatcherRef.setWireRemover(wireRemover);
+                System.out.println("SimulationRegistrar: Connected PacketDispatcher to WireRemovalController");
+            }
         }
-
     }
-
-
 }
