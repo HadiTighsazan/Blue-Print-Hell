@@ -37,9 +37,7 @@ public class WireDurabilityController implements Updatable {
             // پکت‌های سایز 4 (که از ادغام بیت‌ها ساخته می‌شوند) را نادیده بگیر
             if (lp.getOriginalSizeUnits() >= 8) {
                 recordHeavyPass(wire);
-                System.out.println("Wire durability: Large packet size " +
-                        lp.getOriginalSizeUnits() + " passed. Wire passes: " +
-                        getPasses(wire) + "/" + maxPasses);
+
             }
         }
     }
@@ -62,8 +60,7 @@ public class WireDurabilityController implements Updatable {
 
         List<PacketModel> packetsOnWire = new ArrayList<>(wire.getPackets());
         if (!packetsOnWire.isEmpty()) {
-            System.out.println("Warning: Removing wire with " + packetsOnWire.size() +
-                    " packets on it. Moving them to loss.");
+
 
             // پکت‌ها را به عنوان loss ثبت کن
             for (PacketModel p : packetsOnWire) {
@@ -107,7 +104,6 @@ public class WireDurabilityController implements Updatable {
             if (remover != null) {
                 remover.removeWire(w);
             } else {
-                System.err.println("WireRemovalController not set!");
             }
         }
     }
