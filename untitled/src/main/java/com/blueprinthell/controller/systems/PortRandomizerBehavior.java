@@ -26,15 +26,16 @@ public final class PortRandomizerBehavior implements SystemBehavior {
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
+        // فقط برای LargePacket فعال شود
         if (!(packet instanceof LargePacket)) return;
 
+        // تغییر تصادفی پورت ورودی یا یک پورت دلخواه
         if (enteredPort != null && belongsToBox(enteredPort)) {
             mutateShape(enteredPort);
         } else {
             randomizeOnePort();
         }
     }
-
     @Override
     public void onEnabledChanged(boolean enabled) {
     }

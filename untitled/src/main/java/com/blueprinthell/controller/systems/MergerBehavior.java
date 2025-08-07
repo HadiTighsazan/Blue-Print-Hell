@@ -132,22 +132,7 @@ public final class MergerBehavior implements SystemBehavior {
         return lp;
     }
 
-    private void closeGroup(GroupContext ctx) {
-        int totalBits = ctx.mergeCount * BITS_PER_MERGE;
-        GroupState st = registry.get(ctx.groupId);
-        if (st != null) {
-            registry.registerPartialMerge(ctx.groupId, totalBits, MERGED_PKT_SIZE);
-            if (totalBits >= st.expectedBits) {
-                registry.closeGroup(ctx.groupId);
-                registry.removeGroup(ctx.groupId);
-            }
-        }
-        groups.remove(ctx.groupId);
-    }
 
-    /* ---------------------------------------------------------------------
-     *  Data structure per group
-     * ------------------------------------------------------------------ */
 
     private static final class GroupContext {
         final int groupId;
@@ -163,8 +148,23 @@ public final class MergerBehavior implements SystemBehavior {
         boolean isDone() { return bits.isEmpty() && pending.isEmpty(); }
     }
 
-    /* ------------------------------------------------------------------ */
+    private void closeGroup(GroupContext ctx) {
+        int totalBits = ctx.mergeCount * BITS_PER_MERGE;
+        GroupState st = registry.get(ctx.groupId);
+        if (st != null) {
+            registry.registerPartialMerge(ctx.groupId, totalBits, MERGED_PKT_SIZE);
 
-    /** Clears all runtime data — useful for hot‑reloads or tests. */
-    public void clear() { groups.clear(); }
+            // محاسبه و اعمال Loss
+            int actualLoss = registry.calculateActualLoss(ctx.groupId);
+            if (actualLoss > 0) {
+                lossModel.incrementBy(actualLoss);
+            }
+
+            if (totalBits >= st.expectedBits) {
+                registry.closeGroup(ctx.groupId);
+                registry.removeGroup(ctx.groupId);
+            }
+        }
+        groups.remove(ctx.groupId);
+    }
 }

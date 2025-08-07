@@ -153,6 +153,33 @@ public final class LargeGroupRegistry {
         return Math.max(0, st.originalSizeUnits - totalRecovered);
     }
 
+
+    public int calculateActualLoss(int groupId) {
+        GroupState st = groups.get(groupId);
+        if (st == null) return 0;
+
+        List<Integer> merges = st.getPartialMerges();
+        if (merges.isEmpty()) {
+            return st.originalSizeUnits;
+        }
+
+        // محاسبه حاصلضرب n1 * n2 * ... * nk
+        double product = 1.0;
+        for (int size : merges) {
+            product *= size;
+        }
+
+        // محاسبه ریشه k-ام
+        int k = merges.size();
+        double kthRoot = Math.pow(product, 1.0 / k);
+
+        // محاسبه مقدار بازیابی شده
+        int recovered = (int) Math.floor(k * kthRoot);
+
+        // محاسبه Loss
+        return Math.max(0, st.originalSizeUnits - recovered);
+    }
+
     // Telemetry methods
     public int getTotalBitsProduced() { return totalBitsProduced; }
     public int getTotalBitsLost() { return totalBitsLost; }

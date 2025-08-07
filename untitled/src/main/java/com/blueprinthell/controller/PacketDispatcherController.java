@@ -89,13 +89,22 @@ public class PacketDispatcherController implements Updatable {
                 boolean accepted = dest.enqueue(packet, dstPort);
 
                 if (accepted) {
-                    int coins = PacketOps.coinValueOnEntry(packet);
+                    int coins = 0;
 
-                    if (dest.getPrimaryKind() == SystemKind.VPN) {
-                        if (PacketOps.isMessenger(packet)) {
-                            coins = 5;
-                        } else if (PacketOps.isConfidential(packet) && !PacketOps.isConfidentialVpn(packet)) {
-                            coins = 4;
+                    // برای پکت‌های حجیم
+                    if (packet instanceof LargePacket lp) {
+                        coins = lp.getOriginalSizeUnits(); // 8 یا 10 سکه
+                    }
+                    // برای سایر پکت‌ها
+                    else {
+                        coins = PacketOps.coinValueOnEntry(packet);
+
+                        if (dest.getPrimaryKind() == SystemKind.VPN) {
+                            if (PacketOps.isMessenger(packet)) {
+                                coins = 5;
+                            } else if (PacketOps.isConfidential(packet) && !PacketOps.isConfidentialVpn(packet)) {
+                                coins = 4;
+                            }
                         }
                     }
 
