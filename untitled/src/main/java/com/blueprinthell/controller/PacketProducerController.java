@@ -129,7 +129,7 @@ public class PacketProducerController implements Updatable {
                             } else {
                                 // پورت‌های دیگر = 10% شانس پکت حجیم
                                 // توجه: عمداً 100% گذاشتی؛ دست نمی‌زنیم
-                                if (RND.nextInt(10) < 10) {
+                                if (RND.nextInt(10) < 0) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
