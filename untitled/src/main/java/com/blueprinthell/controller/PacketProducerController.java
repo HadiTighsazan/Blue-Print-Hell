@@ -68,30 +68,7 @@ public class PacketProducerController implements Updatable {
         // returnedCredits را دست‌نخورده می‌گذاریم تا حذف فیلد نداشته باشیم
     }
 
-    private PacketModel createLargePacketRandomly() {
-        int size = RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10;
-        int colorId = RND.nextInt(360);
-        Color color = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
 
-        LargePacket large = new LargePacket(PacketType.CIRCLE, Config.DEFAULT_PACKET_SPEED, size, color);
-
-        // مشکل: سایز ویژوال ست نمی‌شود!
-        // باید اضافه کنیم:
-        int visualSize = size * Config.PACKET_SIZE_MULTIPLIER;
-        large.setWidth(visualSize);
-        large.setHeight(visualSize);
-
-        large.setGroupInfo(-1, size, colorId);
-
-        // تنظیم پروفایل حرکتی
-        if (size == 8) {
-            KinematicsRegistry.setProfile(large, KinematicsProfile.LARGE_8);
-        } else {
-            KinematicsRegistry.setProfile(large, KinematicsProfile.LARGE_10);
-        }
-
-        return large;
-    }
 
     // --- تغییر: این متد حالا وقتی پکتی برمی‌گرده، inFlight را کم می‌کند
     public void onPacketReturned() {
@@ -180,14 +157,20 @@ public class PacketProducerController implements Updatable {
     private LargePacket createLargePacketForPort(PacketType portType, double baseSpeed) {
         int units = (RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10);
 
+        // تولید colorId تصادفی
+        int colorId = RND.nextInt(360);
+        Color color = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
+
         LargePacket lp = new LargePacket(portType, baseSpeed, units);
 
-        // اضافه کنید: تنظیم سایز ویژوال
+        // تنظیم سایز ویژوال
         int visualSize = units * Config.PACKET_SIZE_MULTIPLIER;
         lp.setWidth(visualSize);
         lp.setHeight(visualSize);
 
-        lp.setCustomColor(Color.getHSBColor(RND.nextFloat(), 0.8f, 0.9f));
+        // تنظیم رنگ و colorId
+        lp.setCustomColor(color);
+        lp.setGroupInfo(-1, units, colorId);  // اضافه کردن این خط مهم است
 
         KinematicsRegistry.setProfile(
                 lp,
