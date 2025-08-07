@@ -32,7 +32,11 @@ public class PacketProducerController implements Updatable {
 
     // --- تغییر: از inFlight برای شمارش پکت‌های درحال حرکت استفاده می‌کنیم
     private int inFlight = 0;
+    private int producedUnits = 0;
 
+    public int getProducedUnits() {
+        return producedUnits;
+    }
     // --- توجه: فیلد قبلی returnedCredits حذف نشده، اما دیگر استفاده نمی‌شود
     @SuppressWarnings("unused")
     private int returnedCredits = 0;
@@ -147,6 +151,11 @@ public class PacketProducerController implements Updatable {
                             producedCount++;
                             inFlight++;
                             producedPerPort.put(out, producedForThisPort + 1);
+                             if (packet instanceof LargePacket lp) {
+                                 producedUnits += lp.getOriginalSizeUnits();
+                                 } else {
+                                     producedUnits++;
+                                 }
                         });
             }
         }

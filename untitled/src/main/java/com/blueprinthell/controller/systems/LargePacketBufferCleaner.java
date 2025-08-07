@@ -48,20 +48,23 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             allPackets.add(p);
         }
 
-        int destroyedCount = 0;
+        int destroyedUnits = 0;
 
         // فقط پکت حجیم جدید را نگه می‌داریم
         for (PacketModel packet : allPackets) {
             if (packet == newLarge) {
                 box.enqueue(packet);
             } else {
-                // پکت‌های دیگر حذف می‌شوند
-                destroyedCount++;
+                         if (packet instanceof LargePacket lp) {
+                                 destroyedUnits += lp.getOriginalSizeUnits();
+                             } else {
+                                 destroyedUnits++;
+                             }
             }
         }
 
-        if (destroyedCount > 0) {
-            lossModel.incrementBy(destroyedCount);
+        if (destroyedUnits  > 0) {
+            lossModel.incrementBy(destroyedUnits);
         }
     }
 }

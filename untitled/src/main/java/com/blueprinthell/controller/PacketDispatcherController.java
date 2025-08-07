@@ -118,7 +118,7 @@ public class PacketDispatcherController implements Updatable {
                         wire.attachPacket(packet, 1.0);
                         continue;
                     } else {
-                        lossModel.increment();
+                        lossModel.incrementPacket(packet);
                     }
                 }
             }

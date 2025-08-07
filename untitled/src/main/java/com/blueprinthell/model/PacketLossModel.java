@@ -1,6 +1,8 @@
 package com.blueprinthell.model;
 
 
+import com.blueprinthell.model.large.LargePacket;
+
 public class PacketLossModel {
     private int lostCount;
 
@@ -23,4 +25,12 @@ public class PacketLossModel {
     public void reset() {
         lostCount = 0;
     }
+    public void incrementPacket(PacketModel p) {
+        if (p instanceof LargePacket lp) {
+            incrementBy(lp.getOriginalSizeUnits());
+        } else {
+            increment();
+        }
+    }
+
 }

@@ -237,7 +237,8 @@ public class CollisionController implements Updatable {
                         } else {
                             w.removePacket(p);
                             ow.removePacket(other);
-                            lossModel.incrementBy(2);
+                            lossModel.incrementPacket(p);
+                            lossModel.incrementPacket(other);
                             if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; }
                             processed.add(p);
                             processed.add(other);
@@ -307,7 +308,7 @@ public class CollisionController implements Updatable {
             }
             for (PacketModel p : doomed) {
                 w.removePacket(p);
-                lossModel.increment();
+                lossModel.incrementPacket(p);
                 played = true;
             }
         }

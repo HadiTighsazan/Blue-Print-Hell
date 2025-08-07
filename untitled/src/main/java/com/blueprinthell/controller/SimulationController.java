@@ -116,4 +116,8 @@ public class SimulationController {
             packetProducer.onPacketReturned();
         }
     }
+    public PacketProducerController getPacketProducerController() {
+        return packetProducer;
+    }
+
 }
