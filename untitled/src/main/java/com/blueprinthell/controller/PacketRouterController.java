@@ -364,16 +364,18 @@ public class PacketRouterController implements Updatable {
             return;
         }
 
-        // ابتدا LargePacket ها را از largeBuffer پردازش کن
-        while (hasAvailableRoute()) {
-            LargePacket largePacket = box.pollLarge();
-            if (largePacket == null) break;
+        if (box.getPrimaryKind() != SystemKind.DISTRIBUTOR) {
+            // ابتدا LargePacket ها را از largeBuffer پردازش کن
+            while (hasAvailableRoute()) {
+                LargePacket largePacket = box.pollLarge();
+                if (largePacket == null) break;
 
-            boolean routed = routePacket(largePacket);
-            if (!routed) {
-                // اگر نتوانست route کند، برگردان به largeBuffer
-                box.enqueue(largePacket);
-                break;
+                boolean routed = routePacket(largePacket);
+                if (!routed) {
+                    // اگر نتوانست route کند، برگردان به largeBuffer
+                    box.enqueue(largePacket);
+                    break;
+                }
             }
         }
 
