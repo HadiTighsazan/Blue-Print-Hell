@@ -102,14 +102,10 @@ public class PacketProducerController implements Updatable {
                 continue;
             }
             for (PortModel out : box.getOutPorts()) {
-
-                // --- تغییر: محدودیت per-port
                 int producedForThisPort = producedPerPort.getOrDefault(out, 0);
                 if (producedForThisPort >= packetsPerPort) {
-                    continue; // این پورت سهمش را کامل تولید کرده
+                    continue;
                 }
-
-                // --- محافظ اضافه: اگر سقف کلی پر شده دیگر تولید نکن
                 if (producedCount >= totalToProduce) {
                     break;
                 }
@@ -118,25 +114,27 @@ public class PacketProducerController implements Updatable {
                         .filter(w -> w.getSrcPort() == out)
                         .findFirst()
                         .ifPresent(wire -> {
-                            // تولید پکت بر اساس شکل پورت
                             PacketModel packet;
-                            if (RND.nextInt(10) < 10) {
-                                packet = PacketOps.toConfidential(new PacketModel(randomType(), baseSpeed));
-                            }
-                            if (out.getShape() == PortShape.CIRCLE) {
 
+                            // ابتدا پکت پایه را بسازید
+                            if (out.getShape() == PortShape.CIRCLE) {
                                 if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
                             } else {
-
                                 if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
                                 }
+                            }
+
+                            // حالا اگر می‌خواهید، آن را به محرمانه تبدیل کنید
+                            // این کار باید بعد از ساخت پکت پایه انجام شود
+                            if (RND.nextInt(10) < 10) { // برای تست، همیشه محرمانه
+                                packet = PacketOps.toConfidential(packet);
                             }
 
                             // تنظیم سرعت اولیه و پیکربندی استراتژی حرکت
@@ -148,20 +146,20 @@ public class PacketProducerController implements Updatable {
                             // چسباندن پکت به سیم خروجی
                             wire.attachPacket(packet, 0);
 
-                            // --- تغییر اصلی: شمارنده‌ها را بعد از attach به‌روز کن
+                            // به‌روزرسانی شمارنده‌ها
                             producedCount++;
                             inFlight++;
                             producedPerPort.put(out, producedForThisPort + 1);
-                             if (packet instanceof LargePacket lp) {
-                                 producedUnits += lp.getOriginalSizeUnits();
-                                 } else {
-                                     producedUnits++;
-                                 }
+
+                            if (packet instanceof LargePacket lp) {
+                                producedUnits += lp.getOriginalSizeUnits();
+                            } else {
+                                producedUnits++;
+                            }
                         });
             }
         }
     }
-
     private LargePacket createLargePacketForPort(PacketType portType, double baseSpeed) {
         int units = (RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10);
 
