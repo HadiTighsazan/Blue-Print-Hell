@@ -1,6 +1,8 @@
 package com.blueprinthell.controller.systems;
 
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.LargePacket;
+
 import java.util.*;
 
 public final class SystemBehaviorAdapter implements Updatable {
@@ -37,50 +39,79 @@ public final class SystemBehaviorAdapter implements Updatable {
 
 
     public void checkNewPackets() {
-        final Queue<PacketModel> buf = box.getBuffer();
-        if (buf == null || buf.isEmpty()) {
+        // ترکیب هر دو بافر
+        final List<PacketModel> allPackets = new ArrayList<>();
+
+        // اضافه کردن پکت‌های معمولی از bitBuffer
+        final Queue<PacketModel> bitBuf = box.getBitBuffer();
+        if (bitBuf != null && !bitBuf.isEmpty()) {
+            allPackets.addAll(bitBuf);
+        }
+
+        // اضافه کردن پکت‌های حجیم از largeBuffer
+        final Queue<LargePacket> largeBuf = box.getLargeBuffer();
+        if (largeBuf != null && !largeBuf.isEmpty()) {
+            allPackets.addAll(largeBuf);
+        }
+
+        if (allPackets.isEmpty()) {
             seen.clear();
             return;
         }
 
-        final PacketModel[] snapshot = buf.toArray(new PacketModel[0]);
         final Set<PacketModel> current = Collections.newSetFromMap(
-                new IdentityHashMap<>(Math.max(16, snapshot.length * 2)));
+                new IdentityHashMap<>(Math.max(16, allPackets.size() * 2)));
 
-        for (PacketModel p0 : snapshot) {
+        for (PacketModel p0 : allPackets) {
             if (p0 == null) continue;
             PacketModel p = p0;
 
-            // تلاش برای بازگردانی فوری Protectedها (بعد از خاموشی VPN)
+            // بقیه کد مثل قبل...
+            // تلاش برای بازگردانی Protected packets
             try {
                 PacketModel original = VpnRevertHints.consumeGlobal(p);
                 if (original != null && original != p) {
-                    // جایگزینی امن در بافر: p -> original
-                    Deque<PacketModel> temp = new ArrayDeque<>();
-                    PacketModel q;
-                    boolean replaced = false;
-                    while ((q = box.pollPacket()) != null) {
-                        if (!replaced && q == p) {
-                            temp.addLast(original);
-                            replaced = true;
-                        } else {
-                            temp.addLast(q);
+                    // جایگزینی در بافر مناسب
+                    if (p instanceof LargePacket) {
+                        // جایگزینی در largeBuffer
+                        Deque<LargePacket> tempLarge = new ArrayDeque<>();
+                        LargePacket lp;
+                        boolean replaced = false;
+                        while ((lp = box.pollLarge()) != null) {
+                            if (!replaced && lp == p) {
+                                tempLarge.addLast((LargePacket) original);
+                                replaced = true;
+                            } else {
+                                tempLarge.addLast(lp);
+                            }
+                        }
+                        for (LargePacket l : tempLarge) {
+                            box.enqueue(l);
+                        }
+                    } else {
+                        // جایگزینی در bitBuffer (کد قبلی)
+                        Deque<PacketModel> temp = new ArrayDeque<>();
+                        PacketModel q;
+                        boolean replaced = false;
+                        while ((q = box.pollPacket()) != null) {
+                            if (!replaced && q == p) {
+                                temp.addLast(original);
+                                replaced = true;
+                            } else {
+                                temp.addLast(q);
+                            }
+                        }
+                        for (PacketModel r : temp) {
+                            box.enqueue(r);
                         }
                     }
-                    for (PacketModel r : temp) {
-                        box.enqueue(r);
-                    }
 
-                    // پاکسازی ردِ پورت ورودی برای پکت قدیم/جدید
                     EnteredPortTracker.clearPacket(p);
                     EnteredPortTracker.clearPacket(original);
-
-                    // ادامهٔ پردازش با نسخهٔ اصلی
                     p = original;
                 }
             } catch (Throwable ignore) {}
 
-            // ثبت در مجموعهٔ جاری
             current.add(p);
 
             // اولین ورود به این باکس → فراخوانی behavior.onPacketEnqueued
@@ -94,11 +125,10 @@ public final class SystemBehaviorAdapter implements Updatable {
             }
         }
 
-        // همگام‌سازی مجموعهٔ seen با وضعیت فعلی بافر
+        // همگام‌سازی مجموعه seen
         seen.retainAll(current);
         seen.addAll(current);
     }
-
     public PortModel findEnteredPort(PacketModel packet) {
         if (packet == null) return null;
 

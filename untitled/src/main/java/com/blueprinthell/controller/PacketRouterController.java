@@ -4,12 +4,14 @@ import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.SystemBehaviorAdapter;
 import com.blueprinthell.controller.systems.TeleportTracking;
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.MotionStrategyFactory;
 import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.controller.systems.SystemKind;
 
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 public class PacketRouterController implements Updatable {
@@ -23,6 +25,9 @@ public class PacketRouterController implements Updatable {
     private long packetsRouted = 0;
     private long incompatibleRoutes = 0;
     private long droppedPackets = 0;
+
+    private static final ReentrantLock TRANSFER_LOCK = new ReentrantLock();
+    private static final Map<SystemBoxModel, Queue<PacketModel>> TELEPORTED_PACKETS = new HashMap<>();
 
     public PacketRouterController(SystemBoxModel box,
                                   List<WireModel> wires,
@@ -352,24 +357,38 @@ public class PacketRouterController implements Updatable {
 
     @Override
     public void update(double dt) {
-        // CRITICAL: Process teleported packets FIRST, before normal routing
-        processTeleportedPackets();
+        // CRITICAL: ابتدا پکت‌های تله‌پورت شده را پردازش کن
+        processTeleportedPacketsForThisBox();
 
-        // Original logic continues...
         if (!hasAvailableRoute()) {
             return;
         }
 
+        // ابتدا LargePacket ها را از largeBuffer پردازش کن
+        while (hasAvailableRoute()) {
+            LargePacket largePacket = box.pollLarge();
+            if (largePacket == null) break;
+
+            boolean routed = routePacket(largePacket);
+            if (!routed) {
+                // اگر نتوانست route کند، برگردان به largeBuffer
+                box.enqueue(largePacket);
+                break;
+            }
+        }
+
+        // سپس پکت‌های معمولی را از bitBuffer پردازش کن
         while (hasAvailableRoute()) {
             PacketModel packet = box.pollPacket();
             if (packet == null) break;
 
-            // Skip if this is a teleported packet we missed
+            // بررسی که آیا این پکت تله‌پورت شده است
             boolean noWire = (packet.getCurrentWire() == null);
             boolean noTrackedPort = (SystemBehaviorAdapter.EnteredPortTracker.peek(packet) == null);
 
             if (box.getPrimaryKind() == SystemKind.SPY && noWire && noTrackedPort) {
-                boolean routed = routePacketDirect(packet);
+                // این پکت احتمالاً تله‌پورت شده، مستقیم route کن
+                boolean routed = routeTeleportedPacket(packet);
                 if (!routed) {
                     if (!box.enqueue(packet)) {
                         drop(packet);
@@ -388,5 +407,118 @@ public class PacketRouterController implements Updatable {
         }
     }
 
+    private void processTeleportedPacketsForThisBox() {
+        // فقط برای سیستم‌های SPY عمل کن
+        if (box.getPrimaryKind() != SystemKind.SPY) {
+            return;
+        }
+
+        TRANSFER_LOCK.lock();
+        try {
+            // بررسی صف پکت‌های تله‌پورت شده برای این box
+            Queue<PacketModel> myTeleportedPackets = TELEPORTED_PACKETS.get(box);
+            if (myTeleportedPackets == null || myTeleportedPackets.isEmpty()) {
+                return;
+            }
+
+            // کپی از پکت‌ها برای پردازش (برای جلوگیری از concurrent modification)
+            List<PacketModel> toProcess = new ArrayList<>(myTeleportedPackets);
+            myTeleportedPackets.clear(); // صف را پاک کن
+
+            // پردازش هر پکت تله‌پورت شده
+            for (PacketModel packet : toProcess) {
+                // تلاش برای route کردن مستقیم
+                if (!routeTeleportedPacket(packet)) {
+                    // اگر نتوانست route کند، در بافر قرار بده
+                    if (!box.enqueue(packet)) {
+                        lossModel.increment();
+                    } else {
+                        // پکت در بافر قرار گرفت، در چرخه بعدی route خواهد شد
+                    }
+                }
+            }
+        } finally {
+            TRANSFER_LOCK.unlock();
+        }
+    }
+    private boolean routeTeleportedPacket(PacketModel packet) {
+        // پیدا کردن پورت‌های خروجی available
+        List<PortModel> availableOuts = new ArrayList<>();
+
+        for (PortModel port : box.getOutPorts()) {
+            WireModel wire = findWireForPort(port);
+            if (wire != null) {
+                SystemBoxModel dest = destMap.get(wire);
+                if (dest != null && dest.isEnabled()) {
+                    // بررسی که سیم خیلی شلوغ نباشد
+                    if (wire.getPackets().size() < 3) {
+                        availableOuts.add(port);
+                    }
+                }
+            }
+        }
+
+        if (availableOuts.isEmpty()) {
+            return false; // نمی‌تواند route کند
+        }
+
+        // انتخاب تصادفی یک پورت
+        PortModel chosenPort = availableOuts.get(rnd.nextInt(availableOuts.size()));
+        WireModel chosenWire = findWireForPort(chosenPort);
+
+        if (chosenWire == null) {
+            return false;
+        }
+
+        // تنظیم motion strategy
+        boolean compatible = chosenPort.isCompatible(packet);
+        packet.setStartSpeedMul(1.0);
+
+        MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
+        packet.setMotionStrategy(ms);
+
+        // چسباندن پکت به سیم
+        chosenWire.attachPacket(packet, 0.0);
+
+        // پاک کردن علامت teleported
+        TeleportTracking.clearTeleported(packet);
+
+        // به‌روزرسانی آمار
+        packetsRouted++;
+        if (!compatible) {
+            incompatibleRoutes++;
+        }
+
+        return true;
+    }
+
+    /**
+     * Helper method to find wire connected to a port
+     */
+    private WireModel findWireForPort(PortModel port) {
+        for (WireModel wire : wires) {
+            if (wire.getSrcPort() == port) {
+                return wire;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Static method to add teleported packet to a target spy system
+     * (این متد توسط SpyBehavior فراخوانی می‌شود)
+     */
+    public static void addTeleportedPacket(SystemBoxModel targetBox, PacketModel packet) {
+        TRANSFER_LOCK.lock();
+        try {
+            Queue<PacketModel> queue = TELEPORTED_PACKETS.computeIfAbsent(
+                    targetBox,
+                    k -> new LinkedList<>()
+            );
+            queue.offer(packet);
+        } finally {
+            TRANSFER_LOCK.unlock();
+        }
+    }
 
 }
