@@ -111,24 +111,10 @@ public class CollisionController implements Updatable {
                     if (other == p || processed.contains(other)) continue;
                     if (isShielded(other)) continue;
 
-
-
-
-
-//=====================================================
-
                     if (p instanceof BitPacket || p instanceof LargePacket
                             || other instanceof BitPacket || other instanceof LargePacket) {
                         continue;
                     }
-
-
-
-
-
-
-
-
 
                     // کول‌داونِ برگشت برای other
                     if (other.isReturning()) {
@@ -235,10 +221,19 @@ public class CollisionController implements Updatable {
                             processed.add(other);
 
                         } else {
+                            // اینجا دو پکت با هم برخورد کرده و از بین می‌روند
                             w.removePacket(p);
                             ow.removePacket(other);
                             lossModel.incrementPacket(p);
                             lossModel.incrementPacket(other);
+
+                            // اطلاع به producer که دو پکت از بین رفت
+                            SimulationController sim = WireModel.getSimulationController();
+                            if (sim != null && sim.getPacketProducerController() != null) {
+                                sim.getPacketProducerController().onPacketLost();
+                                sim.getPacketProducerController().onPacketLost(); // دو بار چون دو پکت از بین رفت
+                            }
+
                             if (!lossSfxPlayed) { playLossSfxOnce(); lossSfxPlayed = true; }
                             processed.add(p);
                             processed.add(other);
@@ -309,6 +304,13 @@ public class CollisionController implements Updatable {
             for (PacketModel p : doomed) {
                 w.removePacket(p);
                 lossModel.incrementPacket(p);
+
+                // اطلاع به producer - استفاده از static method
+                SimulationController sim = WireModel.getSimulationController();
+                if (sim != null && sim.getPacketProducerController() != null) {
+                    sim.getPacketProducerController().onPacketLost();
+                }
+
                 played = true;
             }
         }

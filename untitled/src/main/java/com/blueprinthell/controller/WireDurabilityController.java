@@ -56,29 +56,6 @@ public class WireDurabilityController implements Updatable {
         }
     }
 
-    private void savePacketsBeforeRemoval(WireModel wire) {
-        if (wire == null) return;
-
-        List<PacketModel> packetsOnWire = new ArrayList<>(wire.getPackets());
-        if (!packetsOnWire.isEmpty()) {
-            Iterator<PacketModel> it = packetsOnWire.iterator();
-
-            while (it.hasNext()) {
-                PacketModel p = it.next();
-
-                if (p instanceof LargePacket lp &&
-                        lp.isOriginal() && lp.getGroupId() < 0 &&
-                        (lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_8 ||
-                                lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_10)) {
-                    return;
-                }
-
-                lossModel.increment();  // ثبت loss فقط برای پکت‌های غیر حجیم
-            }
-
-            wire.clearPackets();  // پاک‌سازی فقط اگر safe بود
-        }
-    }
 
 
     public int getPasses(WireModel wire) {
@@ -117,6 +94,35 @@ public class WireDurabilityController implements Updatable {
                 // فالبک: حذف مستقیم از لیست wires
                 boolean removedFromList = wires.remove(w);
             }
+        }
+    }
+    private void savePacketsBeforeRemoval(WireModel wire) {
+        if (wire == null) return;
+
+        List<PacketModel> packetsOnWire = new ArrayList<>(wire.getPackets());
+        if (!packetsOnWire.isEmpty()) {
+            Iterator<PacketModel> it = packetsOnWire.iterator();
+
+            while (it.hasNext()) {
+                PacketModel p = it.next();
+
+                if (p instanceof LargePacket lp &&
+                        lp.isOriginal() && lp.getGroupId() < 0 &&
+                        (lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_8 ||
+                                lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_10)) {
+                    return;
+                }
+
+                lossModel.increment();
+
+                // اطلاع به producer
+                SimulationController sim = WireModel.getSimulationController();
+                if (sim != null && sim.getPacketProducerController() != null) {
+                    sim.getPacketProducerController().onPacketLost();
+                }
+            }
+
+            wire.clearPackets();
         }
     }
 }

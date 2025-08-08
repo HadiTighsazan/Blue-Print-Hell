@@ -364,19 +364,27 @@ public class PacketRouterController implements Updatable {
             return;
         }
 
-        if (box.getPrimaryKind() != SystemKind.DISTRIBUTOR) {
-            // ابتدا LargePacket ها را از largeBuffer پردازش کن
+        if (box.getPrimaryKind() == SystemKind.DISTRIBUTOR) {
+            // فقط پکت‌های معمولی (BitPacket ها) را پردازش کن
             while (hasAvailableRoute()) {
-                LargePacket largePacket = box.pollLarge();
-                if (largePacket == null) break;
+                PacketModel packet = box.pollPacket();
+                if (packet == null) break;
 
-                boolean routed = routePacket(largePacket);
+                // LargePacket ها را نادیده بگیر (DistributorBehavior آنها را مدیریت می‌کند)
+                if (packet instanceof LargePacket) {
+                    box.enqueue(packet); // برگردان به بافر
+                    break;
+                }
+
+                boolean routed = routePacket(packet);
                 if (!routed) {
-                    // اگر نتوانست route کند، برگردان به largeBuffer
-                    box.enqueue(largePacket);
+                    if (!box.enqueue(packet)) {
+                        drop(packet);
+                    }
                     break;
                 }
             }
+            return; // از پردازش بقیه خارج شو
         }
 
         // سپس پکت‌های معمولی را از bitBuffer پردازش کن
@@ -506,10 +514,7 @@ public class PacketRouterController implements Updatable {
         return null;
     }
 
-    /**
-     * Static method to add teleported packet to a target spy system
-     * (این متد توسط SpyBehavior فراخوانی می‌شود)
-     */
+
     public static void addTeleportedPacket(SystemBoxModel targetBox, PacketModel packet) {
         TRANSFER_LOCK.lock();
         try {

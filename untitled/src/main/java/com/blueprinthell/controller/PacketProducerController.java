@@ -77,10 +77,7 @@ public class PacketProducerController implements Updatable {
         if (inFlight > 0) inFlight--;
     }
 
-    public boolean isFinished() {
-        // --- تغییر: پایان وقتی همه تولید شده و هیچ پکتی در پرواز نیست
-        return producedCount >= totalToProduce && inFlight == 0;
-    }
+
 
     public int getProducedCount() { return producedCount; }
     public int getPacketsPerPort() { return packetsPerPort; }
@@ -191,5 +188,25 @@ public class PacketProducerController implements Updatable {
         return (r == 0) ? PacketType.SQUARE
                 : (r == 1) ? PacketType.TRIANGLE
                 : PacketType.CIRCLE;
+    }
+    // فایل: untitled/src/main/java/com/blueprinthell/controller/PacketProducerController.java
+// اضافه کردن متدهای جدید:
+
+    public void onPacketConsumed() {
+        if (inFlight > 0) inFlight--;
+    }
+
+    public void onPacketLost() {
+        if (inFlight > 0) inFlight--;
+    }
+
+    // همچنین در متد isFinished() اضافه کنید یک لاگ برای دیباگ:
+    public boolean isFinished() {
+        boolean finished = producedCount >= totalToProduce && inFlight == 0;
+        // برای دیباگ:
+        if (!finished && producedCount >= totalToProduce) {
+            System.out.println("Waiting for " + inFlight + " packets in flight...");
+        }
+        return finished;
     }
 }

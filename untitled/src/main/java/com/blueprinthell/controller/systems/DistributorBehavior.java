@@ -11,12 +11,7 @@ import com.blueprinthell.motion.KinematicsRegistry;
 import java.awt.*;
 import java.util.*;
 
-/**
- * DistributorBehavior – هماهنگ با SystemBoxModel جدید:
- *   • از بافر حجیم جداگانه استفاده می‌کند
- *   • در هر فریم حداکثر Config.MAX_LP_SPLIT_PER_FRAME پکت حجیم را می‌شکَنَد
- *   • حذف امن LargePacket به کمک  box.removeFromBuffer(..)
- */
+
 public final class DistributorBehavior implements SystemBehavior {
 
     private final SystemBoxModel     box;
@@ -80,13 +75,12 @@ public final class DistributorBehavior implements SystemBehavior {
         }
     }
 
-    /* ===================== دریافت پکت جدید ===================== */
-
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet instanceof LargePacket lp && !processedPackets.contains(lp)) {
-            pendingLargePackets.add(lp);              // در صف Split بگذار
+            pendingLargePackets.add(lp);
         }
+
     }
 
     @Override
@@ -118,7 +112,8 @@ public final class DistributorBehavior implements SystemBehavior {
             groupId = registry.createGroup(parentSize, expectedBits, colorId);
             large.setGroupInfo(groupId, expectedBits, colorId);
             large.setCustomColor(groupColor);
-        } else {
+        }
+        else {
             groupId    = large.getGroupId();
             colorId    = large.getColorId();
             groupColor = large.getCustomColor();
@@ -126,9 +121,13 @@ public final class DistributorBehavior implements SystemBehavior {
                 registry.createGroupWithId(groupId, parentSize, expectedBits, colorId);
             }
         }
+        boolean removed = box.removeFromBuffer(large);
+        if (!removed) {
+            // اگر نتوانست حذف کند، مشکلی وجود دارد
+            System.err.println("Warning: Could not remove LargePacket from buffer in Distributor");
+            return;
+        }
 
-        /* --- حذف پکت حجیم از بافر حجیم جعبه --- */
-        box.removeFromBuffer(large);   // اکنون در SystemBoxModel برای هر دو بافر کار می‌کند
 
         /* --- ثبت وضعیت تولید تدریجی بیت‌ها --- */
         remainingBits.merge(groupId, expectedBits, Integer::sum);
@@ -186,6 +185,7 @@ public final class DistributorBehavior implements SystemBehavior {
             }
         }
     }
+
 
     private void cleanupGroup(int gid) {
         remainingBits.remove(gid);

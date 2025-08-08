@@ -158,7 +158,8 @@ public class SimulationRegistrar {
         simulation.register(dispatcher);
 
         if (sink != null) {
-            PacketConsumerController consumer = new PacketConsumerController(sink, scoreModel, coinModel);
+            PacketConsumerController consumer = new PacketConsumerController(
+                    sink, scoreModel, coinModel, lossModel, simulation); // اضافه کردن simulation
             simulation.register(consumer);
         }
 
@@ -276,6 +277,7 @@ public class SimulationRegistrar {
                 behaviorRegistry.register(box, db);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, db);
                 simulation.register(adapter);
+
                 break;
             }
             case MERGER: {

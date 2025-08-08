@@ -125,6 +125,12 @@ public class PacketDispatcherController implements Updatable {
                         continue;
                     } else {
                         lossModel.incrementPacket(packet);
+
+                        // اطلاع به producer که پکت از بین رفت
+                        SimulationController sim = WireModel.getSimulationController();
+                        if (sim != null && sim.getPacketProducerController() != null) {
+                            sim.getPacketProducerController().onPacketLost();
+                        }
                     }
                 }
             }

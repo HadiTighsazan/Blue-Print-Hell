@@ -244,4 +244,12 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         inPorts.add(new PortModel(getX(), getY(), shape, true));
         updatePortsPosition();
     }
+    // اضافه کردن متد برای بررسی نوع سیستم
+    public boolean isDistributor() {
+        return primaryKind == SystemKind.DISTRIBUTOR;
+    }
+
+    public boolean isMerger() {
+        return primaryKind == SystemKind.MERGER;
+    }
 }

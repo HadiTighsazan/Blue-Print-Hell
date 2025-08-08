@@ -1,12 +1,15 @@
-// جایگزین فایل: untitled/src/main/java/com/blueprinthell/level/LevelCompletionDetector.java
+// فایل: untitled/src/main/java/com/blueprinthell/level/LevelCompletionDetector.java
+
 package com.blueprinthell.level;
 
 import com.blueprinthell.controller.PacketProducerController;
+import com.blueprinthell.controller.systems.SystemKind;
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
+import com.blueprinthell.model.large.BitPacket;
 import javax.swing.SwingUtilities;
 import java.util.List;
 
@@ -53,31 +56,44 @@ public class LevelCompletionDetector implements Updatable {
         boolean wiresEmpty = wires.stream()
                 .allMatch(w -> w.getPackets().isEmpty());
 
-
-
-        boolean boxesEmpty = boxes.stream()
+        // بررسی خاص برای Merger ها و سایر سیستم‌ها
+        boolean boxesReady = boxes.stream()
                 .allMatch(b -> {
                     boolean noBacklog = !b.hasUnprocessedEntries();
-                    boolean isSink    = b.getOutPorts().isEmpty();
-                    boolean bufEmpty  = b.getBuffer().isEmpty();
-                    return isSink ? noBacklog : (noBacklog && bufEmpty);
+                    boolean isSink = b.getOutPorts().isEmpty();
+
+                    // برای Merger ها: باید کمتر از 4 بیت داشته باشند
+                    if (b.getPrimaryKind() == SystemKind.MERGER) {
+                        // شمارش BitPacket ها در بافر
+                        long bitCount = b.getBitBuffer().stream()
+                                .filter(p -> p instanceof BitPacket)
+                                .count();
+                        return bitCount < 4 && noBacklog;
+                    }
+
+                    // برای Sink ها
+                    if (isSink) {
+                        return noBacklog;
+                    }
+
+                    // برای سایر سیستم‌ها
+                    boolean bufEmpty = b.getBitBuffer().isEmpty() && b.getLargeBuffer().isEmpty();
+                    return noBacklog && bufEmpty;
                 });
-
-
 
         boolean noReturning = wires.stream()
                 .flatMap(w -> w.getPackets().stream())
                 .noneMatch(PacketModel::isReturning);
 
-        double lossRatio = plannedPackets > 0
-                ? (double) lossModel.getLostCount() / plannedPackets
+        // محاسبه نسبت loss بر اساس واحدهای تولیدی
+        int producedUnits = producer.getProducedUnits();
+        double lossRatio = producedUnits > 0
+                ? (double) lossModel.getLostCount() / producedUnits
                 : 0.0;
 
-        boolean acceptableLoss = lossRatio <= lossThreshold;
+        boolean acceptableLoss = lossRatio < lossThreshold; // کمتر از 50%
 
-
-
-        if (wiresEmpty && boxesEmpty && noReturning) {
+        if (wiresEmpty && boxesReady && noReturning) {
             if (acceptableLoss) {
                 stableAcc += dt;
                 if (stableAcc >= STABLE_WINDOW_S) {
@@ -85,7 +101,7 @@ public class LevelCompletionDetector implements Updatable {
                     SwingUtilities.invokeLater(levelManager::reportLevelCompleted);
                 }
             } else {
-
+                // اگر loss بیش از حد است، بازی تمام نمی‌شود
                 stableAcc = 0.0;
             }
         } else {

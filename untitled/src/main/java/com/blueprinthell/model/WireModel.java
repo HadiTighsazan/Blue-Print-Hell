@@ -56,6 +56,10 @@ public class WireModel implements Serializable {
         this.path = buildDefaultPath();
     }
 
+    public static SimulationController getSimulationController() {
+        return simulationController;
+    }
+
     public boolean isForPreviousLevels() {
         return isForPreviousLevels;
     }
@@ -111,17 +115,15 @@ public class WireModel implements Serializable {
                                 : srcBox.enqueue(p);
                     }
 
-                    if (accepted) {
 
+                    if (accepted) {
                         it.remove();
                         p.attachToWire(null, 0.0);
                         p.setReturning(false);
 
                         if (simulationController != null) {
-                            boolean isMessenger = PacketOps.isMessenger(p);
-                            if (simulationController != null && !PacketOps.isMessenger(p)) {
-                                simulationController.onPacketReturned();
-                            }
+                            // برای همه پکت‌ها، نه فقط غیر-messenger
+                            simulationController.onPacketReturned();
                         }
                     } else {
                         p.setProgress(0.0);

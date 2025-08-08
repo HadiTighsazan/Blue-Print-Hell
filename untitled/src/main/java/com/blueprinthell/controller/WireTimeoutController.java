@@ -58,6 +58,12 @@ public final class WireTimeoutController implements Updatable {
         for (Removal r : toRemove) {
             if (r.wire.removePacket(r.packet)) {
                 lossModel.increment();
+
+                // اطلاع به producer
+                SimulationController sim = WireModel.getSimulationController();
+                if (sim != null && sim.getPacketProducerController() != null) {
+                    sim.getPacketProducerController().onPacketLost();
+                }
             }
             elapsed.remove(r.packet);
             lastWire.remove(r.packet);
@@ -80,11 +86,7 @@ public final class WireTimeoutController implements Updatable {
         lastWire.clear();
     }
 
-    public void resetTimer(PacketModel p) {
-        if (p == null) return;
-        elapsed.put(p, 0.0);
-        lastWire.put(p, p.getCurrentWire());
-    }
+
 
     private static final class Removal {
         final WireModel wire;
