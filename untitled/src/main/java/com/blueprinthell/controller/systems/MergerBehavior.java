@@ -12,19 +12,9 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 
-/**
- * MergerBehavior – هماهنگ با SystemBoxModel جدید:
- *   • Bit-Packetها را از bitBuffer برمی‌دارد و پس از هر ۴ تا، LargePacket
- *     تازه را در largeBuffer جعبه قرار می‌دهد (box.enqueue(..) خودش تشخیص می‌دهد).
- *   • از متد عمومی box.removeFromBuffer(..) برای حذف امن استفاده می‌کند؛
- *     بنابراین کد قبلیِ دست‌ساز برای پیمایش بافر حذف شد.
- */
 public final class MergerBehavior implements SystemBehavior {
 
-    /* === Constants =================================================== */
     private static final int BITS_PER_MERGE = 4;
-
-    /* === Dependencies ================================================ */
     private final SystemBoxModel     box;
     private final LargeGroupRegistry registry;
     private final PacketLossModel    lossModel;

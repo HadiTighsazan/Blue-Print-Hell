@@ -14,6 +14,7 @@ public final class Config {
     public static final double MAX_TIME_ON_WIRE_SEC = 8.0;
     public static final double SYSTEM_DISABLE_DURATION =2.0 ;
     public static final double MAX_ALLOWED_SPEED = 150.0;
+    public static final int MERGE_SIZE = 4;
 
 
     private Config() { /* Prevent instantiation */ }

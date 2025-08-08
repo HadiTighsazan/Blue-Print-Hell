@@ -105,8 +105,15 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
             /* پکت حجیم */
         } else {
-            if (largeBuffer.size() >= Config.MAX_LARGE_BUFFER_CAPACITY) return false;
-            added = largeBuffer.offerLast((LargePacket) packet);
+            // فقط در توزیع‌گرها یا ادغام‌گرها: در largeBuffer صف کن
+            if (isDistributor() || isMerger()) {
+                if (largeBuffer.size() >= Config.MAX_LARGE_BUFFER_CAPACITY) return false;
+                added = largeBuffer.offerLast((LargePacket) packet);
+            } else {
+                // در سیستم‌های عادی: بستهٔ حجیم را مثل پکت معمولی در bitBuffer قرار بده
+                if (bitBuffer.size() >= Config.MAX_BUFFER_CAPACITY) return false;
+                added = bitBuffer.offerLast(packet);
+            }
         }
 
         /* ثبت ورودی تازه برای رخداد‌ها */
