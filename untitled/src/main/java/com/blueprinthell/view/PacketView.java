@@ -3,6 +3,7 @@ package com.blueprinthell.view;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.ConfidentialPacket;
+import com.blueprinthell.model.PacketOps;
 import com.blueprinthell.model.ProtectedPacket;
 import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargePacket;
@@ -95,6 +96,61 @@ public class PacketView extends GameObjectView<PacketModel> {
                 g2.setColor(Color.WHITE);
                 g2.drawString(idx, 3, 10);
 
+                return;
+            }
+
+            if (model instanceof ConfidentialPacket) {
+                boolean isVpn = PacketOps.isConfidentialVpn(model);
+                int expectedSize = isVpn ? 6 : 4;
+
+                int visualSize = expectedSize * Config.PACKET_SIZE_MULTIPLIER;
+                if (model.getWidth() != visualSize) {
+                    model.setWidth(visualSize);
+                    model.setHeight(visualSize);
+                    setBounds(model.getX(), model.getY(), visualSize, visualSize);
+                }
+
+                Polygon pentagon = ShapeUtils.regularPolygon(5, getWidth(), getHeight(), Config.POLY_INSET);
+
+                if (isVpn) {
+                    g2.setColor(new Color(0x1E3A8A));
+                    g2.fillPolygon(pentagon);
+
+                    // حاشیه آبی روشن
+                    g2.setStroke(new BasicStroke(2.5f));
+                    g2.setColor(new Color(0x60A5FA));
+                    g2.drawPolygon(pentagon);
+
+                    // نمایش "V" در مرکز
+                    g2.setColor(Color.WHITE);
+                    g2.setFont(new Font("Arial", Font.BOLD, 14));
+                    String label = "V";
+                    FontMetrics fm = g2.getFontMetrics();
+                    int tx = (getWidth() - fm.stringWidth(label)) / 2;
+                    int ty = (getHeight() + fm.getAscent()) / 2 - 2;
+                    g2.drawString(label, tx, ty);
+                } else {
+                    // پکت محرمانه عادی - بنفش
+                    g2.setColor(new Color(0x7C3AED)); // بنفش
+                    g2.fillPolygon(pentagon);
+
+                    // حاشیه بنفش روشن
+                    g2.setStroke(new BasicStroke(2f));
+                    g2.setColor(new Color(0xA78BFA)); // بنفش روشن
+                    g2.drawPolygon(pentagon);
+
+                    // نمایش "C" در مرکز
+                    g2.setColor(Color.WHITE);
+                    g2.setFont(new Font("Arial", Font.BOLD, 12));
+                    String label = "C";
+                    FontMetrics fm = g2.getFontMetrics();
+                    int tx = (getWidth() - fm.stringWidth(label)) / 2;
+                    int ty = (getHeight() + fm.getAscent()) / 2 - 2;
+                    g2.drawString(label, tx, ty);
+                }
+
+                // نمایش Badge اضافی در صورت نیاز
+                drawPacketBadges(g2, model, getWidth(), getHeight());
                 return;
             }
             // ===== رندر انواع معمولی + Protected با شفافیت پایین =====

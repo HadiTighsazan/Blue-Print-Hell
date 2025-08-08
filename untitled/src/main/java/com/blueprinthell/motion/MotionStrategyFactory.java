@@ -283,11 +283,11 @@ public final class MotionStrategyFactory {
                 if (pxDist < minGapPx) {
                     // اگر جلوتر هستیم، سرعت کم کن
                     if (other.getProgress() > myProg && !packet.isReturning()) {
-                        speed *= 0.5; // کاهش 50% سرعت
+                        speed *= 0.3; // کاهش 50% سرعت
                     }
                     // اگر عقب‌تر هستیم، سرعت زیاد کن
                     else if (other.getProgress() < myProg && !packet.isReturning()) {
-                        speed *= 1.5; // افزایش 50% سرعت
+                        speed *= 1.8; // افزایش 50% سرعت
                     }
                 }
             }
