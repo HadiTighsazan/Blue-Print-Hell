@@ -7,7 +7,6 @@ import com.blueprinthell.model.WireModel;
 
 import java.awt.*;
 import java.io.Serializable;
-import java.util.Objects;
 
 
 public class LargePacket extends PacketModel implements Serializable {
@@ -61,28 +60,17 @@ public class LargePacket extends PacketModel implements Serializable {
         this.colorId = colorId;
         this.rebuiltFromBits = rebuiltFromBits;
         this.customColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
+        if (rebuiltFromBits) {
+                    this.isOriginal = false;
+                }
     }
     public boolean isOriginal() {
         return isOriginal;
     }
 
-    public static LargePacket fromSample(PacketModel sample,
-                                         int originalSizeUnits,
-                                         int groupId,
-                                         int expectedBits,
-                                         int colorId,
-                                         boolean rebuiltFromBits) {
-        Objects.requireNonNull(sample, "sample");
-        LargePacket lp = new LargePacket(sample.getType(), sample.getBaseSpeed(), originalSizeUnits,
-                groupId, expectedBits, colorId, rebuiltFromBits);
-        copyRuntimeState(sample, lp);
-        return lp;
-    }
 
 
-    public static LargePacket createRaw(PacketType type, double baseSpeed, int sizeUnits) {
-        return new LargePacket(type, baseSpeed, sizeUnits);
-    }
+
 
 
 

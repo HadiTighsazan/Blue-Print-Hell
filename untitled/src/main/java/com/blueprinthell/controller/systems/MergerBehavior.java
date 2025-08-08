@@ -143,7 +143,7 @@ public final class MergerBehavior implements SystemBehavior {
         lp.setHeight(chunkUnits * Config.PACKET_SIZE_MULTIPLIER);
 
         lp.setGroupInfo(first.getGroupId(), first.getParentSizeUnits(), first.getColorId());
-
+        lp.setOriginal(false);
         KinematicsRegistry.copyProfile(first, lp);
         return lp;
     }

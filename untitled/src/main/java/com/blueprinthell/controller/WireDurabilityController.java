@@ -1,5 +1,6 @@
 package com.blueprinthell.controller;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
 import com.blueprinthell.model.large.LargePacket;
 
@@ -32,7 +33,9 @@ public class WireDurabilityController implements Updatable {
         if (packet == null || wire == null) return;
 
         if (packet instanceof LargePacket lp) {
-            if (lp.isOriginal() && lp.getOriginalSizeUnits() > 5) {
+            int u = lp.getOriginalSizeUnits();
+            if (lp.isOriginal() && lp.getGroupId() < 0 &&
+                    (u == Config.LARGE_PACKET_SIZE_8 || u == Config.LARGE_PACKET_SIZE_10)){
                 recordHeavyPass(wire);
             }
         }
@@ -63,9 +66,10 @@ public class WireDurabilityController implements Updatable {
             while (it.hasNext()) {
                 PacketModel p = it.next();
 
-                // اگر پکت حجیم باشد، صبر کن تا پردازش شود (فرصت بده در فریم‌های بعد برسد)
-                if (p instanceof LargePacket lp && lp.isOriginal() && lp.getOriginalSizeUnits() > 5) {
-                    // سیم را هنوز حذف نکن! defer کن
+                if (p instanceof LargePacket lp &&
+                        lp.isOriginal() && lp.getGroupId() < 0 &&
+                        (lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_8 ||
+                                lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_10)) {
                     return;
                 }
 
