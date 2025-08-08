@@ -42,9 +42,9 @@ public class PacketConsumerController implements Updatable {
 
 
         if (packet instanceof BitPacket) {
-            // هیچ کاری نکن - BitPacket به تنهایی ارزشی ندارد
-            return;
-        }
+            if (lossModel != null) lossModel.increment();
+                        return;
+                    }
 
         // برای پکت‌های حجیم و سایر پکت‌ها
         int coins = PacketOps.coinValueOnConsume(packet);

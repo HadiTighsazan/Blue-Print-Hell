@@ -24,6 +24,12 @@ public class LargePacket extends PacketModel implements Serializable {
     private boolean rebuiltFromBits;
     private Color customColor;
 
+    public void setOriginal(boolean original) {
+        isOriginal = original;
+    }
+
+    private  boolean isOriginal = true;
+
 
 
 
@@ -55,6 +61,9 @@ public class LargePacket extends PacketModel implements Serializable {
         this.colorId = colorId;
         this.rebuiltFromBits = rebuiltFromBits;
         this.customColor = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
+    }
+    public boolean isOriginal() {
+        return isOriginal;
     }
 
     public static LargePacket fromSample(PacketModel sample,

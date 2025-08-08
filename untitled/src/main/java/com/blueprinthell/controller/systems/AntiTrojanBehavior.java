@@ -209,6 +209,7 @@ public final class AntiTrojanBehavior implements SystemBehavior {
 
     private void startCooldown() {
         cooldownLeft = cooldownSec;
+        try { box.disableFor(cooldownSec); } catch (Throwable ignore) {}
     }
 
     public void clear() {

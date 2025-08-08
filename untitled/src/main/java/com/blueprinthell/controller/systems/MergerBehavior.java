@@ -1,11 +1,7 @@
 package com.blueprinthell.controller.systems;
 
 import com.blueprinthell.config.Config;
-import com.blueprinthell.model.PacketLossModel;
-import com.blueprinthell.model.PacketModel;
-import com.blueprinthell.model.PacketType;
-import com.blueprinthell.model.PortModel;
-import com.blueprinthell.model.SystemBoxModel;
+import com.blueprinthell.model.*;
 import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.model.large.LargeGroupRegistry.GroupState;
@@ -16,20 +12,26 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 
-
+/**
+ * MergerBehavior – هماهنگ با SystemBoxModel جدید:
+ *   • Bit-Packetها را از bitBuffer برمی‌دارد و پس از هر ۴ تا، LargePacket
+ *     تازه را در largeBuffer جعبه قرار می‌دهد (box.enqueue(..) خودش تشخیص می‌دهد).
+ *   • از متد عمومی box.removeFromBuffer(..) برای حذف امن استفاده می‌کند؛
+ *     بنابراین کد قبلیِ دست‌ساز برای پیمایش بافر حذف شد.
+ */
 public final class MergerBehavior implements SystemBehavior {
 
-    /* === Constants ======================================================= */
-    private static final int BITS_PER_MERGE  = 4;
-    private static final int MERGED_PKT_SIZE = 4;
+    /* === Constants =================================================== */
+    private static final int BITS_PER_MERGE = 4;
 
-    /* === Dependencies ==================================================== */
+    /* === Dependencies ================================================ */
     private final SystemBoxModel     box;
     private final LargeGroupRegistry registry;
     private final PacketLossModel    lossModel;
 
-    /* === State =========================================================== */
-    private final Map<Integer, GroupContext> groups = new HashMap<>();
+    /* === State ======================================================= */
+    private final Map<Integer, GroupContext> groups  = new HashMap<>();
+    private final Deque<Integer>             rrQueue = new ArrayDeque<>();
 
     public MergerBehavior(SystemBoxModel box,
                           LargeGroupRegistry registry,
@@ -39,123 +41,141 @@ public final class MergerBehavior implements SystemBehavior {
         this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
     }
 
-    /* ---------------------------------------------------------------------
-     *  SystemBehavior implementation
-     * ------------------------------------------------------------------ */
-
+    /* ===================== Packet Arrived ============================ */
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (!(packet instanceof BitPacket bp)) return;
 
-        /* Remove immediately from buffer to avoid duplicate handling. */
-        if (!box.getBuffer().remove(bp)) return;
+        /* حذف امن بیت از بافر بیت */
+        if (!box.removeFromBuffer(bp)) return;
 
-        GroupContext ctx = groups.computeIfAbsent(bp.getGroupId(), GroupContext::new);
-        ctx.bits.add(bp);
+        final int gid = bp.getGroupId();
+        GroupContext ctx = groups.computeIfAbsent(gid, GroupContext::new);
+        ctx.bits.addLast(bp);
 
-        /* Create registry records on first arrival. */
-        GroupState st = registry.get(ctx.groupId);
+        /* اطمینان از وجود گروه در رجیستری */
+        GroupState st = registry.get(gid);
         if (st == null) {
-            registry.createGroupWithId(ctx.groupId,
-                    bp.getParentSizeUnits(),
-                    bp.getParentSizeUnits(),
-                    bp.getColorId());
-            st = registry.get(ctx.groupId);
+            registry.createGroupWithId(
+                    gid,
+                    bp.getParentSizeUnits(),     // original N
+                    bp.getParentSizeUnits(),     // expectedBits = N
+                    bp.getColorId()
+            );
+            st = registry.get(gid);
         }
-        registry.registerArrival(ctx.groupId, bp);
 
-        tryMerge(ctx);
+        registry.registerArrival(gid, bp);
+
+        /* آمادهٔ مرج شد؟ */
+        if (ctx.bits.size() >= BITS_PER_MERGE && !rrQueue.contains(gid)) {
+            rrQueue.addLast(gid);
+        }
     }
 
+    /* ===================== Game-loop ================================= */
     @Override
     public void update(double dt) {
-        /* Second chance for groups that previously waited due to full buffer. */
-        groups.values().forEach(this::tryMerge);
+        processRoundRobinMerges();     // مرج عادلانه
+
+        /* بستن گروه‌های تمام‌شده */
+        List<Integer> done = new ArrayList<>();
+        for (Map.Entry<Integer, GroupContext> e : groups.entrySet()) {
+            GroupContext ctx = e.getValue();
+            if (ctx.isDone()) {
+                closeGroup(ctx);
+                done.add(e.getKey());
+            }
+        }
+        for (Integer gid : done) {
+            groups.remove(gid);
+            rrQueue.remove(gid);
+        }
     }
 
     @Override
-    public void onEnabledChanged(boolean enabled) {/* no‑op */}
+    public void onEnabledChanged(boolean enabled) {
+        if (enabled) clear();
+    }
 
-    /* ---------------------------------------------------------------------
-     *  Core merge workflow
-     * ------------------------------------------------------------------ */
+    /* ===================== Merge Logic =============================== */
+    private void processRoundRobinMerges() {
+        int guard = 1024;     // جلوگیری از حلقهٔ بی‌نهایت
+        while (!rrQueue.isEmpty() && guard-- > 0) {
+            int gid = rrQueue.removeFirst();
+            GroupContext ctx = groups.get(gid);
+            if (ctx == null || ctx.bits.size() < BITS_PER_MERGE) continue;
 
-    private void tryMerge(GroupContext ctx) {
-        /* Attempt as many merges as possible until the buffer fills. */
-        while (ctx.ready()) {
-            /* Snapshot first 4 bits – used both for packet creation and cleanup. */
-            List<BitPacket> toMerge = new ArrayList<>(ctx.bits.subList(0, BITS_PER_MERGE));
+            /* برداشتن ۴ بیت */
+            List<BitPacket> four = new ArrayList<>(BITS_PER_MERGE);
+            for (int i = 0; i < BITS_PER_MERGE; i++) four.add(ctx.bits.removeFirst());
 
-            LargePacket merged = createMergedPacket(toMerge);
+            LargePacket merged = createMergedPacket(four);
+
+            /* تلاش برای قرار دادن در largeBuffer */
             if (!box.enqueue(merged)) {
-                /* Buffer full — MOVE bits to pending, then abort loop. */
-                ctx.pending.addAll(toMerge);
-                ctx.bits.subList(0, BITS_PER_MERGE).clear(); // avoid duplicates
+                /* جا نیست → بیت‌ها را برگردان و از حلقه خارج شو */
+                for (int i = BITS_PER_MERGE - 1; i >= 0; i--) ctx.bits.addFirst(four.get(i));
+                rrQueue.addFirst(gid);
                 break;
             }
 
-            /* Successful merge. Remove merged bits and clean pending duplicates. */
-            ctx.bits.subList(0, BITS_PER_MERGE).clear();
-            ctx.pending.removeAll(toMerge);
             ctx.mergeCount++;
-        }
 
-        /* Close & report if the group is entirely processed. */
-        if (ctx.isDone()) closeGroup(ctx);
+            /* اگر دوباره ≥۴ بیت ماند، به انتهای صف برگردد */
+            if (ctx.bits.size() >= BITS_PER_MERGE) rrQueue.addLast(gid);
+        }
     }
 
     private LargePacket createMergedPacket(List<BitPacket> bits) {
-        if (bits == null || bits.size() != BITS_PER_MERGE) return null;
-
         BitPacket first = bits.get(0);
-        Color mergedColor = Color.getHSBColor(first.getColorId() / 360f, 0.8f, 0.9f);
 
-        LargePacket lp = new LargePacket(PacketType.SQUARE,
+        Color c = first.getColor();
+        int chunkUnits = BITS_PER_MERGE;
+
+        LargePacket lp = new LargePacket(
+                PacketType.SQUARE,
                 Config.DEFAULT_PACKET_SPEED,
-                MERGED_PKT_SIZE);
-        lp.setCustomColor(mergedColor);
+                chunkUnits
+        );
+        lp.setCustomColor(c);
+        lp.setWidth (chunkUnits * Config.PACKET_SIZE_MULTIPLIER);
+        lp.setHeight(chunkUnits * Config.PACKET_SIZE_MULTIPLIER);
 
-        int visual = MERGED_PKT_SIZE * Config.PACKET_SIZE_MULTIPLIER;
-        lp.setWidth(visual);
-        lp.setHeight(visual);
-        lp.setGroupInfo(first.getGroupId(), BITS_PER_MERGE, first.getColorId());
+        lp.setGroupInfo(first.getGroupId(), first.getParentSizeUnits(), first.getColorId());
+
         KinematicsRegistry.copyProfile(first, lp);
         return lp;
     }
 
+    /* ===================== Registry / Loss =========================== */
+    private void closeGroup(GroupContext ctx) {
+        int totalBitsMerged = ctx.mergeCount * BITS_PER_MERGE;
+        GroupState st = registry.get(ctx.groupId);
+        if (st == null) return;
 
+        registry.registerPartialMerge(ctx.groupId, totalBitsMerged, BITS_PER_MERGE);
+
+        int actualLoss = registry.calculateActualLoss(ctx.groupId);
+        if (actualLoss > 0) lossModel.incrementBy(actualLoss);
+
+        if (totalBitsMerged >= st.expectedBits) {
+            registry.closeGroup(ctx.groupId);
+            registry.removeGroup(ctx.groupId);
+        }
+    }
+
+    /* ===================== Helpers =================================== */
+    private void clear() {
+        groups.clear();
+        rrQueue.clear();
+    }
 
     private static final class GroupContext {
         final int groupId;
-        final List<BitPacket> bits    = new ArrayList<>();
-        final Set<BitPacket>  pending = new HashSet<>();
+        final Deque<BitPacket> bits = new ArrayDeque<>();
         int mergeCount = 0;
-
-        GroupContext(int id) { this.groupId = id; }
-
-        /** Ready when at least 4 fresh bits exist. */
-        boolean ready()  { return bits.size() >= BITS_PER_MERGE; }
-        /** Done when nothing left to process or waiting. */
-        boolean isDone() { return bits.isEmpty() && pending.isEmpty(); }
-    }
-
-    private void closeGroup(GroupContext ctx) {
-        int totalBits = ctx.mergeCount * BITS_PER_MERGE;
-        GroupState st = registry.get(ctx.groupId);
-        if (st != null) {
-            registry.registerPartialMerge(ctx.groupId, totalBits, MERGED_PKT_SIZE);
-
-            // محاسبه و اعمال Loss
-            int actualLoss = registry.calculateActualLoss(ctx.groupId);
-            if (actualLoss > 0) {
-                lossModel.incrementBy(actualLoss);
-            }
-
-            if (totalBits >= st.expectedBits) {
-                registry.closeGroup(ctx.groupId);
-                registry.removeGroup(ctx.groupId);
-            }
-        }
-        groups.remove(ctx.groupId);
+        GroupContext(int id){ this.groupId = id; }
+        boolean isDone(){ return bits.isEmpty(); }
     }
 }

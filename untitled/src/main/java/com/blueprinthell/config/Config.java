@@ -137,4 +137,6 @@ public final class Config {
 
     public static final double CIRCLE_YIELD_WAIT = 0.30;
 
+    public static final int MAX_LARGE_BUFFER_CAPACITY = 8;
+    public static final int MAX_LP_SPLIT_PER_FRAME = 1;
 }

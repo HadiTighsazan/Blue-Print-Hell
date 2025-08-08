@@ -314,7 +314,7 @@ public class SimulationRegistrar {
                 break;
             }
         }
-        if (!box.getInPorts().isEmpty() && !box.getOutPorts().isEmpty()) {
+        if (!box.getInPorts().isEmpty() ) {
             // فقط برای سیستم‌هایی که هم ورودی و هم خروجی دارند
             LargePacketPortRandomizer lppr = new LargePacketPortRandomizer(box);
             behaviorRegistry.register(box, lppr);

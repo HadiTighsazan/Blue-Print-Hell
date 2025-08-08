@@ -16,7 +16,7 @@ public class BitPacket extends PacketModel implements Serializable {
     private final int groupId;
     private final int parentSizeUnits;
     private final int indexInGroup;
-    private final int colorId;
+    private int colorId;
 
     private boolean registeredAtMerger = false;
 
@@ -79,5 +79,9 @@ public class BitPacket extends PacketModel implements Serializable {
         if (src.getNoise() > 0) {
             dst.increaseNoise(src.getNoise());
         }
+    }
+
+    public void setColorId(Integer orDefault) {
+        this.colorId = orDefault;
     }
 }

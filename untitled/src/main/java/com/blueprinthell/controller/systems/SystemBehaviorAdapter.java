@@ -35,6 +35,7 @@ public final class SystemBehaviorAdapter implements Updatable {
         }
     }
 
+
     public void checkNewPackets() {
         final Queue<PacketModel> buf = box.getBuffer();
         if (buf == null || buf.isEmpty()) {
@@ -46,9 +47,43 @@ public final class SystemBehaviorAdapter implements Updatable {
         final Set<PacketModel> current = Collections.newSetFromMap(
                 new IdentityHashMap<>(Math.max(16, snapshot.length * 2)));
 
-        for (PacketModel p : snapshot) {
-            if (p == null) continue;
+        for (PacketModel p0 : snapshot) {
+            if (p0 == null) continue;
+            PacketModel p = p0;
+
+            // تلاش برای بازگردانی فوری Protectedها (بعد از خاموشی VPN)
+            try {
+                PacketModel original = VpnRevertHints.consumeGlobal(p);
+                if (original != null && original != p) {
+                    // جایگزینی امن در بافر: p -> original
+                    Deque<PacketModel> temp = new ArrayDeque<>();
+                    PacketModel q;
+                    boolean replaced = false;
+                    while ((q = box.pollPacket()) != null) {
+                        if (!replaced && q == p) {
+                            temp.addLast(original);
+                            replaced = true;
+                        } else {
+                            temp.addLast(q);
+                        }
+                    }
+                    for (PacketModel r : temp) {
+                        box.enqueue(r);
+                    }
+
+                    // پاکسازی ردِ پورت ورودی برای پکت قدیم/جدید
+                    EnteredPortTracker.clearPacket(p);
+                    EnteredPortTracker.clearPacket(original);
+
+                    // ادامهٔ پردازش با نسخهٔ اصلی
+                    p = original;
+                }
+            } catch (Throwable ignore) {}
+
+            // ثبت در مجموعهٔ جاری
             current.add(p);
+
+            // اولین ورود به این باکس → فراخوانی behavior.onPacketEnqueued
             if (!seen.contains(p)) {
                 final PortModel entered = findEnteredPort(p);
                 try {
@@ -59,10 +94,9 @@ public final class SystemBehaviorAdapter implements Updatable {
             }
         }
 
+        // همگام‌سازی مجموعهٔ seen با وضعیت فعلی بافر
         seen.retainAll(current);
-        for (PacketModel p : snapshot) {
-            if (p != null) seen.add(p);
-        }
+        seen.addAll(current);
     }
 
     public PortModel findEnteredPort(PacketModel packet) {

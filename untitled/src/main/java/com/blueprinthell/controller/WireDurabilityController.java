@@ -31,15 +31,13 @@ public class WireDurabilityController implements Updatable {
     public void onPacketArrived(PacketModel packet, WireModel wire) {
         if (packet == null || wire == null) return;
 
-        // فقط پکت‌های حجیم اصلی را بشمار، نه بیت‌پکت‌ها
         if (packet instanceof LargePacket lp) {
-            // فقط پکت‌های حجیم با سایز 8 یا 10 را بشمار
-            // پکت‌های سایز 4 (که از ادغام بیت‌ها ساخته می‌شوند) را نادیده بگیر
-            if (lp.getOriginalSizeUnits() >= 8) {
+            if (lp.isOriginal() && lp.getOriginalSizeUnits() > 5) {
                 recordHeavyPass(wire);
             }
         }
     }
+
 
     public void recordHeavyPass(WireModel wire) {
         if (wire == null || removed.contains(wire)) return;
@@ -60,16 +58,24 @@ public class WireDurabilityController implements Updatable {
 
         List<PacketModel> packetsOnWire = new ArrayList<>(wire.getPackets());
         if (!packetsOnWire.isEmpty()) {
+            Iterator<PacketModel> it = packetsOnWire.iterator();
 
-            // پکت‌ها را به عنوان loss ثبت کن
-            for (PacketModel p : packetsOnWire) {
-                lossModel.increment();
+            while (it.hasNext()) {
+                PacketModel p = it.next();
+
+                // اگر پکت حجیم باشد، صبر کن تا پردازش شود (فرصت بده در فریم‌های بعد برسد)
+                if (p instanceof LargePacket lp && lp.isOriginal() && lp.getOriginalSizeUnits() > 5) {
+                    // سیم را هنوز حذف نکن! defer کن
+                    return;
+                }
+
+                lossModel.increment();  // ثبت loss فقط برای پکت‌های غیر حجیم
             }
 
-            // پاک کردن پکت‌ها از سیم
-            wire.clearPackets();
+            wire.clearPackets();  // پاک‌سازی فقط اگر safe بود
         }
     }
+
 
     public int getPasses(WireModel wire) {
         return passCount.getOrDefault(wire, 0);

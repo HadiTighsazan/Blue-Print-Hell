@@ -4,259 +4,244 @@ import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.SystemBehavior;
 import com.blueprinthell.controller.systems.SystemBehaviorAdapter;
 import com.blueprinthell.controller.systems.SystemKind;
+import com.blueprinthell.model.large.LargePacket;
 
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 
+/**
+ * System-Box: اکنون دو بافر مجزا دارد
+ *   • bitBuffer  ← فقط Bit/Packet های معمولی
+ *   • largeBuffer ← فقط LargePacket ها
+ */
 public class SystemBoxModel extends GameObjectModel implements Serializable, Updatable {
+
     private static final long serialVersionUID = 5L;
 
-    private final List<PortModel> inPorts = new ArrayList<>();
+    /* ---------- پورت‌ها ---------- */
+    private final List<PortModel> inPorts  = new ArrayList<>();
     private final List<PortModel> outPorts = new ArrayList<>();
 
-    private Queue<PacketModel> buffer;
+    /* ---------- بافر بیت ---------- */
+    private final Deque<PacketModel> bitBuffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
 
+    /* ---------- بافر پکت حجیم ---------- */
+    private final Deque<LargePacket> largeBuffer =
+            new ArrayDeque<>(Config.MAX_LARGE_BUFFER_CAPACITY);
+
+    /* ---------- وضعیت ---------- */
     private boolean enabled = true;
-    private double disableTimer = 0.0;
+    private double  disableTimer = 0.0;
 
     private final List<SystemBehavior> behaviors = new ArrayList<>();
+    private final Queue<PacketEntry>   newEntries = new ConcurrentLinkedQueue<>();
 
-    private final Queue<PacketEntry> newEntries = new ConcurrentLinkedQueue<>();
-
-    private boolean lastEnabledState = true;
-
-    private SystemKind primaryKind = SystemKind.NORMAL;
+    private boolean    lastEnabledState = true;
+    private SystemKind primaryKind      = SystemKind.NORMAL;
 
     private final String id;
+
+    /* ---------- سازنده ---------- */
+    public SystemBoxModel(String id,
+                          int x, int y, int width, int height,
+                          List<PortShape> inShapes,
+                          List<PortShape> outShapes) {
+
+        super(x, y, width, height);
+        this.id = id;
+        createPorts(inShapes, outShapes);
+    }
+
+    /* ---------- کلاس کمکی ثبت ورودی ---------- */
     public static class PacketEntry {
         public final PacketModel packet;
-        public final PortModel enteredPort;
+        public final PortModel  enteredPort;
 
         public PacketEntry(PacketModel packet, PortModel enteredPort) {
-            this.packet = packet;
+            this.packet      = packet;
             this.enteredPort = enteredPort;
         }
     }
 
-       public SystemBoxModel(String id, int x, int y, int width, int height,
-                          List<PortShape> inShapes,
-                          List<PortShape> outShapes) {
-                super(x, y, width, height);
-                this.id     = id;
-                this.buffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
-                createPorts(inShapes, outShapes);
-            }
+    /* ====== API عمومی ====== */
 
-    public SystemKind getPrimaryKind() {
-        return primaryKind;
-    }
+    /* --- شناسنامه --- */
+    public String getId()                      { return id;            }
+    public SystemKind getPrimaryKind()        { return primaryKind;   }
+    public void setPrimaryKind(SystemKind k ) { primaryKind = (k!=null)?k:SystemKind.NORMAL; }
 
-    public void setPrimaryKind(SystemKind kind) {
-        this.primaryKind = (kind != null) ? kind : SystemKind.NORMAL;
-    }
+    /* --- پورت‌ها --- */
+    public List<PortModel> getInPorts () { return Collections.unmodifiableList(inPorts ); }
+    public List<PortModel> getOutPorts() { return Collections.unmodifiableList(outPorts); }
+    public List<PortShape> getInShapes () { return inPorts .stream().map(PortModel::getShape).collect(Collectors.toList()); }
+    public List<PortShape> getOutShapes() { return outPorts.stream().map(PortModel::getShape).collect(Collectors.toList()); }
 
-    private void createPorts(List<PortShape> inShapes, List<PortShape> outShapes) {
-        int portSize = Config.PORT_SIZE;
-        for (int i = 0; i < inShapes.size(); i++) {
-            int yOffset = (i + 1) * getHeight() / (inShapes.size() + 1) - portSize / 2;
-            inPorts.add(new PortModel(getX(), getY() + yOffset, inShapes.get(i), true));
-        }
-        for (int i = 0; i < outShapes.size(); i++) {
-            int yOffset = (i + 1) * getHeight() / (outShapes.size() + 1) - portSize / 2;
-            outPorts.add(new PortModel(getX() + getWidth() - portSize, getY() + yOffset, outShapes.get(i), false));
-        }
-    }
+    /* --- بافر بیت --- */
+    public int  getBitBufferSize() { return bitBuffer.size(); }
+    public int  getBitBufferFree() { return Config.MAX_BUFFER_CAPACITY - bitBuffer.size(); }
+    public Deque<PacketModel> getBitBuffer() { return bitBuffer; }
 
-    @Override
-    public void setX(int x) {
-        super.setX(x);
-        updatePortsPosition();
-    }
+    /* --- بافر حجیم --- */
+    public int           getLargeBufferSize() { return largeBuffer.size(); }
+    public int           getLargeBufferFree() { return Config.MAX_LARGE_BUFFER_CAPACITY - largeBuffer.size(); }
+    public Deque<LargePacket> getLargeBuffer() { return largeBuffer; }
 
-    @Override
-    public void setY(int y) {
-        super.setY(y);
-        updatePortsPosition();
-    }
+    /** خواندن یک LargePacket از ابتدای صف؛ اگر خالی باشد null برمی‌گرداند. */
+    public LargePacket pollLarge() { return largeBuffer.pollFirst(); }
 
-    private void updatePortsPosition() {
-        int portSize = Config.PORT_SIZE;
-        for (int i = 0; i < inPorts.size(); i++) {
-            int yOffset = (i + 1) * getHeight() / (inPorts.size() + 1) - portSize / 2;
-            PortModel pm = inPorts.get(i);
-            pm.setX(getX());
-            pm.setY(getY() + yOffset);
-        }
-        for (int i = 0; i < outPorts.size(); i++) {
-            int yOffset = (i + 1) * getHeight() / (outPorts.size() + 1) - portSize / 2;
-            PortModel pm = outPorts.get(i);
-            pm.setX(getX() + getWidth() - portSize);
-            pm.setY(getY() + yOffset);
-        }
-    }
-    public String getId() {
-                return id;
-            }
-    public List<PortShape> getInShapes() {
-        return inPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
-    }
-
-    public List<PortShape> getOutShapes() {
-        return outPorts.stream().map(PortModel::getShape).collect(Collectors.toList());
-    }
-
-    public List<PortModel> getInPorts() {
-        return java.util.Collections.unmodifiableList(inPorts);
-    }
-
-    public List<PortModel> getOutPorts() {
-        return java.util.Collections.unmodifiableList(outPorts);
-    }
-
-    public void addBehavior(SystemBehavior behavior) {
-        if (!behaviors.contains(behavior)) {
-            behaviors.add(behavior);
-        }
-    }
-
-    public void removeBehavior(SystemBehavior behavior) {
-        behaviors.remove(behavior);
-    }
-
-    public List<SystemBehavior> getBehaviors() {
-        return Collections.unmodifiableList(behaviors);
-    }
-
-    public boolean hasUnprocessedEntries() {
-        return !newEntries.isEmpty();
-    }
-
+    /* ====== ENQUEUE— نقطهٔ ورودی مشترک ====== */
     public boolean enqueue(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return false;
+        if (!enabled && enteredPort != null) return false;
 
-        if (!enabled && enteredPort != null) {
-            return false;
+        final boolean added;
+
+        /* پکت معمولی (BitPacket و مشتقات) */
+        if (!(packet instanceof LargePacket)) {
+            if (bitBuffer.size() >= Config.MAX_BUFFER_CAPACITY) return false;
+            added = bitBuffer.offerLast(packet);
+
+            /* پکت حجیم */
+        } else {
+            if (largeBuffer.size() >= Config.MAX_LARGE_BUFFER_CAPACITY) return false;
+            added = largeBuffer.offerLast((LargePacket) packet);
         }
 
-        if (buffer.size() >= Config.MAX_BUFFER_CAPACITY) {
-            return false;
-        }
-
-        if (enteredPort != null) {
-            SystemBehaviorAdapter.EnteredPortTracker.record(packet, enteredPort);
-        }
-
-        final boolean added = buffer.offer(packet);
+        /* ثبت ورودی تازه برای رخداد‌ها */
         if (added) {
+            if (enteredPort != null)
+                SystemBehaviorAdapter.EnteredPortTracker.record(packet, enteredPort);
             newEntries.offer(new PacketEntry(packet, enteredPort));
         }
-
         return added;
     }
 
-    public boolean enqueue(PacketModel packet) {
-        return enqueue(packet, null);
-    }
+    /** نسخهٔ ساده‌تر وقتی پورت ورودی مهم نیست. */
+    public boolean enqueue(PacketModel packet) { return enqueue(packet, null); }
 
-    public PacketModel pollPacket() {
-        return buffer.poll();
-    }
+    /* ====== عملیات بر روی بیت‏بافر ====== */
 
-    public void clearBuffer() {
-        buffer.clear();
-        newEntries.clear();
-        SystemBehaviorAdapter.EnteredPortTracker.clear();
-    }
+    /** دریافت بستهٔ بعدی از bitBuffer؛ LargePacket را برنمی‌گرداند. */
+    public PacketModel pollPacket() { return bitBuffer.pollFirst(); }
 
-    public Queue<PacketModel> getBuffer() {
-        return buffer;
-    }
-
-    public void disable() {
-        this.enabled = false;
-        this.disableTimer = Config.SYSTEM_DISABLE_DURATION;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    @Override
-    public void update(double dt) {
-        if (!enabled) {
-            disableTimer -= dt;
-            if (disableTimer <= 0) {
-                enabled = true;
-            }
-        }
-
-        if (enabled != lastEnabledState) {
-            for (SystemBehavior behavior : behaviors) {
-                behavior.onEnabledChanged(enabled);
-            }
-            lastEnabledState = enabled;
-        }
-
-        for (SystemBehavior behavior : behaviors) {
-            behavior.update(dt);
-        }
-
-        PacketEntry entry;
-        while ((entry = newEntries.poll()) != null) {
-            for (SystemBehavior behavior : behaviors) {
-                behavior.onPacketEnqueued(entry.packet, entry.enteredPort);
-            }
-        }
-    }
-
-    /** افزودن پورت خروجی (لبهٔ راست) + به‌روزرسانی چینش پورت‌ها */
-    public void addOutputPort(PortShape shape) {
-        if (outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
-        int portSize = Config.PORT_SIZE;
-        PortModel newPort = new PortModel(
-                getX() + getWidth() - portSize,
-                getY(),
-                shape,
-                false
-        );
-        outPorts.add(newPort);
-        updatePortsPosition();
-    }
-
-    public boolean removeOutputPort() {
-        if (outPorts.isEmpty()) return false;
-        outPorts.remove(outPorts.size() - 1);
-        updatePortsPosition();
+    /** درج در ابتدای bitBuffer (برای اولویت دادن) */
+    public boolean enqueueFront(PacketModel packet) {
+        if (packet == null) return false;
+        if (bitBuffer.size() >= Config.MAX_BUFFER_CAPACITY) return false;
+        bitBuffer.addFirst(packet);
+        newEntries.offer(new PacketEntry(packet, null));
         return true;
     }
 
+    /** حذف دلخواه از هر دو بافر */
     public boolean removeFromBuffer(PacketModel packet) {
         if (packet == null) return false;
-        return buffer.remove(packet);
+        if (packet instanceof LargePacket lp)  return largeBuffer.remove(lp);
+        else                                   return bitBuffer .remove(packet);
     }
 
-    public boolean enqueueFront(PacketModel packet) {
-        if (packet == null) return false;
-        if (buffer instanceof java.util.Deque<PacketModel> deq) {
-            if (deq.size() >= Config.MAX_BUFFER_CAPACITY) return false;
-            deq.addFirst(packet);
-            newEntries.offer(new PacketEntry(packet, null));
-            return true;
+    /** پاک‌سازی هر دو بافر + ردگیری‌های رویداد */
+    public void clearBuffer() {
+        bitBuffer  .clear();
+        largeBuffer.clear();
+        newEntries .clear();
+        SystemBehaviorAdapter.EnteredPortTracker.clear();
+    }
+
+    /* ====== قابلیت‌های غیرفعال/فعال ====== */
+    public void disable()             { enabled = false; disableTimer = Config.SYSTEM_DISABLE_DURATION; }
+    public void disableFor(double s ) { if (s>0) { enabled = false; disableTimer = s; } }
+    public boolean isEnabled()        { return enabled; }
+
+    /* ====== به‌روزرسانی هر فریم ====== */
+    @Override
+    public void update(double dt) {
+
+        /* مدیریت زمان غیرفعال بودن */
+        if (!enabled) {
+            disableTimer -= dt;
+            if (disableTimer <= 0) enabled = true;
         }
-        return enqueue(packet, null);
+
+        /* آگاه‌سازی رفتارها در صورت تغییر حالت فعال/غیرفعال */
+        if (enabled != lastEnabledState) {
+            for (SystemBehavior b : behaviors) b.onEnabledChanged(enabled);
+            lastEnabledState = enabled;
+        }
+
+        /* به‌روزرسانی رفتارها */
+        for (SystemBehavior b : behaviors) b.update(dt);
+
+        /* ارسال رویداد «بسته‌ای وارد شد» به رفتارها */
+        PacketEntry entry;
+        while ((entry = newEntries.poll()) != null) {
+            for (SystemBehavior b : behaviors)
+                b.onPacketEnqueued(entry.packet, entry.enteredPort);
+        }
     }
 
-    /** افزودن پورت ورودی (لبهٔ چپ) + به‌روزرسانی چینش پورت‌ها */
-    public void addInputPort(PortShape shape) {
-        PortModel newPort = new PortModel(
-                getX(),   // left edge
-                getY(),
-                shape,
-                true
-        );
-        inPorts.add(newPort);
+    /* ====== مدیریت پورت‌های داینامیک (بدون تغییر) ====== */
+
+    private void createPorts(List<PortShape> inShapes, List<PortShape> outShapes) {
+        int ps = Config.PORT_SIZE;
+        for (int i = 0; i < inShapes.size(); i++) {
+            int yOff = (i + 1) * getHeight() / (inShapes.size() + 1) - ps / 2;
+            inPorts.add(new PortModel(getX(), getY() + yOff, inShapes.get(i), true));
+        }
+        for (int i = 0; i < outShapes.size(); i++) {
+            int yOff = (i + 1) * getHeight() / (outShapes.size() + 1) - ps / 2;
+            outPorts.add(new PortModel(getX() + getWidth() - ps, getY() + yOff, outShapes.get(i), false));
+        }
+    }
+
+    @Override public void setX(int x){ super.setX(x); updatePortsPosition(); }
+    @Override public void setY(int y){ super.setY(y); updatePortsPosition(); }
+
+    private void updatePortsPosition() {
+        int ps = Config.PORT_SIZE;
+        for (int i = 0; i < inPorts.size(); i++) {
+            int yOff = (i + 1) * getHeight() / (inPorts.size() + 1) - ps / 2;
+            PortModel p = inPorts.get(i);
+            p.setX(getX()); p.setY(getY() + yOff);
+        }
+        for (int i = 0; i < outPorts.size(); i++) {
+            int yOff = (i + 1) * getHeight() / (outPorts.size() + 1) - ps / 2;
+            PortModel p = outPorts.get(i);
+            p.setX(getX() + getWidth() - ps); p.setY(getY() + yOff);
+        }
+    }
+
+    public void addBehavior(SystemBehavior b){ if(!behaviors.contains(b)) behaviors.add(b); }
+    public void removeBehavior(SystemBehavior b){ behaviors.remove(b); }
+    public List<SystemBehavior> getBehaviors(){ return Collections.unmodifiableList(behaviors); }
+
+    public boolean hasUnprocessedEntries(){ return !newEntries.isEmpty(); }
+
+    /* ---------- اضافه/حذف پورت خروجی ---------- */
+    public void addOutputPort(PortShape shape){
+        if(outPorts.size() >= Config.MAX_OUTPUT_PORTS) return;
+        int ps = Config.PORT_SIZE;
+        outPorts.add(new PortModel(getX() + getWidth() - ps, getY(), shape, false));
+        updatePortsPosition();
+    }
+    public boolean removeOutputPort(){
+        if(outPorts.isEmpty()) return false;
+        outPorts.remove(outPorts.size()-1);
+        updatePortsPosition();
+        return true;
+    }
+    @Deprecated
+    public Queue<PacketModel> getBuffer() {
+        return bitBuffer;      // همان بافر بیت را برمی‌گرداند
+    }
+
+
+    /* ---------- اضافه پورت ورودی ---------- */
+    public void addInputPort(PortShape shape){
+        int ps = Config.PORT_SIZE;
+        inPorts.add(new PortModel(getX(), getY(), shape, true));
         updatePortsPosition();
     }
 }
