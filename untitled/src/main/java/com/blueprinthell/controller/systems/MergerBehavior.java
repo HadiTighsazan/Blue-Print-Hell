@@ -6,6 +6,7 @@ import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.model.large.LargeGroupRegistry.GroupState;
 import com.blueprinthell.model.large.LargePacket;
+import com.blueprinthell.model.large.MergedPacket;
 import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.awt.*;
@@ -100,8 +101,7 @@ public final class MergerBehavior implements SystemBehavior {
             List<BitPacket> four = new ArrayList<>(BITS_PER_MERGE);
             for (int i = 0; i < BITS_PER_MERGE; i++) four.add(ctx.bits.removeFirst());
 
-            LargePacket merged = createMergedPacket(four);
-
+            MergedPacket merged = (MergedPacket) createMergedPacket(four);
             /* تلاش برای قرار دادن در largeBuffer */
             if (!box.enqueue(merged)) {
                 /* جا نیست → بیت‌ها را برگردان و از حلقه خارج شو */
@@ -117,45 +117,41 @@ public final class MergerBehavior implements SystemBehavior {
         }
     }
 
-    private LargePacket createMergedPacket(List<BitPacket> bits) {
+    private MergedPacket createMergedPacket(List<BitPacket> bits) {
         BitPacket first = bits.get(0);
 
-        Color c = first.getColor();
+        java.awt.Color c = first.getColor();
         int chunkUnits = BITS_PER_MERGE;
 
-        LargePacket lp = new LargePacket(
+        MergedPacket lp = new MergedPacket(
                 PacketType.SQUARE,
                 Config.DEFAULT_PACKET_SPEED,
-                chunkUnits
+                chunkUnits,
+                first.getGroupId(),
+                first.getParentSizeUnits(), // expectedBits = اندازه‌ی اولیه گروه
+                first.getColorId()
         );
         lp.setCustomColor(c);
         lp.setWidth (chunkUnits * Config.PACKET_SIZE_MULTIPLIER);
         lp.setHeight(chunkUnits * Config.PACKET_SIZE_MULTIPLIER);
 
+        // برای سازگاری با سایر مسیرها اگر setGroupInfo استفاده می‌شود، نگهش می‌داریم
         lp.setGroupInfo(first.getGroupId(), first.getParentSizeUnits(), first.getColorId());
-        lp.setOriginal(false);
-        KinematicsRegistry.copyProfile(first, lp);
+        lp.markRebuilt();
         return lp;
     }
-
-    /* ===================== Registry / Loss =========================== */
     private void closeGroup(GroupContext ctx) {
-        int totalBitsMerged = ctx.mergeCount * BITS_PER_MERGE;
         GroupState st = registry.get(ctx.groupId);
         if (st == null) return;
 
-        registry.registerPartialMerge(ctx.groupId, totalBitsMerged, BITS_PER_MERGE);
 
-        int actualLoss = registry.calculateActualLoss(ctx.groupId);
-        if (actualLoss > 0) lossModel.incrementBy(actualLoss);
-
+        int totalBitsMerged = ctx.mergeCount * BITS_PER_MERGE;
         if (totalBitsMerged >= st.expectedBits) {
             registry.closeGroup(ctx.groupId);
             registry.removeGroup(ctx.groupId);
         }
     }
 
-    /* ===================== Helpers =================================== */
     private void clear() {
         groups.clear();
         rrQueue.clear();

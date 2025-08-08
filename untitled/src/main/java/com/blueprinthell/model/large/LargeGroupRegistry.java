@@ -158,31 +158,19 @@ public final class LargeGroupRegistry {
         GroupState st = groups.get(groupId);
         if (st == null) return 0;
 
-        List<Integer> merges = st.getPartialMerges();
+        var merges = st.getPartialMerges();
         if (merges.isEmpty()) {
-            // اگر هیچ ادغامی نشده، کل سایز اصلی Loss است
-            return st.originalSizeUnits;
+            return st.originalSizeUnits; // هیچ مرجی به مقصد نرسیده
         }
 
-        // محاسبه حاصلضرب n1 * n2 * ... * nk
+        int i = merges.size();
         double product = 1.0;
-        for (int size : merges) {
-            product *= size;
-        }
+        for (int a : merges) product *= a;
 
-        // محاسبه ریشه k-ام
-        int k = merges.size();
-        double kthRoot = Math.pow(product, 1.0 / k);
-
-        // محاسبه مقدار بازیابی شده: floor(k * kth_root)
-        int recovered = (int) Math.floor(k * kthRoot);
-
-        // محاسبه Loss = سایز اصلی - مقدار بازیابی شده
+        // فرمول جدید: recovered = floor( i * sqrt(product) )
+        int recovered = (int) Math.floor(i * Math.sqrt(product));
         return Math.max(0, st.originalSizeUnits - recovered);
     }
-    public int getTotalBitsProduced() { return totalBitsProduced; }
-    public int getTotalBitsLost() { return totalBitsLost; }
-    public int getTotalBitsMerged() { return totalBitsMerged; }
 
 
 }

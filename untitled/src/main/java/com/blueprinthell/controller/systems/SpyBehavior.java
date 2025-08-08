@@ -71,7 +71,7 @@ public final class SpyBehavior implements SystemBehavior {
                 if (!routeTeleportedPacket(packet)) {
                     // If routing failed, put it in the buffer
                     if (!box.enqueue(packet)) {
-                        lossModel.increment();
+                        lossModel.incrementPacket(packet);
                     } else {
                     }
                 }
@@ -146,7 +146,7 @@ public final class SpyBehavior implements SystemBehavior {
         if (PacketOps.isConfidential(packet)) {
             if (box.removeFromBuffer(packet)) {
                 destroyedConfidentialCount++;
-                lossModel.increment();
+                lossModel.incrementPacket(packet);
             }
             return;
         }

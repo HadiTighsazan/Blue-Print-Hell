@@ -161,6 +161,8 @@ public class SimulationRegistrar {
             PacketConsumerController consumer = new PacketConsumerController(
                     sink, scoreModel, coinModel, lossModel, simulation); // اضافه کردن simulation
             simulation.register(consumer);
+            consumer.setLargeGroupRegistry(largeGroupRegistry);
+            lossModel.setLargeGroupRegistry(largeGroupRegistry);
         }
 
         registerOptionalControllers(wires, boxes, destMap);

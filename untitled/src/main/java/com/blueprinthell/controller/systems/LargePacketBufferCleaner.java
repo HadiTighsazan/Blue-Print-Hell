@@ -20,6 +20,7 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
 
     @Override
     public void update(double dt) {
+        // no-op
     }
 
     @Override
@@ -27,12 +28,12 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
         if (!(packet instanceof LargePacket)) {
             return;
         }
-
         clearBufferExceptLarge((LargePacket) packet);
     }
 
     @Override
     public void onEnabledChanged(boolean enabled) {
+        // no-op
     }
 
     private void clearBufferExceptLarge(LargePacket newLarge) {
@@ -41,30 +42,23 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             return;
         }
 
-        // جمع‌آوری تمام پکت‌های موجود در بافر
+        // Drain all packets
         List<PacketModel> allPackets = new ArrayList<>();
         PacketModel p;
         while ((p = box.pollPacket()) != null) {
             allPackets.add(p);
         }
 
-        int destroyedUnits = 0;
-
-        // فقط پکت حجیم جدید را نگه می‌داریم
+        // Re-enqueue only the new large packet; drop others.
         for (PacketModel packet : allPackets) {
             if (packet == newLarge) {
                 box.enqueue(packet);
             } else {
-                         if (packet instanceof LargePacket lp) {
-                                 destroyedUnits += lp.getOriginalSizeUnits();
-                             } else {
-                                 destroyedUnits++;
-                             }
+                // مهم: فقط پکت‌های غیر بیت/غیر حجیم فوراً Loss می‌دهند.
+                // BitPacket و هر نوع LargePacket (اولیه/مرج‌شده) اینجا Loss آنی ندارند.
+                lossModel.incrementPacket(packet);
+                // عمداً آن را به بافر برنمی‌گردانیم → حذف می‌شود.
             }
-        }
-
-        if (destroyedUnits  > 0) {
-            lossModel.incrementBy(destroyedUnits);
         }
     }
 }

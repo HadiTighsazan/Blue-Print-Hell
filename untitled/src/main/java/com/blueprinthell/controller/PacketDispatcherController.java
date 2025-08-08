@@ -4,6 +4,7 @@ import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.SystemKind;
 import com.blueprinthell.model.*;
 import com.blueprinthell.model.large.LargePacket;
+import com.blueprinthell.model.large.MergedPacket;
 
 import java.util.List;
 import java.util.Map;
@@ -46,11 +47,9 @@ public class PacketDispatcherController implements Updatable {
 
             for (PacketModel packet : arrived) {
 
-                // بررسی و شمارش عبور LargePacket
-                if (packet instanceof LargePacket) {
+                if (packet instanceof LargePacket lp && !lp.isRebuiltFromBits() && !(packet instanceof MergedPacket)) {
                     wire.incrementLargePacketPass();
 
-                    // بررسی آیا سیم باید حذف شود
                     if (wire.shouldBeDestroyed()) {
                         if (wireRemover != null) {
                             wireRemover.scheduleRemoval(wire);
@@ -59,7 +58,6 @@ public class PacketDispatcherController implements Updatable {
                         }
                     }
                 }
-
                 if (durability != null) {
                     durability.onPacketArrived(packet, wire);
                 }

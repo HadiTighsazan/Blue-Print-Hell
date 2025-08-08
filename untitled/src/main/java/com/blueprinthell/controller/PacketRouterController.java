@@ -274,20 +274,12 @@ public class PacketRouterController implements Updatable {
     }
 
     private void drop(PacketModel packet) {
-        lossModel.increment();
+        lossModel.incrementPacket(packet); // خودش نوع را تشخیص می‌دهد
         droppedPackets++;
     }
 
-    public long getPacketsRouted() { return packetsRouted; }
-    public long getIncompatibleRoutes() { return incompatibleRoutes; }
-    public long getDroppedPackets() { return droppedPackets; }
-    // اضافه کردن این کد به PacketRouterController.java
 
-    // در PacketRouterController.java - اضافه/تغییر این متدها:
 
-    /**
-     * Enhanced processTeleportedPackets - better detection
-     */
     private void processTeleportedPackets() {
         // Check if this is a spy system
         if (box.getPrimaryKind() != SystemKind.SPY) {
@@ -321,7 +313,8 @@ public class PacketRouterController implements Updatable {
                 if (!routed) {
                     // Put back in buffer if routing failed
                     if (!box.enqueue(packet)) {
-                        drop(packet);
+                        lossModel.incrementPacket(packet);
+
                     } else {
                     }
                 } else {
