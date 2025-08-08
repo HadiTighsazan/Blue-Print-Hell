@@ -363,6 +363,17 @@ public class PacketRouterController implements Updatable {
         if (!hasAvailableRoute()) {
             return;
         }
+         if (box.getPrimaryKind() == SystemKind.MERGER) {
+              while (hasAvailableRoute()) {
+                     LargePacket lp = box.pollLarge();
+                         if (lp == null) break;
+                       boolean routed = routePacket(lp);
+                      if (!routed) {
+                                    box.enqueueFront(lp);
+                                  break;
+                                   }
+                       }
+                           }
 
         if (box.getPrimaryKind() == SystemKind.DISTRIBUTOR) {
             // فقط پکت‌های معمولی (BitPacket ها) را پردازش کن

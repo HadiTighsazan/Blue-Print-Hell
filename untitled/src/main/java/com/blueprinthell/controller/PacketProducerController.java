@@ -205,7 +205,6 @@ public class PacketProducerController implements Updatable {
         boolean finished = producedCount >= totalToProduce && inFlight == 0;
         // برای دیباگ:
         if (!finished && producedCount >= totalToProduce) {
-            System.out.println("Waiting for " + inFlight + " packets in flight...");
         }
         return finished;
     }

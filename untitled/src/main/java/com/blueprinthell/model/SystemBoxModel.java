@@ -259,4 +259,11 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     public boolean isMerger() {
         return primaryKind == SystemKind.MERGER;
     }
+       public boolean enqueueFront(LargePacket lp) {
+                if (lp == null) return false;
+                if (largeBuffer.size() >= Config.MAX_LARGE_BUFFER_CAPACITY) return false;
+                largeBuffer.addFirst(lp);
+                // توجه: این بازگردانی داخلی است، نیازی به ثبت در EnteredPortTracker نیست
+                       return true;
+            }
 }
