@@ -182,24 +182,35 @@ public final class MotionStrategyFactory {
             if (len <= 0) return;
 
             double effective = speed;
+
             // Long-wire accel فقط برای پیام‌رسان‌ها
             if (PacketOps.isMessenger(packet) && len >= Config.LONG_WIRE_THRESHOLD_PX) {
-                double v0      = Math.max(packet.getSpeed(), speed);
-                double vmax    = packet.getBaseSpeed() * Config.LONG_WIRE_MAX_SPEED_MUL;
-                double v1      = Math.min(v0 + Config.LONG_WIRE_ACCEL * dt, vmax);
-                effective      = Math.max(speed, v1);
+                double v0   = Math.max(packet.getSpeed(), speed);
+                double vmax = packet.getBaseSpeed() * Config.LONG_WIRE_MAX_SPEED_MUL;
+                double v1   = Math.min(v0 + Config.LONG_WIRE_ACCEL * dt, vmax);
+                effective   = Math.max(speed, v1);
                 packet.setSpeed(effective);
             } else {
-                // در حالت عادی سرعت ثابت را روی مدل نگه داریم
-                packet.setSpeed(speed);
+                // *** نکته‌ی مهم: برای پکت محرمانه سرعت از بیرون قابل تحمیل باشد (throttle) ***
+                if (packet instanceof com.blueprinthell.model.ConfidentialPacket) {
+                    // اگر قبلاً throttled شده بود همان را نگه دار، وگرنه روی سرعت قاعده بیفت
+                    double ext = packet.getSpeed();
+                    effective  = (ext > 0) ? ext : speed;
+                    packet.setSpeed(effective);
+                } else {
+                    packet.setSpeed(speed);
+                }
             }
-            double dp = (effective * dt) / len;
 
+            double dp = (effective * dt) / len;
             double next = packet.getProgress() + dp;
             if (next > 1.0) next = 1.0;
             packet.setProgress(next);
+
+            // همخوانی state داخلی مدل با سرعتی که واقعاً استفاده شد
             packet.setSpeed(effective);
         }
+
     }
 
     private static final class LinearAccelStrategy implements MotionStrategy {
@@ -252,15 +263,19 @@ public final class MotionStrategyFactory {
         }
     }
 
-    // در MotionStrategyFactory.java - کلاس KeepDistanceStrategy را بهبود دهید:
 
     private static final class KeepDistanceStrategy implements MotionStrategy {
-        private final double baseSpeed;
-        private final double minGapPx;
+        private final double baseSpeed;   // px/s
+        private final double minGapPx;    // حداقل فاصله‌ی مطلوب روی سیم (px)
+
+        private static final double K_FWD  = 2.0;   // وقتی پشت سر ما خیلی نزدیک است → جلو رفتن
+        private static final double K_BACK = 2.0;   // وقتی جلوی ما خیلی نزدیک است → عقب‌رفتن
+        private static final double EPS    = 2.0;   // هیسترزیس کوچک برای جلوگیری از نوسان
+        private static final double VMAX_MUL = 2.0; // سقف |سرعت| نسبت به baseSpeed
 
         KeepDistanceStrategy(MotionRule rule, double gap) {
             this.baseSpeed = rule.speedStart;
-            this.minGapPx = gap;
+            this.minGapPx  = gap;
         }
 
         @Override
@@ -268,40 +283,77 @@ public final class MotionStrategyFactory {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
 
-            double speed = baseSpeed;
-            double myProg = packet.getProgress();
-            double len = wire.getLength();
+            final double len    = wire.getLength();
+            if (len <= 0) return;
 
-            // بررسی فاصله با سایر پکت‌ها روی همین سیم
-            for (PacketModel other : wire.getPackets()) {
+            final double myProg = packet.getProgress();
+            double speed = baseSpeed; // پیش‌فرض: حرکت رو به جلو با سرعت پایه
+
+            // فقط روی همان سیم بررسی می‌کنیم
+            double nearestFrontPx = Double.POSITIVE_INFINITY; // نزدیک‌ترین پکت جلوی ما
+            double nearestBackPx  = Double.POSITIVE_INFINITY; // نزدیک‌ترین پکت پشت سر ما
+
+            // اسنپ‌شات برای جلوگیری از ConcurrentModification
+            List<PacketModel> snapshot = new ArrayList<>(wire.getPackets());
+            for (PacketModel other : snapshot) {
                 if (other == packet) continue;
 
-                double dProg = Math.abs(other.getProgress() - myProg);
-                double pxDist = dProg * len;
+                double dProg  = other.getProgress() - myProg;
+                double pxDist = Math.abs(dProg) * len;
 
-                // اگر خیلی نزدیک هستیم
-                if (pxDist < minGapPx) {
-                    // اگر جلوتر هستیم، سرعت کم کن
-                    if (other.getProgress() > myProg && !packet.isReturning()) {
-                        speed *= 0.3; // کاهش 50% سرعت
-                    }
-                    // اگر عقب‌تر هستیم، سرعت زیاد کن
-                    else if (other.getProgress() < myProg && !packet.isReturning()) {
-                        speed *= 1.8; // افزایش 50% سرعت
-                    }
+                if (dProg > 0) { // جلوتر از ما
+                    if (pxDist < nearestFrontPx) nearestFrontPx = pxDist;
+                } else if (dProg < 0) { // عقب‌تر از ما
+                    if (pxDist < nearestBackPx) nearestBackPx = pxDist;
                 }
             }
 
-            // محدودیت‌های سرعت
-            speed = Math.max(10, Math.min(speed, baseSpeed * 2));
+            // اگر پکت در حالت returning است، مانند قبل هیچ تنظیم فاصله‌ای اعمال نکنیم
+            boolean active = !packet.isReturning();
 
-            double dp = (speed * dt) / len;
+            if (active) {
+                boolean tooCloseFront = nearestFrontPx < (minGapPx - EPS);
+                boolean tooCloseBack  = nearestBackPx  < (minGapPx - EPS);
+
+                if (tooCloseFront && tooCloseBack) {
+                    // بین دو پکت گیر افتاده‌ایم → بهترین کار توقف موقت است
+                    speed = 0.0;
+                } else if (tooCloseFront) {
+                    // پکت جلویی زیادی نزدیک است → کمی عقب برو
+                    double err = (minGapPx - nearestFrontPx); // px
+                    speed = -K_BACK * err; // منفی یعنی عقب‌رفتن
+                } else if (tooCloseBack) {
+                    // پکت پشتی زیادی نزدیک است → کمی جلو برو
+                    double err = (minGapPx - nearestBackPx); // px
+                    speed =  K_FWD * err; // مثبت یعنی جلو رفتن
+                } else {
+                    // فاصله‌ها مناسب‌اند → با سرعت پایه به جلو حرکت کن
+                    speed = baseSpeed;
+                }
+            } else {
+                // returning: رفتار قبلی را حفظ می‌کنیم (حرکت با سرعت پایه به جلو)
+                speed = baseSpeed;
+            }
+
+            // کلمپ سرعت به بازه‌ی مجاز
+            double vmax = Math.max(0.0, baseSpeed * VMAX_MUL);
+            if (Math.abs(speed) > vmax) {
+                speed = Math.copySign(vmax, speed);
+            }
+
+            // پیشروی روی سیم؛ جهت می‌تواند منفی باشد (عقب‌گرد)
+            double dp   = (speed * dt) / len;
             double next = myProg + dp;
+
+            if (next < 0.0) next = 0.0;
             if (next > 1.0) next = 1.0;
-            packet.setSpeed(speed);
+
+            // برای نمایش/HUD سرعت را قدرمطلق می‌گذاریم؛ جهت را با dp/پیشروی کنترل می‌کنیم
+            packet.setSpeed(Math.abs(speed));
             packet.setProgress(next);
         }
     }
+
     private static final class DriftStrategy implements MotionStrategy {
         private final double baseSpeed;
         private final double stepDist;
@@ -339,7 +391,6 @@ public final class MotionStrategyFactory {
         }
     }
 
-    // Safety wrapper: limit approach speed near destination for all types
     private static final class ApproachLimiterWrapper implements MotionStrategy {
         private final MotionStrategy delegate;
         ApproachLimiterWrapper(MotionStrategy d) { this.delegate = d; }

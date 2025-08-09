@@ -2,8 +2,11 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
+import com.blueprinthell.motion.MotionStrategy;
+import com.blueprinthell.motion.ConstantSpeedStrategy;
 
 import java.util.*;
+
 
 public class ConfidentialThrottleController implements Updatable {
 
@@ -12,8 +15,11 @@ public class ConfidentialThrottleController implements Updatable {
 
     private boolean enabled = true;
 
-    // Phase-4 additions: remember original/base speeds to restore after congestion clears
-    private final Map<PacketModel, Double> baseSpeed = new WeakHashMap<>();
+    private final Map<PacketModel, MotionStrategy> originalStrategy =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    private final Set<PacketModel> throttled =
+            Collections.newSetFromMap(new WeakHashMap<>());
 
     public ConfidentialThrottleController(List<WireModel> wires,
                                           Map<WireModel, SystemBoxModel> destMap) {
@@ -28,41 +34,50 @@ public class ConfidentialThrottleController implements Updatable {
         this.destMap = Objects.requireNonNull(destMap, "destMap");
     }
 
-    // در فایل ConfidentialThrottleController.java - خط 42 به بعد را جایگزین کنید:
-
     @Override
     public void update(double dt) {
         if (!enabled) return;
 
+        // مقدار کندی: اگر در Config اشتباهاً صفر/منفی بود، کمی مثبتش می‌کنیم
+        double slowSpeed = Config.CONF_SLOW_SPEED;
+        if (slowSpeed <= 0.0) slowSpeed = 0.1;
+
         for (WireModel w : wires) {
-            SystemBoxModel dest = destMap.get(w);
+            final SystemBoxModel dest = destMap.get(w);
             if (dest == null) continue;
 
-            // بررسی وضعیت بافر مقصد
-            boolean congested = !dest.getBuffer().isEmpty();
+            // طبق خواسته‌ی شما: فقط همین بافر مقصد ملاک شلوغی باشد
+            final boolean congested = !dest.getBuffer().isEmpty();
 
-            for (PacketModel p : w.getPackets()) {
-                // فقط پکت‌های محرمانه را بررسی کن
+            // از اسنپ‌شات استفاده می‌کنیم که اگر لیست داخلی تغییر کرد، ConcurrentModification نگیریم
+            final List<PacketModel> packets = new ArrayList<>(w.getPackets());
+            for (PacketModel p : packets) {
+                // فقط محرمانه‌ها؛ VPNها منطق فاصله‌گذاری خودشان را دارند
                 if (!(p instanceof ConfidentialPacket)) continue;
-
-                // پکت‌های VPN variant را نادیده بگیر (آن‌ها منطق خودشان را دارند)
                 if (PacketOps.isConfidentialVpn(p)) continue;
 
-                // اگر در حال نزدیک شدن به مقصد هستیم (پیشرفت > 70%)
-                if (p.getProgress() > 0.7 && !p.isReturning()) {
-                    if (congested) {
-                        // ذخیره سرعت اصلی و کاهش سرعت
-                        baseSpeed.putIfAbsent(p, p.getSpeed());
-                        double slow = Config.CONF_SLOW_SPEED;
-                        if (p.getSpeed() > slow) {
-                            p.setSpeed(slow);
+                // شرط فاز شما:
+                final boolean shouldThrottle =
+                        (p.getProgress() > 0.0) && !p.isReturning() && congested;
+
+                if (shouldThrottle) {
+                    if (!throttled.contains(p)) {
+                        // ذخیره‌ی استراتژی فعلی و سوییچ به کند
+                        final MotionStrategy current = p.getMotionStrategy();
+                        if (current != null) {
+                            originalStrategy.put(p, current);
                         }
-                    } else {
-                        // بازگردانی سرعت اصلی
-                        Double orig = baseSpeed.remove(p);
-                        if (orig != null && orig > 0) {
-                            p.setSpeed(orig);
+                        p.setMotionStrategy(new ConstantSpeedStrategy(slowSpeed));
+                        throttled.add(p);
+                    }
+                } else {
+                    // اگر دیگر لازم نیست کند باشد و قبلاً کندش کرده‌ایم: استراتژی اصلی را برگردان
+                    if (throttled.contains(p)) {
+                        final MotionStrategy original = originalStrategy.remove(p);
+                        if (original != null) {
+                            p.setMotionStrategy(original);
                         }
+                        throttled.remove(p);
                     }
                 }
             }

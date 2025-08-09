@@ -36,9 +36,9 @@ public class Level1 extends AbstractLevel {
                 300, 150,
                 Collections.singletonList(PortShape.SQUARE),
                 Collections.singletonList(PortShape.TRIANGLE),
-                SystemKind.NORMAL
+                SystemKind.VPN
         );
-        boxes.add(withId("L1-B2-NORMAL", _b2));
+        boxes.add(withId("L1-B2-VPN", _b2));
 
         // 1-3: Distributor برای تقسیم پکت‌های حجیم
         LevelDefinition.BoxSpec _b3 = createBox(

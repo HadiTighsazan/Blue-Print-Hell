@@ -107,7 +107,7 @@ public final class Config {
     public static final int   PACKET_SIZE_UNITS_CIRCLE = 1;
     public static final int   PACKET_COINS_CIRCLE      = 1;
     public static final Color COLOR_PACKET_CIRCLE      = new Color(0x39B54A);
-
+    public static final Color CONF_VPN_COLOR = new Color(0xFF, 0x66, 0xCC);
     public static final int BIT_PACKET_SIZE = 2;
     public static final java.awt.Color COLOR_PACKET_LARGE = new java.awt.Color(0x8E44AD);
 
