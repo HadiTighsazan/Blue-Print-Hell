@@ -37,8 +37,11 @@ public class PacketLossModel {
         if (registry == null) return 0;
         int total = 0;
         for (var e : registry.view().entrySet()) {
+            var st = e.getValue();
+            if (!st.isClosed()) continue;            // فقط گروه‌های بسته‌شده
             total += registry.calculateActualLoss(e.getKey());
         }
         return total;
     }
+
 }

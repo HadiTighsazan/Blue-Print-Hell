@@ -148,7 +148,6 @@ public final class MergerBehavior implements SystemBehavior {
         int totalBitsMerged = ctx.mergeCount * BITS_PER_MERGE;
         if (totalBitsMerged >= st.expectedBits) {
             registry.closeGroup(ctx.groupId);
-            registry.removeGroup(ctx.groupId);
         }
     }
 

@@ -67,6 +67,8 @@ public final class DistributorBehavior implements SystemBehavior {
 
             /* اگر بیت بافر پر است، فعلاً صبر کن تا فریم بعد */
             if (box.getBitBufferFree() == 0) break;
+            System.out.printf("[Dist] scheduleSplit gid? pending=%d bitFree=%d%n",
+                    pendingLargePackets.size(), box.getBitBufferFree());
 
             scheduleSplit(lp);                        // زمان‌بندی Split
             processedPackets.add(lp);
@@ -128,6 +130,8 @@ public final class DistributorBehavior implements SystemBehavior {
             return;
         }
 
+        System.out.printf("[Dist] group %d created: parent=%d expectedBits=%d%n",
+                groupId, parentSize, expectedBits);
 
         /* --- ثبت وضعیت تولید تدریجی بیت‌ها --- */
         remainingBits.merge(groupId, expectedBits, Integer::sum);
@@ -155,6 +159,8 @@ public final class DistributorBehavior implements SystemBehavior {
             int parentSize = parentSizeByGrp.get(gid);
             int colorId    = colorIdByGrp   .get(gid);
             int index      = nextIndexByGrp .get(gid);
+            System.out.printf("[Dist] emit bit gid=%d left=%d free=%d%n",
+                    gid, left, box.getBitBufferFree());
 
             BitPacket bit = new BitPacket(
                     PacketType.CIRCLE,

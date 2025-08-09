@@ -74,8 +74,12 @@ public final class LargeGroupRegistry {
     }
 
     public boolean registerArrival(int groupId, PacketModel bit) {
+
         GroupState st = groups.get(groupId);
+
         if (st == null || st.closed) return false;
+        System.out.printf("[LGR] arrival gid=%d recv=%d/%d%n", groupId, st.getReceivedBits(), st.expectedBits);
+
         st.addPacket(bit);
         return st.isComplete();
     }
@@ -111,6 +115,8 @@ public final class LargeGroupRegistry {
 
     public void closeGroup(int groupId) {
         GroupState st = groups.get(groupId);
+        System.out.printf("[LGR] close gid=%d%n", groupId);
+
         if (st != null) st.close();
     }
 
@@ -157,6 +163,7 @@ public final class LargeGroupRegistry {
     public int calculateActualLoss(int groupId) {
         GroupState st = groups.get(groupId);
         if (st == null) return 0;
+        if (!st.isClosed()) return 0;
 
         var merges = st.getPartialMerges();
         if (merges.isEmpty()) {
