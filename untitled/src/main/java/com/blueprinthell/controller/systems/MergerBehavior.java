@@ -110,9 +110,11 @@ public final class MergerBehavior implements SystemBehavior {
                 break;
             }
 
+            registry.registerPartialMerge(gid, /*bitCount=*/BITS_PER_MERGE, /*mergedPacketSize=*/BITS_PER_MERGE);
+
             ctx.mergeCount++;
 
-            /* اگر دوباره ≥۴ بیت ماند، به انتهای صف برگردد */
+            /* اگر دوباره ≥۴ بیت ماند ... */
             if (ctx.bits.size() >= BITS_PER_MERGE) rrQueue.addLast(gid);
         }
     }

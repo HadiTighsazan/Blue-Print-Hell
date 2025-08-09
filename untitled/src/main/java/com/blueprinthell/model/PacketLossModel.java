@@ -43,5 +43,10 @@ public class PacketLossModel {
         }
         return total;
     }
+    public void finalizeDeferredLossNow() {
+        if (registry != null) {
+            registry.closeAllOpenGroups();
+        }
+    }
 
 }

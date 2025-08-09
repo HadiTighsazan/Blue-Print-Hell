@@ -178,6 +178,14 @@ public final class LargeGroupRegistry {
         int recovered = (int) Math.floor(i * Math.sqrt(product));
         return Math.max(0, st.originalSizeUnits - recovered);
     }
+    public void closeAllOpenGroups() {
+        for (var e : groups.entrySet()) {
+            GroupState st = e.getValue();
+            if (st != null && !st.isClosed()) {
+                st.close();
+            }
+        }
+    }
 
 
 }

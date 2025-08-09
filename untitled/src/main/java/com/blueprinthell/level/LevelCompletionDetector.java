@@ -48,52 +48,60 @@ public class LevelCompletionDetector implements Updatable {
             return;
         }
 
+        // تا وقتی تولید تمام نشده، امکان سکون واقعی نیست
         if (!producer.isFinished()) {
             stableAcc = 0.0;
             return;
         }
 
+        // 1) هیچ پکتی روی هیچ واییری نباشد
         boolean wiresEmpty = wires.stream()
                 .allMatch(w -> w.getPackets().isEmpty());
 
-        // بررسی خاص برای Merger ها و سایر سیستم‌ها
+        // 2) آماده‌بودن تمام باکس‌ها
+        //    - مرجر: largeBuffer خالی و تعداد بیت‌ها < 4 و backlog نداشته باشد
+        //    - سینک: فقط backlog نداشته باشد
+        //    - سایر سیستم‌ها: هر دو بافر خالی و backlog نداشته باشد
         boolean boxesReady = boxes.stream()
                 .allMatch(b -> {
                     boolean noBacklog = !b.hasUnprocessedEntries();
                     boolean isSink = b.getOutPorts().isEmpty();
 
-                    // برای Merger ها: باید کمتر از 4 بیت داشته باشند
                     if (b.getPrimaryKind() == SystemKind.MERGER) {
-                        // شمارش BitPacket ها در بافر
                         long bitCount = b.getBitBuffer().stream()
                                 .filter(p -> p instanceof BitPacket)
                                 .count();
-                        return bitCount < 4 && noBacklog;
+                        boolean largeEmpty = b.getLargeBuffer().isEmpty();
+                        return (bitCount < 4) && largeEmpty && noBacklog;
                     }
 
-                    // برای Sink ها
                     if (isSink) {
                         return noBacklog;
                     }
 
-                    // برای سایر سیستم‌ها
                     boolean bufEmpty = b.getBitBuffer().isEmpty() && b.getLargeBuffer().isEmpty();
                     return noBacklog && bufEmpty;
                 });
 
+        // 3) هیچ پکت برگشتی در راه نباشد
         boolean noReturning = wires.stream()
                 .flatMap(w -> w.getPackets().stream())
                 .noneMatch(PacketModel::isReturning);
 
-        // محاسبه نسبت loss بر اساس واحدهای تولیدی
-        int producedUnits = producer.getProducedUnits();
-        double lossRatio = producedUnits > 0
-                ? (double) lossModel.getLostCount() / producedUnits
-                : 0.0;
-
-        boolean acceptableLoss = lossRatio < lossThreshold; // کمتر از 50%
-
         if (wiresEmpty && boxesReady && noReturning) {
+            // --- تسویه‌ی خسارت مؤخره در نقطه‌ی سکون ---
+            // این متد (پچ 3) همه‌ی گروه‌های باز رجیستری را می‌بندد (idempotent)
+            lossModel.finalizeDeferredLossNow();
+
+            // حالا نسبت Loss با احتساب مؤخره
+            int producedUnits = producer.getProducedUnits();
+            double lossRatio = producedUnits > 0
+                    ? (double) lossModel.getLostCount() / producedUnits
+                    : 0.0;
+
+            // کمتر از آستانه = قابل قبول (طبق کامنت موجود)
+            boolean acceptableLoss = lossRatio < lossThreshold;
+
             if (acceptableLoss) {
                 stableAcc += dt;
                 if (stableAcc >= STABLE_WINDOW_S) {
@@ -101,11 +109,13 @@ public class LevelCompletionDetector implements Updatable {
                     SwingUtilities.invokeLater(levelManager::reportLevelCompleted);
                 }
             } else {
-                // اگر loss بیش از حد است، بازی تمام نمی‌شود
+                // اگر loss بیش از حد است، اینجا گزارش مرحله را نمی‌دهیم
+                // (در صورت نیاز، می‌توانی در همین‌جا GameOver را هم تریگر کنی)
                 stableAcc = 0.0;
             }
         } else {
             stableAcc = 0.0;
         }
     }
+
 }
