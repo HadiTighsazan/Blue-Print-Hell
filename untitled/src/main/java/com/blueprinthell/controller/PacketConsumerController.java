@@ -79,7 +79,7 @@ public class PacketConsumerController implements Updatable {
         if (packet instanceof LargePacket lp) {
             if (lp.isRebuiltFromBits() && lp.getGroupId() >= 0) {
 
-                var sim = WireModel.getSimulationController();
+                SimulationController sim = WireModel.getSimulationController();
                 if (sim != null) {
                     // رجیستری را از PacketLossModel برداریم تا وابستگی کم شود
                     LargeGroupRegistry reg = null;
