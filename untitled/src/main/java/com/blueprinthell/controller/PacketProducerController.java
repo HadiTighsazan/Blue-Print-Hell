@@ -130,7 +130,7 @@ public class PacketProducerController implements Updatable {
 
                             // حالا اگر می‌خواهید، آن را به محرمانه تبدیل کنید
                             // این کار باید بعد از ساخت پکت پایه انجام شود
-                            if (RND.nextInt(10) < 10) { // برای تست، همیشه محرمانه
+                            if (RND.nextInt(10) < 5) { // برای تست، همیشه محرمانه
                                 packet = PacketOps.toConfidential(packet);
                             }
 

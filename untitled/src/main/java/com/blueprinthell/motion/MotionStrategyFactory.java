@@ -20,6 +20,7 @@ public final class MotionStrategyFactory {
     public static MotionStrategy create(PacketModel packet, boolean compatible) {
         Objects.requireNonNull(packet, "packet");
 
+
         if (PacketOps.isConfidentialVpn(packet)) {
             KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL_VPN);
             return new KeepDistanceStrategy(
@@ -266,16 +267,21 @@ public final class MotionStrategyFactory {
 
     private static final class KeepDistanceStrategy implements MotionStrategy {
         private final double baseSpeed;   // px/s
-        private final double minGapPx;    // حداقل فاصله‌ی مطلوب روی سیم (px)
+        private final double minGapPx;    // فاصله هدف روی سیم (px)
 
-        private static final double K_FWD  = 2.0;   // وقتی پشت سر ما خیلی نزدیک است → جلو رفتن
-        private static final double K_BACK = 2.0;   // وقتی جلوی ما خیلی نزدیک است → عقب‌رفتن
-        private static final double EPS    = 2.0;   // هیسترزیس کوچک برای جلوگیری از نوسان
-        private static final double VMAX_MUL = 2.0; // سقف |سرعت| نسبت به baseSpeed
+        // از Config خوانده می‌شود تا بیرونی و قابل‌تنظیم باشد
+        private static final double HYST    = Config.CONF_VPN_HYSTERESIS_PX; // مثلا 5
+        private static final double A_MAX   = Config.CONF_VPN_MAX_ACCEL;     // px/s^2
+        private static final double D_MAX   = Config.CONF_VPN_MAX_DECEL;     // px/s^2
+        private static final double VMAX_MUL = 2.0;                           // سقف |v| نسبت به base
+
+        // ضرایب کنترلی سبک
+        private static final double K_FWD  = 2.0;   // پشتی نزدیک → جلو رفتن
+        private static final double K_BACK = 2.0;   // جلویی نزدیک → عقب رفتن
 
         KeepDistanceStrategy(MotionRule rule, double gap) {
-            this.baseSpeed = rule.speedStart;
-            this.minGapPx  = gap;
+            this.baseSpeed = rule.speedStart;    // معمولاً = Config.CONF_VPN_SPEED
+            this.minGapPx  = gap;                // معمولاً = Config.CONF_VPN_KEEP_DIST_PX
         }
 
         @Override
@@ -283,74 +289,77 @@ public final class MotionStrategyFactory {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
 
-            final double len    = wire.getLength();
+            final double len = wire.getLength();
             if (len <= 0) return;
 
             final double myProg = packet.getProgress();
-            double speed = baseSpeed; // پیش‌فرض: حرکت رو به جلو با سرعت پایه
 
-            // فقط روی همان سیم بررسی می‌کنیم
-            double nearestFrontPx = Double.POSITIVE_INFINITY; // نزدیک‌ترین پکت جلوی ما
-            double nearestBackPx  = Double.POSITIVE_INFINITY; // نزدیک‌ترین پکت پشت سر ما
+            // نزدیک‌ترین همسایه‌ها روی همین سیم بر اساس progress
+            double nearestFrontPx = Double.POSITIVE_INFINITY;
+            double nearestBackPx  = Double.POSITIVE_INFINITY;
 
-            // اسنپ‌شات برای جلوگیری از ConcurrentModification
             List<PacketModel> snapshot = new ArrayList<>(wire.getPackets());
             for (PacketModel other : snapshot) {
                 if (other == packet) continue;
 
-                double dProg  = other.getProgress() - myProg;
+                double dProg  = other.getProgress() - myProg; // جلو + ، عقب -
                 double pxDist = Math.abs(dProg) * len;
 
-                if (dProg > 0) { // جلوتر از ما
+                if (dProg > 0) {
                     if (pxDist < nearestFrontPx) nearestFrontPx = pxDist;
-                } else if (dProg < 0) { // عقب‌تر از ما
+                } else if (dProg < 0) {
                     if (pxDist < nearestBackPx) nearestBackPx = pxDist;
                 }
             }
 
-            // اگر پکت در حالت returning است، مانند قبل هیچ تنظیم فاصله‌ای اعمال نکنیم
+            // هدف سرعت (علامت‌دار)
+            double targetV = baseSpeed; // پیش‌فرض: جلو با سرعت پایه
             boolean active = !packet.isReturning();
 
             if (active) {
-                boolean tooCloseFront = nearestFrontPx < (minGapPx - EPS);
-                boolean tooCloseBack  = nearestBackPx  < (minGapPx - EPS);
+                boolean tooCloseFront = nearestFrontPx < (minGapPx - HYST);
+                boolean tooCloseBack  = nearestBackPx  < (minGapPx - HYST);
 
                 if (tooCloseFront && tooCloseBack) {
-                    // بین دو پکت گیر افتاده‌ایم → بهترین کار توقف موقت است
-                    speed = 0.0;
+                    targetV = 0.0; // بین دو پکت گیر کرده‌ایم
                 } else if (tooCloseFront) {
-                    // پکت جلویی زیادی نزدیک است → کمی عقب برو
-                    double err = (minGapPx - nearestFrontPx); // px
-                    speed = -K_BACK * err; // منفی یعنی عقب‌رفتن
+                    double err = (minGapPx - nearestFrontPx);
+                    targetV = -K_BACK * err; // عقب‌گرد
                 } else if (tooCloseBack) {
-                    // پکت پشتی زیادی نزدیک است → کمی جلو برو
-                    double err = (minGapPx - nearestBackPx); // px
-                    speed =  K_FWD * err; // مثبت یعنی جلو رفتن
+                    double err = (minGapPx - nearestBackPx);
+                    targetV = baseSpeed + K_FWD * err; // کمی تندتر جلو برو
                 } else {
-                    // فاصله‌ها مناسب‌اند → با سرعت پایه به جلو حرکت کن
-                    speed = baseSpeed;
+                    targetV = baseSpeed; // داخل باند هیسترزیس
                 }
             } else {
-                // returning: رفتار قبلی را حفظ می‌کنیم (حرکت با سرعت پایه به جلو)
-                speed = baseSpeed;
+                targetV = baseSpeed; // returning
             }
 
-            // کلمپ سرعت به بازه‌ی مجاز
+            // سقف سرعت مجاز
             double vmax = Math.max(0.0, baseSpeed * VMAX_MUL);
-            if (Math.abs(speed) > vmax) {
-                speed = Math.copySign(vmax, speed);
-            }
+            if (Math.abs(targetV) > vmax) targetV = Math.copySign(vmax, targetV);
 
-            // پیشروی روی سیم؛ جهت می‌تواند منفی باشد (عقب‌گرد)
-            double dp   = (speed * dt) / len;
+            // کلمپ dv (شتاب/ترمز) برای حذف پیک‌ها
+            double vNow  = packet.getSpeed(); // مقدار فعلی (بدون علامت)
+            double dvMax = ((Math.abs(targetV) > vNow) ? A_MAX : D_MAX) * dt;
+            double vNext = stepTowardSigned(vNow, targetV, dvMax);
+
+            // پیشروی روی سیم با سرعت علامت‌دار
+            double dp   = (vNext * dt) / len;
             double next = myProg + dp;
-
             if (next < 0.0) next = 0.0;
             if (next > 1.0) next = 1.0;
 
-            // برای نمایش/HUD سرعت را قدرمطلق می‌گذاریم؛ جهت را با dp/پیشروی کنترل می‌کنیم
-            packet.setSpeed(Math.abs(speed));
+            // سرعت را بدون علامت ذخیره می‌کنیم (جهت را progress تعیین می‌کند)
+            packet.setSpeed(Math.abs(vNext));
             packet.setProgress(next);
+        }
+
+        private static double stepTowardSigned(double currentAbs, double targetSigned, double dvMax) {
+            double currentSigned = currentAbs; // فرض رو به جلو؛ هدف علامت را تعیین می‌کند
+            double diff = targetSigned - currentSigned;
+            if (Math.abs(diff) <= dvMax) return targetSigned;
+            return currentSigned + Math.copySign(dvMax, diff);
         }
     }
 

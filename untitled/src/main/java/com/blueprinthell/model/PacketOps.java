@@ -89,30 +89,27 @@ public final class PacketOps {
         // اگر از قبل Confidential + VPN-tag بود، همان را برگردان
         if (isConfidentialVpn(original)) return original;
 
-        // اگر از قبل Confidential-4 است، از روی ابعاد فعلی مقیاس 6/4 بدهیم
+        // اگر از قبل محرمانه (۴ واحدی) است: حتماً یک ConfidentialPacket بساز و 1.5× کن
         if (isConfidential(original)) {
-            PacketModel conf6 = clonePlain(original);
-            // scale 6/4 نسبت به ابعاد فعلی
-            conf6.setWidth((int) Math.round(original.getWidth()  * (6.0 / 4.0)));
-            conf6.setHeight((int) Math.round(original.getHeight() * (6.0 / 4.0)));
+            ConfidentialPacket conf6 = ConfidentialPacket.wrap(original); // حفظ کلاسِ Confidential
+            conf6.setWidth( (int)Math.round(conf6.getWidth()  * (6.0/4.0)) );
+            conf6.setHeight((int)Math.round(conf6.getHeight() * (6.0/4.0)) );
             tag(conf6, PacketTag.CONFIDENTIAL_VPN);
             KinematicsRegistry.setProfile(conf6, KinematicsProfile.CONFIDENTIAL_VPN);
             return conf6;
         }
 
-        // در غیر این صورت از روی پیام‌رسان/پکت ورودی بسازیم (مثل wrap معمولی، اما 6 واحد)
-        PacketModel conf = ConfidentialPacket.wrap(original);
-
+        // در غیر این صورت، از روی پکت ورودی، محرمانه ۶ واحدی بساز
+        ConfidentialPacket conf = ConfidentialPacket.wrap(original);
         int suOrig = Math.max(1, original.getType().sizeUnits);
         int w = original.getWidth();
         int h = original.getHeight();
         if (w > 0 && h > 0) {
             double pxPerUnitW = (double) w / suOrig;
             double pxPerUnitH = (double) h / suOrig;
-            conf.setWidth((int) Math.round(pxPerUnitW * 6));
-            conf.setHeight((int) Math.round(pxPerUnitH * 6));
+            conf.setWidth( (int)Math.round(pxPerUnitW * 6) );
+            conf.setHeight((int)Math.round(pxPerUnitH * 6) );
         }
-
         tag(conf, PacketTag.CONFIDENTIAL_VPN);
         KinematicsRegistry.setProfile(conf, KinematicsProfile.CONFIDENTIAL_VPN);
         return conf;

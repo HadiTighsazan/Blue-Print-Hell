@@ -124,7 +124,7 @@ public class SimulationRegistrar {
 
         Map<PortModel, SystemBoxModel> portToBoxMap = new HashMap<>();
         for (SystemBoxModel b : boxes) {
-            for (PortModel p : b.getInPorts()) portToBoxMap.put(p, b);
+            for (PortModel p : b.getInPorts())  portToBoxMap.put(p, b);
             for (PortModel p : b.getOutPorts()) portToBoxMap.put(p, b);
         }
         collisionController.setPortToBoxMap(portToBoxMap);
@@ -134,14 +134,22 @@ public class SimulationRegistrar {
             WireModel.setSourceInputPorts(sources);
         }
 
+        // 1) خود باکس‌ها
         for (SystemBoxModel b : boxes) {
             if (!already.contains(b)) simulation.register(b);
         }
 
+        // 2) *** Dispatcher قبل از Behavior-Adapter ها ***
+        PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
+        this.dispatcherRef = dispatcher;
+        simulation.register(dispatcher);
+
+        // 3) Behavior ها و Adapterها (از جمله VPN)
         for (SystemBoxModel box : boxes) {
             attachBehaviorsForBox(box, boxes, wires, destMap);
         }
 
+        // 4) Router ها
         for (SystemBoxModel box : boxes) {
             if (!box.getOutPorts().isEmpty()) {
                 PacketRouterController router = new PacketRouterController(box, wires, destMap, lossModel);
@@ -149,27 +157,27 @@ public class SimulationRegistrar {
             }
         }
 
+        // 5) Producer (اگر هست)
         if (producer != null) {
             simulation.register(producer);
         }
 
-        PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
-        this.dispatcherRef = dispatcher;
-        simulation.register(dispatcher);
-
+        // 6) Consumer (Sink) و رجیستری گروه‌ها
         if (sink != null) {
             PacketConsumerController consumer = new PacketConsumerController(
-                    sink, scoreModel, coinModel, lossModel, simulation); // اضافه کردن simulation
+                    sink, scoreModel, coinModel, lossModel, simulation);
             simulation.register(consumer);
             consumer.setLargeGroupRegistry(largeGroupRegistry);
             lossModel.setLargeGroupRegistry(largeGroupRegistry);
         }
 
+        // 7) سایر کنترلرهای اختیاری (timeout, durability, throttle, ...)
         registerOptionalControllers(wires, boxes, destMap);
 
         int plannedTotal = (sources != null && producer != null)
                 ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
                 : 0;
+
         if (screenController != null) {
             LossMonitorController lossMonitor = new LossMonitorController(
                     lossModel,
@@ -206,6 +214,7 @@ public class SimulationRegistrar {
         simulation.register(packetRenderer);
         simulation.register(collisionController);
     }
+
 
     private void attachBehaviorsForBox(SystemBoxModel box,
                                        List<SystemBoxModel> allBoxes,
@@ -355,7 +364,6 @@ public class SimulationRegistrar {
         }
         simulation.register(durability);
 
-        // *** کانکشن PacketDispatcherController به WireDurabilityController ***
         if (dispatcherRef != null) {
             dispatcherRef.setDurabilityController(durability);
 

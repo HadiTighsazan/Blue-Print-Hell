@@ -22,14 +22,10 @@ public final class SystemBehaviorAdapter implements Updatable {
 
     @Override
     public void update(double dt) {
-        // 1) Check enable/disable transitions
         checkEnabledState();
 
-        // 2) Detect newly enqueued packets
         checkNewPackets();
 
-        // 3) CRITICAL FIX: Propagate update to behavior
-        // This ensures SpyBehavior.update() gets called for processing teleported packets
         try {
             behavior.update(dt);
         } catch (Throwable t) {
@@ -66,51 +62,58 @@ public final class SystemBehaviorAdapter implements Updatable {
             if (p0 == null) continue;
             PacketModel p = p0;
 
-            // بقیه کد مثل قبل...
-            // تلاش برای بازگردانی Protected packets
-            try {
-                PacketModel original = VpnRevertHints.consumeGlobal(p);
-                if (original != null && original != p) {
-                    // جایگزینی در بافر مناسب
-                    if (p instanceof LargePacket) {
-                        // جایگزینی در largeBuffer
-                        Deque<LargePacket> tempLarge = new ArrayDeque<>();
-                        LargePacket lp;
-                        boolean replaced = false;
-                        while ((lp = box.pollLarge()) != null) {
-                            if (!replaced && lp == p) {
-                                tempLarge.addLast((LargePacket) original);
-                                replaced = true;
-                            } else {
-                                tempLarge.addLast(lp);
+            // *** فقط برای ProtectedPacket تلاش برای بازگردانی انجام بده ***
+            if (p instanceof ProtectedPacket) {
+                try {
+                    PacketModel original = VpnRevertHints.consumeGlobal(p);
+                    if (original != null && original != p) {
+                        // جایگزینی در بافر مناسب
+                        if (p instanceof LargePacket) {
+                            // largeBuffer
+                            Deque<LargePacket> tempLarge = new ArrayDeque<>();
+                            LargePacket lp;
+                            boolean replaced = false;
+                            while ((lp = box.pollLarge()) != null) {
+                                if (!replaced && lp == p) {
+                                    // original باید LargePacket باشد؛ اگر نبود، از enqueue عمومی استفاده کن
+                                    if (original instanceof LargePacket) {
+                                        tempLarge.addLast((LargePacket) original);
+                                    } else {
+                                        // برگشتِ غیرهم‌نوع: به بافر عمومی برگردان
+                                        box.enqueue(original);
+                                    }
+                                    replaced = true;
+                                } else {
+                                    tempLarge.addLast(lp);
+                                }
+                            }
+                            for (LargePacket l : tempLarge) {
+                                box.enqueue(l);
+                            }
+                        } else {
+                            // bitBuffer
+                            Deque<PacketModel> temp = new ArrayDeque<>();
+                            PacketModel q;
+                            boolean replaced = false;
+                            while ((q = box.pollPacket()) != null) {
+                                if (!replaced && q == p) {
+                                    temp.addLast(original);
+                                    replaced = true;
+                                } else {
+                                    temp.addLast(q);
+                                }
+                            }
+                            for (PacketModel r : temp) {
+                                box.enqueue(r);
                             }
                         }
-                        for (LargePacket l : tempLarge) {
-                            box.enqueue(l);
-                        }
-                    } else {
-                        // جایگزینی در bitBuffer (کد قبلی)
-                        Deque<PacketModel> temp = new ArrayDeque<>();
-                        PacketModel q;
-                        boolean replaced = false;
-                        while ((q = box.pollPacket()) != null) {
-                            if (!replaced && q == p) {
-                                temp.addLast(original);
-                                replaced = true;
-                            } else {
-                                temp.addLast(q);
-                            }
-                        }
-                        for (PacketModel r : temp) {
-                            box.enqueue(r);
-                        }
-                    }
 
-                    EnteredPortTracker.clearPacket(p);
-                    EnteredPortTracker.clearPacket(original);
-                    p = original;
-                }
-            } catch (Throwable ignore) {}
+                        EnteredPortTracker.clearPacket(p);
+                        EnteredPortTracker.clearPacket(original);
+                        p = original;
+                    }
+                } catch (Throwable ignore) {}
+            }
 
             current.add(p);
 
@@ -132,13 +135,13 @@ public final class SystemBehaviorAdapter implements Updatable {
     public PortModel findEnteredPort(PacketModel packet) {
         if (packet == null) return null;
 
-        // 1) Check tracked port
-        final PortModel tracked = EnteredPortTracker.peek(packet);
+        // رکورد ورود را یک‌بار مصرف کن تا در تیک‌های بعدی نلغزد
+        final PortModel tracked = EnteredPortTracker.consume(packet);
         if (tracked != null) {
             return tracked;
         }
 
-        // 2) Check current wire
+        // fallback: از روی سیم فعلی
         try {
             final WireModel w = packet.getCurrentWire();
             if (w != null) {

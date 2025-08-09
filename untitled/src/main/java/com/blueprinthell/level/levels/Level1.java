@@ -54,9 +54,9 @@ public class Level1 extends AbstractLevel {
                 500, 300,
                 Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
                 Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
-                SystemKind.NORMAL
+                SystemKind.VPN
         );
-        boxes.add(withId("L1-B4-NORMAL", _b4));
+        boxes.add(withId("L1-B4-VPN", _b4));
 
         // 1-5: Merger برای بازسازی پکت حجیم
         LevelDefinition.BoxSpec _b5 = createBox(

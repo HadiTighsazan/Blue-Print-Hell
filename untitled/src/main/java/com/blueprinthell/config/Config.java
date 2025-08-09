@@ -13,7 +13,7 @@ public final class Config {
     public static final PortShape DEFAULT_PORT_SHAPE = PortShape.SQUARE;
     public static final double MAX_TIME_ON_WIRE_SEC = 8.0;
     public static final double SYSTEM_DISABLE_DURATION =2.0 ;
-    public static final double MAX_ALLOWED_SPEED = 150.0;
+    public static final double MAX_ALLOWED_SPEED = 250;
     public static final int MERGE_SIZE = 4;
 
 
@@ -93,7 +93,7 @@ public final class Config {
     public static final double CONF_SLOW_SPEED = 60;
 
     public static final double CONF_VPN_SPEED        = 170;
-    public static final double CONF_VPN_KEEP_DIST_PX = 60;
+    public static final double CONF_VPN_KEEP_DIST_PX = 100;
 
     public static final double L8_BASE_SPEED   = 140;
     public static final double L8_CURVE_ACCEL  = 80;
@@ -140,4 +140,9 @@ public final class Config {
 
     public static final int MAX_LARGE_BUFFER_CAPACITY = 8;
     public static final int MAX_LP_SPLIT_PER_FRAME = 1;
+
+    public static final double CONF_VPN_HYSTERESIS_PX  = 5;    // هیسترزیس برای جلوگیری از نوسان
+    public static final double CONF_VPN_MAX_ACCEL      = 600;  // px/s^2
+    public static final double CONF_VPN_MAX_DECEL      = 800;  // px/s^2 (ترمز قوی‌تر)
+
 }
