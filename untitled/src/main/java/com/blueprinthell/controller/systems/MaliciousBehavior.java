@@ -118,7 +118,6 @@ public final class MaliciousBehavior implements SystemBehavior {
                 packet.getNoise(),
                 packet instanceof TrojanPacket
         );
-        // System.out.println(action); // Uncomment for debugging
     }
 
     // Telemetry getters
