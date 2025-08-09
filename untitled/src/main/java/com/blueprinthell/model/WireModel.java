@@ -222,24 +222,7 @@ public class WireModel implements Serializable {
         largePacketPassCount = 0;
     }
 
-    // فاصله‌ی خطی روی خود سیم بین دو پکت (برحسب پیکسل)
-    public double getAlongDistance(PacketModel a, PacketModel b) {
-        if (a == null || b == null) return Double.POSITIVE_INFINITY;
-        try {
-            if (a.getCurrentWire() != this || b.getCurrentWire() != this) {
-                return Double.POSITIVE_INFINITY;
-            }
-        } catch (Throwable ignore) {}
 
-        double t1 = a.getProgress();
-        double t2 = b.getProgress();
-
-        // کلمپ به [0..1]
-        if (t1 < 0) t1 = 0; else if (t1 > 1) t1 = 1;
-        if (t2 < 0) t2 = 0; else if (t2 > 1) t2 = 1;
-
-        return Math.abs(t1 - t2) * getLength();
-    }
 
 
 }
