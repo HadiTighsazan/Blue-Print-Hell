@@ -34,8 +34,6 @@ public final class VpnBehavior implements SystemBehavior {
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
-        System.out.printf("[VPN] onPacketEnqueued: %s  messenger=%s  protected=%s%n",
-                packet.getType(), PacketOps.isMessenger(packet), (packet instanceof ProtectedPacket));
 
         // اگر قبلاً محافظت شده، نادیده بگیر
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
@@ -48,8 +46,6 @@ public final class VpnBehavior implements SystemBehavior {
             VpnRevertHints.markGlobal(prot, packet);
             myProtectedPackets.add(prot);
             replaceInBuffer(packet, prot);
-            System.out.printf("[VPN] -> PROTECTED width=%d height=%d%n",
-                    prot.getWidth(), prot.getHeight());
 
             return;
         }

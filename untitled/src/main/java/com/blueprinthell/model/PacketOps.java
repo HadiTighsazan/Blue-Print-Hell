@@ -115,6 +115,10 @@ public final class PacketOps {
         return conf;
     }
     public static boolean isMessenger(PacketModel p) {
+        if (p == null) return false;
+
+        if (p instanceof com.blueprinthell.model.large.BitPacket) return false;
+
         if (p instanceof ProtectedPacket) return true;
 
         KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
