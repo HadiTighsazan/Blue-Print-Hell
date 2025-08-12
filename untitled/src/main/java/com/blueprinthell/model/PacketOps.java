@@ -114,17 +114,18 @@ public final class PacketOps {
         KinematicsRegistry.setProfile(conf, KinematicsProfile.CONFIDENTIAL_VPN);
         return conf;
     }
-
     public static boolean isMessenger(PacketModel p) {
-        if (p instanceof ProtectedPacket) return true;  // Protected از جنس پیام‌رسان تلقی شود
-        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
-        return prof == MSG1
-                || prof == MSG2
-                || prof == MSG3;
-    }
-    /* ---------------- ADDITIONS (Phase-1) ---------------- */
+        if (p instanceof ProtectedPacket) return true;
 
-    /** Lightweight tagging so VPN can mark confidential variants without new fields on models. */
+        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
+        if (prof != null) {
+            return prof == MSG1 || prof == MSG2 || prof == MSG3;
+        }
+
+        int su = Math.max(1, p.getType().sizeUnits);
+        return su <= 3 && !(p instanceof ConfidentialPacket) && !(p instanceof com.blueprinthell.model.large.LargePacket);
+    }
+
     public enum PacketTag {
         CONFIDENTIAL_VPN // Confidential with VPN semantics (keep-distance), coin=4
     }

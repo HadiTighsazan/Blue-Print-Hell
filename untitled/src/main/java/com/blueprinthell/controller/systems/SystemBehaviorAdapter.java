@@ -62,58 +62,7 @@ public final class SystemBehaviorAdapter implements Updatable {
             if (p0 == null) continue;
             PacketModel p = p0;
 
-            // *** فقط برای ProtectedPacket تلاش برای بازگردانی انجام بده ***
-            if (p instanceof ProtectedPacket) {
-                try {
-                    PacketModel original = VpnRevertHints.consumeGlobal(p);
-                    if (original != null && original != p) {
-                        // جایگزینی در بافر مناسب
-                        if (p instanceof LargePacket) {
-                            // largeBuffer
-                            Deque<LargePacket> tempLarge = new ArrayDeque<>();
-                            LargePacket lp;
-                            boolean replaced = false;
-                            while ((lp = box.pollLarge()) != null) {
-                                if (!replaced && lp == p) {
-                                    // original باید LargePacket باشد؛ اگر نبود، از enqueue عمومی استفاده کن
-                                    if (original instanceof LargePacket) {
-                                        tempLarge.addLast((LargePacket) original);
-                                    } else {
-                                        // برگشتِ غیرهم‌نوع: به بافر عمومی برگردان
-                                        box.enqueue(original);
-                                    }
-                                    replaced = true;
-                                } else {
-                                    tempLarge.addLast(lp);
-                                }
-                            }
-                            for (LargePacket l : tempLarge) {
-                                box.enqueue(l);
-                            }
-                        } else {
-                            // bitBuffer
-                            Deque<PacketModel> temp = new ArrayDeque<>();
-                            PacketModel q;
-                            boolean replaced = false;
-                            while ((q = box.pollPacket()) != null) {
-                                if (!replaced && q == p) {
-                                    temp.addLast(original);
-                                    replaced = true;
-                                } else {
-                                    temp.addLast(q);
-                                }
-                            }
-                            for (PacketModel r : temp) {
-                                box.enqueue(r);
-                            }
-                        }
 
-                        EnteredPortTracker.clearPacket(p);
-                        EnteredPortTracker.clearPacket(original);
-                        p = original;
-                    }
-                } catch (Throwable ignore) {}
-            }
 
             current.add(p);
 

@@ -147,7 +147,23 @@ public class PacketView extends GameObjectView<PacketModel> {
 
             int s = Math.min(w, h);
 
-            // اگر Protected: فقط بدنه با شفافیت کمتر
+            int units = model.getType().sizeUnits;
+            int expected = units * Config.PACKET_SIZE_MULTIPLIER;
+
+// اگر Protected است، اندازه باید 2× باشد
+            if (model instanceof ProtectedPacket) {
+                expected *= 2;
+            }
+
+// اگر اندازهٔ مدل/ویو با expected نمی‌خواند، همگام کن
+            if (model.getWidth() != expected || model.getHeight() != expected
+                    || getWidth() != expected || getHeight() != expected) {
+                model.setWidth(expected);
+                model.setHeight(expected);
+                setBounds(model.getX(), model.getY(), expected, expected);
+            }
+
+// از اینجا به بعد رسم عادی: (اگر Protected بود، آلفا را کم می‌کنیم)
             final boolean isProtected = (model instanceof ProtectedPacket);
             Composite savedComposite = null;
             if (isProtected) {
@@ -174,9 +190,7 @@ public class PacketView extends GameObjectView<PacketModel> {
                 case CIRCLE -> g2.fillOval(0, 0, s, s);
             }
 
-            // بازگردانی کامپوزیت برای Badgeها
             if (savedComposite != null) g2.setComposite(savedComposite);
-
             drawPacketBadges(g2, model, w, h);
 
         } finally {
