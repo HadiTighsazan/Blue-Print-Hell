@@ -9,10 +9,8 @@ import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.MotionStrategyFactory;
 
 import java.awt.*;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.HashMap;
 
 public class PacketProducerController implements Updatable {
 
@@ -79,8 +77,6 @@ public class PacketProducerController implements Updatable {
 
 
 
-    public int getProducedCount() { return producedCount; }
-    public int getPacketsPerPort() { return packetsPerPort; }
 
     @Override
     public void update(double dt) {
@@ -115,7 +111,7 @@ public class PacketProducerController implements Updatable {
 
                             // ابتدا پکت پایه را بسازید
                             if (out.getShape() == PortShape.CIRCLE) {
-                                if (RND.nextInt(10) < 0) {
+                                if (RND.nextInt(10) < 10) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
@@ -130,7 +126,7 @@ public class PacketProducerController implements Updatable {
 
                             // حالا اگر می‌خواهید، آن را به محرمانه تبدیل کنید
                             // این کار باید بعد از ساخت پکت پایه انجام شود
-                            if (RND.nextInt(10) < 10) { // برای تست، همیشه محرمانه
+                            if (RND.nextInt(10) < 0) { // برای تست، همیشه محرمانه
                                 packet = PacketOps.toConfidential(packet);
                             }
 
@@ -208,4 +204,50 @@ public class PacketProducerController implements Updatable {
         }
         return finished;
     }
+    public int getPacketsPerPort()      { return packetsPerPort; }
+    public int getTotalToProduce()      { return totalToProduce; }
+    public int getProducedCount()       { return producedCount; }
+    public int getInFlight()            { return inFlight; }
+    public boolean isRunning()          { return running; }
+
+
+    /** Emission accumulator (seconds) to preserve emission cadence. */
+    public double getAccumulatorSec()   { return acc; }
+    /** Unmodifiable view of per-port produced counters. */
+    public Map<PortModel,Integer> getProducedPerPortView() {
+        return Collections.unmodifiableMap(new HashMap<>(producedPerPort));
+    }
+
+        /** Aggregate list of all out-ports of all source boxes. */
+        public List<PortModel> getOutPorts() {
+                List<PortModel> outs = new ArrayList<>();
+                for (SystemBoxModel b : sourceBoxes) outs.addAll(b.getOutPorts());
+                return outs;
+            }
+    // -------------------- SNAPSHOT RESTORE --------------------
+      public void restoreFrom(int producedCount,
+                            int inFlight,
+                            double accumulatorSec,
+                            boolean running,
+                            Map<PortModel,Integer> perPortProduced) {
+                // variable counters
+                        this.producedCount  = Math.min(Math.max(0, producedCount), this.totalToProduce);
+                this.inFlight       = Math.max(0, inFlight);
+                this.acc            = Math.max(0.0, accumulatorSec);
+
+                        // rebuild per-port counters
+                                this.producedPerPort.clear();
+                if (perPortProduced != null) {
+                        for (Map.Entry<PortModel,Integer> e : perPortProduced.entrySet()) {
+                                int v = (e.getValue() == null) ? 0 : e.getValue();
+                                v = Math.max(0, Math.min(this.packetsPerPort, v)); // clamp by current final packetsPerPort
+                                if (e.getKey() != null) this.producedPerPort.put(e.getKey(), v);
+                            }
+                    }
+
+                        // only allow running if there's still budget left
+                                this.running = running && (this.producedCount < this.totalToProduce);
+            }
+
 }
+

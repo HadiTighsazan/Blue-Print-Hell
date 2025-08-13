@@ -18,7 +18,7 @@ public final class NetworkSnapshot implements Serializable {
 
     /** Top-level meta information. */
     public Meta meta;
-    /** World state (boxes, wires, counters). */
+    /** World state (boxes, wires, counters, producers). */
     public WorldState world;
     /** Large-packet group registry state. */
     public List<LargeGroupState> largeGroups;
@@ -61,16 +61,42 @@ public final class NetworkSnapshot implements Serializable {
 
         public double wireUsageTotal; // WireUsageModel.getTotalWireLength()
         public double wireUsageUsed;  // WireUsageModel.getUsedWireLength()
-
+        public List<WireState> wires  = new ArrayList<>();
         public List<BoxState> boxes = new ArrayList<>();
-        public List<WireState> wires = new ArrayList<>();
+
+        /** Snapshot of all packet producers (order-corresponds to controllers list). */
+        public List<ProducerState> producers = new ArrayList<>();
 
         public WorldState() {}
     }
+    // ---------------------------------------------------------------------
+    // PRODUCER
+    // ---------------------------------------------------------------------
+    /** Minimal, stable snapshot of a PacketProducerController. */
+    public static final class ProducerState implements Serializable {
+        /** How many packets each out-port is allowed to emit in this stage. */
+        public int packetsPerPort;
+        /** Total emission budget of this producer (outs * packetsPerPort). */
+        public int totalToProduce;
+        /** How many packets already emitted. */
+        public int producedCount;
+        /** How many packets currently in-flight on wires. */
+        public int inFlight;
+        /** Whether the producer was running at snapshot time. */
+        public boolean running;
+        /** Emission time accumulator (seconds) to preserve spacing between bursts. */
+        public double accumulatorSec;
+        /** Per-port emission counters keyed by (boxId, outIndex). */
+        public List<PortQuota> portQuotas = new ArrayList<>();
+    }
 
-    // ---------------------------------------------------------------------
-    // BOX
-    // ---------------------------------------------------------------------
+    /** Per-port quota/counter for a producer, keyed stably for snapshotting. */
+    public static final class PortQuota implements Serializable {
+        public String boxId;
+        public int outIndex;
+        public int producedForThisPort;
+    }
+
     public static final class BoxState implements Serializable {
         public String id;                 // SystemBoxModel.getId()
         public SystemKind primaryKind;    // kind at capture time
@@ -181,4 +207,5 @@ public final class NetworkSnapshot implements Serializable {
 
         public LargeGroupState() {}
     }
+
 }

@@ -16,7 +16,6 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 
-
 public final class SnapshotService {
 
     /* ---------------- Dependencies (immutable) ---------------- */
@@ -32,7 +31,9 @@ public final class SnapshotService {
     private final PacketRenderController         packetRenderer;
     private final List<PacketProducerController> producers;
     private final Map<WireModel, SystemBoxModel> destMap;
-    public SnapshotService(Map<WireModel, SystemBoxModel> destMap,List<SystemBoxModel> boxes,
+
+    public SnapshotService(Map<WireModel, SystemBoxModel> destMap,
+                           List<SystemBoxModel> boxes,
                            List<WireModel> wires,
                            ScoreModel scoreModel,
                            CoinModel coinModel,
@@ -43,20 +44,19 @@ public final class SnapshotService {
                            GameScreenView gameView,
                            PacketRenderController renderer,
                            List<PacketProducerController> producers) {
-        this.destMap=destMap;
-        this.boxes            = boxes;
-        this.wires            = wires;
-        this.scoreModel       = scoreModel;
-        this.coinModel        = coinModel;
-        this.lossModel        = lossModel;
-        this.usageModel       = usageModel;
-        this.snapshotManager  = snapshotManager;
-        this.hudView          = hudView;
-        this.gameView         = gameView;
-        this.packetRenderer   = renderer;
-        this.producers        = producers == null ? List.of() : producers;
+        this.destMap         = destMap;
+        this.boxes           = boxes;
+        this.wires           = wires;
+        this.scoreModel      = scoreModel;
+        this.coinModel       = coinModel;
+        this.lossModel       = lossModel;
+        this.usageModel      = usageModel;
+        this.snapshotManager = snapshotManager;
+        this.hudView         = hudView;
+        this.gameView        = gameView;
+        this.packetRenderer  = renderer;
+        this.producers       = (producers == null) ? List.of() : producers;
     }
-
 
     public void capture() { snapshotManager.recordSnapshot(buildSnapshot()); }
 
@@ -64,24 +64,49 @@ public final class SnapshotService {
         // نگاشت Port→Box برای تشخیص اندپوینت‌ها و ایندکس‌ها
         Map<PortModel, SystemBoxModel> portToBox = buildPortToBoxMap(this.boxes);
 
-        NetworkSnapshot snap = new NetworkSnapshot(scoreModel.getScore()); // DTO جدید
+        NetworkSnapshot snap = new NetworkSnapshot(scoreModel.getScore());
         // world counters
-        snap.world.coins = coinModel.getCoins();
-        snap.world.packetLoss = lossModel.getLostCount();
+        snap.world.coins          = coinModel.getCoins();
+        snap.world.packetLoss     = lossModel.getLostCount();
         snap.world.wireUsageTotal = usageModel.getTotalWireLength();
         snap.world.wireUsageUsed  = usageModel.getUsedWireLength();
+
+        // -------------------- PRODUCERS (CAPTURE) --------------------
+        snap.world.producers.clear();
+        for (PacketProducerController p : producers) {
+            ProducerState ps = new ProducerState();
+            ps.packetsPerPort = p.getPacketsPerPort();   // فقط برای دیباگ/اعتبارسنجی
+            ps.totalToProduce = p.getTotalToProduce();   // فقط برای دیباگ/اعتبارسنجی
+            ps.producedCount  = p.getProducedCount();
+            ps.inFlight       = p.getInFlight();
+            ps.running        = p.isRunning();
+            ps.accumulatorSec = p.getAccumulatorSec();
+
+            // per-port counters keyed by (boxId, outIndex)
+            Map<PortModel,Integer> map = p.getProducedPerPortView();
+            for (PortModel out : p.getOutPorts()) {
+                SystemBoxModel box = portToBox.get(out);
+                if (box == null) continue;
+                int outIndex = box.getOutPorts().indexOf(out);
+                if (outIndex < 0) continue;
+                PortQuota q = new PortQuota();
+                q.boxId = box.getId();
+                q.outIndex = outIndex;
+                q.producedForThisPort = map.getOrDefault(out, 0);
+                ps.portQuotas.add(q);
+            }
+            snap.world.producers.add(ps);
+        }
 
         // Boxes
         for (SystemBoxModel b : boxes) {
             BoxState bs = new BoxState();
-            bs.id = b.getId();
-            bs.primaryKind = b.getPrimaryKind();
-            bs.enabled = b.isEnabled();
-            // اگر getter تایمر را طبق گام ۲ اضافه کرده‌ای:
+            bs.id           = b.getId();
+            bs.primaryKind  = b.getPrimaryKind();
+            bs.enabled      = b.isEnabled();
             try { bs.disableTimer = b.isEnabled() ? 0.0 : b.getDisableTimer(); } catch (Throwable ignore) {}
             bs.inShapes.addAll(b.getInShapes());
             bs.outShapes.addAll(b.getOutShapes());
-            // بافرهای اختصاصی
             for (PacketModel p : b.getBitBuffer())    bs.bitBuffer.add(toPacketState(p));
             for (LargePacket lp : b.getLargeBuffer()) bs.largeBuffer.add(toPacketState(lp));
             snap.world.boxes.add(bs);
@@ -92,28 +117,31 @@ public final class SnapshotService {
             WireState ws = new WireState();
             SystemBoxModel from = portToBox.get(w.getSrcPort());
             SystemBoxModel to   = portToBox.get(w.getDstPort());
-            ws.fromBoxId   = from != null ? from.getId() : null;
-            ws.toBoxId     = to   != null ? to.getId()   : null;
+            ws.fromBoxId    = (from != null) ? from.getId() : null;
+            ws.toBoxId      = (to   != null) ? to.getId()   : null;
             ws.fromOutIndex = (from != null) ? indexOfPort(from.getOutPorts(), w.getSrcPort()) : -1;
-            ws.toInIndex    = (to   != null) ? indexOfPort(to.getInPorts(),   w.getDstPort()) : -1;
+            ws.toInIndex    = (to   != null) ? indexOfPort(to.getInPorts(),   w.getDstPort())  : -1;
+
             // مسیر
             for (Point p : w.getPath().getPoints()) ws.path.add(new IntPoint(p.x, p.y));
+
             // پکت‌های روی سیم
             for (PacketModel p : w.getPackets()) {
                 PacketOnWire pow = new PacketOnWire();
                 pow.base = toPacketState(p);
                 double prog = p.getProgress();
-                if (prog >= 0.999) prog = 0.999; if (prog < 0) prog = 0;
+                if (prog >= 0.999) prog = 0.999;
+                if (prog < 0) prog = 0;
                 pow.progress = prog;
                 ws.packetsOnWire.add(pow);
             }
+
             ws.largePassCount = w.getLargePacketPassCount();
             snap.world.wires.add(ws);
         }
 
         return snap;
     }
-
 
     public void restore(NetworkSnapshot snap) {
         if (snap == null) return;
@@ -123,21 +151,48 @@ public final class SnapshotService {
         coinModel.reset();    coinModel.add(snap.world.coins);
         lossModel.reset();    if (snap.world.packetLoss > 0) lossModel.incrementBy(snap.world.packetLoss);
 
-        // ✅ بازگردانی WireUsage – چون روی HUD و محدودیت‌ها اثر دارد
+        // WireUsage روی HUD/محدودیت‌ها اثر دارد
         usageModel.reset(snap.world.wireUsageTotal);
-        if (snap.world.wireUsageUsed > 0) {
-            usageModel.useWire(snap.world.wireUsageUsed);
-        }
+        if (snap.world.wireUsageUsed > 0) usageModel.useWire(snap.world.wireUsageUsed);
 
-        // توقف/ریست تولیدکننده‌ها
-        for (PacketProducerController p : producers) { p.reset(); p.stopProduction(); }
+        // تولیدکننده‌ها را متوقف کن (بدون reset)
+        for (PacketProducerController p : producers) p.stopProduction();
 
-        // نگاشت id→Box
+        // نگاشت‌ها
         Map<String, SystemBoxModel> idToBox = new HashMap<>();
         for (SystemBoxModel b : boxes) idToBox.put(b.getId(), b);
-
-        // نگاشت Port→Box (برای setPortToBoxMap و fallbackهای دیگر)
         Map<PortModel, SystemBoxModel> portToBox = buildPortToBoxMap(this.boxes);
+
+        // -------------------- PRODUCERS (RESTORE) --------------------
+        if (snap.world != null && snap.world.producers != null) {
+            int n = Math.min(producers.size(), snap.world.producers.size());
+            for (int i = 0; i < n; i++) {
+                PacketProducerController p = producers.get(i);
+                ProducerState st = snap.world.producers.get(i);
+
+                // بازسازی map پر-پورت از روی (boxId,outIndex)
+                Map<PortModel,Integer> perPort = new HashMap<>();
+                if (st.portQuotas != null) {
+                    for (PortQuota q : st.portQuotas) {
+                        SystemBoxModel box = idToBox.get(q.boxId);
+                        if (box == null) continue;
+                        List<PortModel> outs = box.getOutPorts();
+                        if (q.outIndex < 0 || q.outIndex >= outs.size()) continue;
+                        PortModel out = outs.get(q.outIndex);
+                        perPort.put(out, Math.max(0, q.producedForThisPort));
+                    }
+                }
+
+                // توجه: فیلدهای final در Producer از constructor آمده‌اند؛ اینجا فقط state متغیر را برمی‌گردانیم
+                p.restoreFrom(
+                        st.producedCount,
+                        st.inFlight,
+                        st.accumulatorSec,
+                        st.running,
+                        perPort
+                );
+            }
+        }
 
         // Box buffers
         for (BoxState bs : snap.world.boxes) {
@@ -152,7 +207,7 @@ public final class SnapshotService {
             for (PacketState ps : bs.largeBuffer) box.enqueueFront((LargePacket) fromPacketState(ps));
         }
 
-        // ✅ سیم‌ها را کاملاً طبق اسنپ‌شات «بازسازی» کن
+        // بازسازی کامل سیم‌ها طبق snapshot
         List<WireModel> rebuilt = new ArrayList<>();
         for (WireState ws : snap.world.wires) {
             SystemBoxModel from = idToBox.get(ws.fromBoxId);
@@ -165,16 +220,14 @@ public final class SnapshotService {
             PortModel dst = to.getInPorts().get(ws.toInIndex);
 
             WireModel wire = findWireByEndpoints(wires, src, dst);
-            if (wire == null) {
-                wire = new WireModel(src, dst);
-            }
+            if (wire == null) wire = new WireModel(src, dst);
 
             // مسیر
             List<Point> pts = new ArrayList<>();
             for (IntPoint ip : ws.path) pts.add(new Point(ip.x, ip.y));
             if (pts.size() >= 2) wire.setPath(new WirePath(pts));
 
-            // ست کردن نگاشت Port→Box روی خود Wire (برای getCanonicalId/fallbackها)
+            // نگاشت Port→Box برای wire
             wire.setPortToBoxMap(portToBox);
 
             // پکت‌های روی سیم
@@ -186,15 +239,15 @@ public final class SnapshotService {
                 pkt.setMotionStrategy(MotionStrategyFactory.create(pkt, compatible));
                 wire.attachPacket(pkt, pow.progress);
             }
-            // Restore large pass count (durability window)
+
+            // large pass count
             if (ws.largePassCount > 0) {
                 wire.resetLargePacketCounter();
-                for (int i = 0; i < ws.largePassCount; i++)
-                    wire.incrementLargePacketPass();
+                for (int i = 0; i < ws.largePassCount; i++) wire.incrementLargePacketPass();
             }
-            rebuilt.add(wire);
 
-             destMap.put(wire, to);
+            rebuilt.add(wire);
+            destMap.put(wire, to);
         }
 
         // جایگزینی لیست سیم‌های زنده با لیست بازسازی‌شده
@@ -211,7 +264,7 @@ public final class SnapshotService {
 
     public SnapshotManager getSnapshotManager() { return snapshotManager; }
 
-    // ----------------- helpers (new) -----------------
+    // ----------------- helpers -----------------
     private static Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {
         Map<PortModel, SystemBoxModel> map = new HashMap<>();
         for (SystemBoxModel b : boxes) {
@@ -233,7 +286,7 @@ public final class SnapshotService {
 
     private static PacketState toPacketState(PacketModel p) {
         PacketState ps = new PacketState();
-        ps.type = p.getType() != null ? p.getType().name() : null;
+        ps.type = (p.getType() != null) ? p.getType().name() : null;
         ps.speed = p.getSpeed();
         ps.acceleration = p.getAcceleration();
         ps.progress = p.getProgress();
@@ -301,7 +354,7 @@ public final class SnapshotService {
     }
 
     private static PacketModel fromPacketState(PacketState ps) {
-        PacketType t = ps.type != null ? PacketType.valueOf(ps.type) : PacketType.CIRCLE;
+        PacketType t = (ps.type != null) ? PacketType.valueOf(ps.type) : PacketType.CIRCLE;
         PacketModel base = new PacketModel(t, Config.DEFAULT_PACKET_SPEED);
         base.setSpeed(ps.speed);
         base.setAcceleration(ps.acceleration);
@@ -311,54 +364,43 @@ public final class SnapshotService {
         base.setCollisionCooldown(ps.collisionCooldown);
         base.setHoldWhileCooldown(ps.holdWhileCooldown);
 
-// خانواده
+        // خانواده
         if ("BIT".equals(ps.family)) {
-            int gid   = ps.groupId != null ? ps.groupId : 0;
-            int psize = ps.parentSizeUnits != null ? ps.parentSizeUnits : 0;
-            int idx   = ps.indexInGroup != null ? ps.indexInGroup : 0;
-            int col   = ps.colorId != null ? ps.colorId : 0;
+            int gid   = (ps.groupId != null) ? ps.groupId : 0;
+            int psize = (ps.parentSizeUnits != null) ? ps.parentSizeUnits : 0;
+            int idx   = (ps.indexInGroup != null) ? ps.indexInGroup : 0;
+            int col   = (ps.colorId != null) ? ps.colorId : 0;
             return BitPacket.fromSample(base, gid, psize, idx, col);
         }
-
         if ("MERGED".equals(ps.family)) {
-            int gid = ps.groupId != null ? ps.groupId : 0;
-            int exp = ps.expectedBits != null ? ps.expectedBits : 0;
-            int col = ps.colorId != null ? ps.colorId : 0;
-            int psize = ps.parentSizeUnits != null ? ps.parentSizeUnits : 0;
+            int gid   = (ps.groupId != null) ? ps.groupId : 0;
+            int exp   = (ps.expectedBits != null) ? ps.expectedBits : 0;
+            int col   = (ps.colorId != null) ? ps.colorId : 0;
+            int psize = (ps.parentSizeUnits != null) ? ps.parentSizeUnits : 0;
             return new MergedPacket(base.getType(), base.getBaseSpeed(), psize, gid, exp, col);
         }
-
         if ("LARGE".equals(ps.family)) {
-            int psize = ps.parentSizeUnits != null ? ps.parentSizeUnits : 0;
+            int psize = (ps.parentSizeUnits != null) ? ps.parentSizeUnits : 0;
             LargePacket lp = new LargePacket(base.getType(), base.getBaseSpeed(), psize);
-
             Integer gid = ps.groupId;
             Integer exp = ps.expectedBits;
             Integer col = ps.colorId;
-            if (gid != null && exp != null && col != null) {
-                lp.setGroupInfo(gid, exp, col);
-            }
-            if (Boolean.TRUE.equals(ps.rebuiltFromBits)) {
-                lp.markRebuilt();
-            }
+            if (gid != null && exp != null && col != null) lp.setGroupInfo(gid, exp, col);
+            if (Boolean.TRUE.equals(ps.rebuiltFromBits)) lp.markRebuilt();
             return lp;
         }
-
         if ("PROTECTED".equals(ps.family)) {
             double shield = (ps.protectedShield != null && ps.protectedShield > 0) ? ps.protectedShield : 1.0;
             return PacketOps.toProtected(base, shield);
         }
-
         if ("CONFIDENTIAL".equals(ps.family)) {
             boolean vpn = Boolean.TRUE.equals(ps.confidentialVpn);
             return vpn ? PacketOps.toConfidentialVpn(base) : PacketOps.toConfidential(base);
         }
-
         if ("TROJAN".equals(ps.family)) {
             PacketType orig = (ps.trojanOriginalType != null) ? PacketType.valueOf(ps.trojanOriginalType) : base.getType();
             return PacketOps.toTrojan(new PacketModel(orig, base.getBaseSpeed()));
         }
-
         return base;
     }
 }
