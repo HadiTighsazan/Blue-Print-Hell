@@ -203,8 +203,8 @@ public final class SnapshotService {
                 if (bs.disableTimer > 1e-6) box.disableFor(bs.disableTimer);
                 else box.disable();
             }
-            for (PacketState ps : bs.bitBuffer)   box.enqueueFront(fromPacketState(ps));
-            for (PacketState ps : bs.largeBuffer) box.enqueueFront((LargePacket) fromPacketState(ps));
+             for (PacketState ps : bs.bitBuffer)   box.enqueueBitSilently(fromPacketState(ps));
+             for (PacketState ps : bs.largeBuffer) box.enqueueLargeSilently((LargePacket) fromPacketState(ps));
         }
 
         // بازسازی کامل سیم‌ها طبق snapshot
@@ -322,6 +322,12 @@ public final class SnapshotService {
                 ps.expectedBits = lp.getExpectedBits();
                 ps.colorId = lp.getColorId();
             }
+            else {
+                // گروه ندارد → رنگ دقیق را ذخیره کن تا بعد از Rewind ثابت بماند
+                java.awt.Color c = lp.getCustomColor();
+                if (c != null) ps.customRgb = c.getRGB();
+                ps.colorId = lp.getColorId();
+            }
             ps.rebuiltFromBits = lp.isRebuiltFromBits();
             return ps;
         }
@@ -385,7 +391,21 @@ public final class SnapshotService {
             Integer gid = ps.groupId;
             Integer exp = ps.expectedBits;
             Integer col = ps.colorId;
-            if (gid != null && exp != null && col != null) lp.setGroupInfo(gid, exp, col);
+
+            if (gid != null && exp != null && col != null) {
+                lp.setGroupInfo(gid, exp, col);
+            }
+            else {
+                                // Large بدون گروه → هم colorId و هم رنگ دقیق را برگردان
+                                        if (col != null) {
+                                        // groupId را منفی نگه می‌داریم ولی colorId را ست می‌کنیم
+                                                lp.setGroupInfo(-1, psize, col);
+                                    }
+                                if (ps.customRgb != null) {
+                                        lp.setCustomColor(new java.awt.Color(ps.customRgb, false));
+                                    }
+            }
+
             if (Boolean.TRUE.equals(ps.rebuiltFromBits)) lp.markRebuilt();
             return lp;
         }

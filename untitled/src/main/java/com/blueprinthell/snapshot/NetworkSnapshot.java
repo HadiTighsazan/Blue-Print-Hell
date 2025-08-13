@@ -14,7 +14,7 @@ import java.util.*;
  *  - Avoid java.awt.Point to keep JSON lean and toolkit-agnostic.
  */
 public final class NetworkSnapshot implements Serializable {
-    public static final String SCHEMA_VERSION = "model-v1";
+    public static final String SCHEMA_VERSION = "model-v2";
 
     /** Top-level meta information. */
     public Meta meta;
@@ -188,7 +188,7 @@ public final class NetworkSnapshot implements Serializable {
         public Integer expectedBits;      // for Large/Merged context
         public Integer colorId;           // for Large/Bit/Merged coloration
         public Boolean rebuiltFromBits;   // for Large reborn from bits
-
+        public Integer customRgb;
         public PacketState() {}
     }
 

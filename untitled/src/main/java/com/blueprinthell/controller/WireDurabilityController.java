@@ -30,36 +30,17 @@ public class WireDurabilityController implements Updatable {
     }
 
     public void onPacketArrived(PacketModel packet, WireModel wire) {
-        if (packet == null || wire == null) return;
-
-        if (packet instanceof LargePacket lp) {
-            int u = lp.getOriginalSizeUnits();
-            if (lp.isOriginal() && lp.getGroupId() < 0 &&
-                    (u == Config.LARGE_PACKET_SIZE_8 || u == Config.LARGE_PACKET_SIZE_10)){
-                recordHeavyPass(wire);
-            }
-        }
+                // شمارش عبورها از اینجا انجام نمی‌شود؛ PacketDispatcher + WireModel منبع واحد هستند
+                        // این متد عمداً no-op می‌ماند تا از دوباره‌شماری جلوگیری شود.
     }
 
 
-    public void recordHeavyPass(WireModel wire) {
-        if (wire == null || removed.contains(wire)) return;
 
-        int c = passCount.getOrDefault(wire, 0) + 1;
-        passCount.put(wire, c);
-
-
-        if (c >= maxPasses) {
-            // قبل از حذف سیم، پکت‌های روی آن را ذخیره کن
-            savePacketsBeforeRemoval(wire);
-            toRemove.add(wire);
-        }
-    }
 
 
 
     public int getPasses(WireModel wire) {
-        return passCount.getOrDefault(wire, 0);
+        return (wire != null) ? wire.getLargePacketPassCount() : 0;
     }
 
     public boolean isAlive(WireModel wire) {

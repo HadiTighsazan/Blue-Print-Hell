@@ -101,19 +101,27 @@ public final class DistributorBehavior implements SystemBehavior {
         Color groupColor;
 
         if (!large.hasGroup()) {
-            colorId    = large.getColorId();
-            groupColor = (large.getCustomColor() != null)
-                    ? large.getCustomColor()
-                    : Color.getHSBColor(
-                    (colorId <= 0 ? rnd.nextInt(360) : colorId) / 360.0f,
-                    0.8f, 0.9f);
+                        int cid = large.getColorId();
+                        if (cid <= 0) {
+                                // اگر colorId نداریم، از hue رنگ فعلی استخراج کن تا پس از rewind ثابت بماند
+                                        Color cc = large.getCustomColor();
+                                if (cc != null) {
+                                        float[] hsb = Color.RGBtoHSB(cc.getRed(), cc.getGreen(), cc.getBlue(), null);
+                                        cid = Math.round(hsb[0] * 360f) % 360;
+                                    } else {
+                                        cid = rnd.nextInt(360);
+                                    }
+                           }
+                        colorId    = cid;
+                        groupColor = (large.getCustomColor() != null)
+                                        ? large.getCustomColor()
+                                        : Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
 
-            if (colorId <= 0) colorId = groupColor.getRGB();
-
-            groupId = registry.createGroup(parentSize, expectedBits, colorId);
-            large.setGroupInfo(groupId, expectedBits, colorId);
-            large.setCustomColor(groupColor);
-        }
+                                groupId = registry.createGroup(parentSize, expectedBits, colorId);
+                        // حالا colorId سازگار روی خود پکت هم ثبت شود
+                               large.setGroupInfo(groupId, expectedBits, colorId);
+                      large.setCustomColor(groupColor);
+                   }
         else {
             groupId    = large.getGroupId();
             colorId    = large.getColorId();
