@@ -1,7 +1,7 @@
 package com.blueprinthell.controller.core;
 
 import com.blueprinthell.controller.NetworkController;
-import com.blueprinthell.controller.NetworkSnapshot;
+import com.blueprinthell.snapshot.NetworkSnapshot;
 import com.blueprinthell.controller.SnapshotManager;
 import com.blueprinthell.controller.SnapshotService;
 
@@ -28,4 +28,5 @@ public class SnapshotCoreController implements NetworkController {
     public void restoreState(NetworkSnapshot snap) {
         snapshotSvc.restore(snap);
     }
+
 }

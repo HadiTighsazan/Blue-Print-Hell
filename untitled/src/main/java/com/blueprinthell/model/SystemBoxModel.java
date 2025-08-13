@@ -288,4 +288,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
         this.getBitBuffer().clear();
         this.getLargeBuffer().clear();
     }
+    public double getDisableTimer() {
+        return this.disableTimer;
+    }
 }

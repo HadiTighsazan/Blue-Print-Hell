@@ -32,7 +32,7 @@ public class WireModel implements Serializable {
     private Map<PortModel, SystemBoxModel> portToBoxMap = Collections.emptyMap();
 
     private boolean isForPreviousLevels = false;
-
+    private int largePacketPassTotal = 0;
     private int largePacketPassCount = 0;
     private static final int MAX_LARGE_PACKET_PASSES = 3;
     public static void setSimulationController(SimulationController sc) {
@@ -44,6 +44,9 @@ public class WireModel implements Serializable {
                 .flatMap(b -> b.getInPorts().stream())
                 .collect(Collectors.toSet());
     }
+    public int getLargePacketPassTotal() { return largePacketPassTotal; }
+    public void setLargePacketPassCount(int n) { this.largePacketPassCount = Math.max(0, n); }
+    public void setLargePacketPassTotal(int n) { this.largePacketPassTotal = Math.max(0, n); }
 
     public void setPortToBoxMap(Map<PortModel, SystemBoxModel> map) {
         this.portToBoxMap = map;
@@ -209,9 +212,7 @@ public class WireModel implements Serializable {
         return largePacketPassCount;
     }
 
-    public void incrementLargePacketPass() {
-        largePacketPassCount++;
-    }
+
 
     public boolean shouldBeDestroyed() {
         return largePacketPassCount >= MAX_LARGE_PACKET_PASSES;
@@ -268,5 +269,11 @@ public class WireModel implements Serializable {
         // Direct insert; do NOT trigger arrival checks or removals here.
         this.packets.add(packet);
     }
+    public void resetLargePacketCounter() { this.largePacketPassCount = 0; }
+    public int incrementLargePacketPass() {
+        this.largePacketPassCount++;
+        this.largePacketPassTotal++;
+        return this.largePacketPassCount;
+           }
 }
 

@@ -115,4 +115,8 @@ public class LargePacket extends PacketModel implements Serializable {
     public void setCustomColor(Color color) {
         this.customColor = color;
     }
+
+    public Integer getSizeUnits() {
+        return originalSizeUnits;
+    }
 }

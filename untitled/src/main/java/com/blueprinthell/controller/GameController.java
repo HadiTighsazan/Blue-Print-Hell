@@ -6,6 +6,7 @@ import com.blueprinthell.controller.core.SnapshotCoreController;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.*;
+import com.blueprinthell.snapshot.NetworkSnapshot;
 import com.blueprinthell.view.HudView;
 import com.blueprinthell.view.screens.GameScreenView;
 

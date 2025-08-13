@@ -1,8 +1,8 @@
 package com.blueprinthell.controller;
 
 import java.util.ArrayList;
+import com.blueprinthell.snapshot.NetworkSnapshot;
 import java.util.List;
-
 
 public class SnapshotManager {
 

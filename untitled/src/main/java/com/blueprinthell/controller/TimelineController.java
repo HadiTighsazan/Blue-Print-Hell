@@ -1,9 +1,5 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.controller.NetworkController;
-import com.blueprinthell.controller.NetworkSnapshot;
-import com.blueprinthell.controller.SnapshotManager;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,8 +7,8 @@ import java.util.List;
 import java.util.Objects;
 
 import com.google.gson.Gson;
+import com.blueprinthell.snapshot.NetworkSnapshot;
 import com.google.gson.reflect.TypeToken;
-
 
 public class TimelineController {
     private final NetworkController controller;

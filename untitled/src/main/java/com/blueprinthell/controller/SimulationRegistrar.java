@@ -27,18 +27,24 @@ public class SimulationRegistrar {
     private final SnapshotManager snapshotManager;
     private final HudView hudView;
     private final LevelManager levelManager;
-
+    private final NetworkController networkController;
     // اضافه کردن فیلدهای WireRemovalController و WireDurabilityController
     private WireRemovalController wireRemover;
     private WireDurabilityController durability;
     private PacketDispatcherController dispatcherRef;
 
     private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
+
+    public LargeGroupRegistry getLargeGroupRegistry() {
+        return largeGroupRegistry;
+    }
+
     private final LargeGroupRegistry largeGroupRegistry = new LargeGroupRegistry();
 
     private List<LevelDefinition.BoxSpec> currentBoxSpecs = Collections.emptyList();
 
-    public SimulationRegistrar(SimulationController simulation,
+    public SimulationRegistrar(NetworkController networkController,
+                               SimulationController simulation,
                                ScreenController screenController,
                                CollisionController collisionController,
                                PacketRenderController packetRenderer,
@@ -49,6 +55,7 @@ public class SimulationRegistrar {
                                SnapshotManager snapshotManager,
                                HudView hudView,
                                LevelManager levelManager) {
+        this.networkController = networkController;
         this.simulation = Objects.requireNonNull(simulation, "simulation");
         this.screenController = screenController;
         this.collisionController = Objects.requireNonNull(collisionController, "collisionController");
@@ -128,7 +135,9 @@ public class SimulationRegistrar {
             for (PortModel p : b.getOutPorts()) portToBoxMap.put(p, b);
         }
         collisionController.setPortToBoxMap(portToBoxMap);
-        WireModel.setPortToBoxMap(portToBoxMap);
+         for (WireModel w : wires) {
+             w.setPortToBoxMap(portToBoxMap);
+             }
         WireModel.setSimulationController(simulation);
         if (sources != null) {
             WireModel.setSourceInputPorts(sources);
@@ -204,8 +213,8 @@ public class SimulationRegistrar {
             simulation.register(detector);
         }
 
-        SnapshotController snapshotCtrl = new SnapshotController(
-                boxes, wires, scoreModel, coinModel, usageModel, lossModel, snapshotManager);
+        SnapshotController snapshotCtrl = new SnapshotController(networkController, snapshotManager);
+
         simulation.register(snapshotCtrl);
 
         HudController hudController = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
