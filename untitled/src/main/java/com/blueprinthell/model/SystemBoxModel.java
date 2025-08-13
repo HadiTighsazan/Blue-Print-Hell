@@ -259,11 +259,33 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     public boolean isMerger() {
         return primaryKind == SystemKind.MERGER;
     }
-       public boolean enqueueFront(LargePacket lp) {
-                if (lp == null) return false;
-                if (largeBuffer.size() >= Config.MAX_LARGE_BUFFER_CAPACITY) return false;
-                largeBuffer.addFirst(lp);
-                // توجه: این بازگردانی داخلی است، نیازی به ثبت در EnteredPortTracker نیست
-                       return true;
-            }
+    public boolean enqueueFront(LargePacket lp) {
+        if (lp == null) return false;
+        if (largeBuffer.size() >= Config.MAX_LARGE_BUFFER_CAPACITY) return false;
+        largeBuffer.addFirst(lp);
+        // توجه: این بازگردانی داخلی است، نیازی به ثبت در EnteredPortTracker نیست
+        return true;
+    }
+
+    /**
+     * Enqueue into bit buffer without triggering behaviors or PacketEntry bookkeeping.
+     */
+    public void enqueueBitSilently(PacketModel packet) {
+        this.getBitBuffer().addLast(packet);
+    }
+
+    /**
+     * Enqueue into large buffer without triggering behaviors.
+     */
+    public void enqueueLargeSilently(LargePacket lp) {
+        this.getLargeBuffer().addLast(lp);
+    }
+
+    /**
+     * Clear both buffers (for clean restore).
+     */
+    public void clearBuffers() {
+        this.getBitBuffer().clear();
+        this.getLargeBuffer().clear();
+    }
 }

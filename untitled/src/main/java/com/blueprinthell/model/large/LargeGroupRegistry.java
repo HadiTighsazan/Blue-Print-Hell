@@ -7,6 +7,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class LargeGroupRegistry {
 
+    /** Lightweight DTO for snapshotting group state. */
+    public static final class GroupSnapshot {
+        public final int id;
+        public final int originalSizeUnits;
+        public final int expectedBits;
+        public final int colorId;
+        public final int mergedBits;
+        public final int lostBits;
+        public final boolean closed;
+        public final List<Integer> partialMerges; // store mergedPacketSize values
+
+        public GroupSnapshot(int id,
+                             int originalSizeUnits,
+                             int expectedBits,
+                             int colorId,
+                             int mergedBits,
+                             int lostBits,
+                             boolean closed,
+                             List<Integer> partialMerges) {
+            this.id = id;
+            this.originalSizeUnits = originalSizeUnits;
+            this.expectedBits = expectedBits;
+            this.colorId = colorId;
+            this.mergedBits = mergedBits;
+            this.lostBits = lostBits;
+            this.closed = closed;
+            this.partialMerges = (partialMerges == null) ? List.of() : List.copyOf(partialMerges);
+        }
+    }
+
     public static final class GroupState {
         public final int  groupId;
         public final int  originalSizeUnits;
@@ -34,6 +64,10 @@ public final class LargeGroupRegistry {
         public boolean isClosed()     { return closed; }
         public List<PacketModel> getCollectedPackets() {return Collections.unmodifiableList(collectedPackets);}
         public List<Integer> getPartialMerges() { return Collections.unmodifiableList(partialMerges); }
+        // Added getters for snapshotting
+        public int getOriginalSize() { return originalSizeUnits; }
+        public int getExpectedBits() { return expectedBits; }
+        public int getColorId() { return colorId; }
 
         void addPacket(PacketModel p) {
             collectedPackets.add(p);
@@ -74,11 +108,8 @@ public final class LargeGroupRegistry {
     }
 
     public boolean registerArrival(int groupId, PacketModel bit) {
-
         GroupState st = groups.get(groupId);
-
         if (st == null || st.closed) return false;
-
         st.addPacket(bit);
         return st.isComplete();
     }
@@ -93,8 +124,16 @@ public final class LargeGroupRegistry {
         st.markMerged(bitCount);
         st.addPartialMerge(mergedPacketSize);
         totalBitsMerged += bitCount;
+    }
 
-
+    /**
+     * Directly mark merged bits (used by restore when we only know counts).
+     */
+    public void markMerged(int groupId, int bitCount) {
+        GroupState st = groups.get(groupId);
+        if (st == null || st.closed) return;
+        st.markMerged(bitCount);
+        totalBitsMerged += Math.max(0, bitCount);
     }
 
     public void registerSplit(int groupId, PacketModel bit) {
@@ -114,7 +153,6 @@ public final class LargeGroupRegistry {
 
     public void closeGroup(int groupId) {
         GroupState st = groups.get(groupId);
-
         if (st != null) st.close();
     }
 
@@ -128,6 +166,54 @@ public final class LargeGroupRegistry {
     }
 
     public Map<Integer, GroupState> view() { return Collections.unmodifiableMap(groups); }
+
+    /**
+     * Create a serializable view of all groups.
+     */
+    public List<GroupSnapshot> snapshot() {
+        List<GroupSnapshot> out = new ArrayList<>();
+        for (Map.Entry<Integer, GroupState> e : view().entrySet()) {
+            GroupState gs = e.getValue();
+            out.add(new GroupSnapshot(
+                    e.getKey(),
+                    gs.getOriginalSize(),
+                    gs.getExpectedBits(),
+                    gs.getColorId(),
+                    gs.getMergedBits(),
+                    gs.getLostBits(),
+                    gs.isClosed(),
+                    gs.getPartialMerges()
+            ));
+        }
+        return out;
+    }
+
+    /**
+     * Restore groups minimally so that subsequent merges/loss accounting continues correctly.
+     * Note: receivedBits is reconstructed later by scanning actual BitPackets during restore.
+     */
+    public void restore(List<GroupSnapshot> data) {
+        clear();
+        if (data == null) return;
+        for (GroupSnapshot s : data) {
+            createGroupWithId(s.id, s.originalSizeUnits, s.expectedBits, s.colorId);
+            if (s.mergedBits > 0) {
+                markMerged(s.id, s.mergedBits);
+            }
+            if (s.lostBits > 0) {
+                markBitLost(s.id, s.lostBits);
+            }
+            if (s.partialMerges != null) {
+                for (int mergedPacketSize : s.partialMerges) {
+                    // Assumption: each partial merged packet of size N consumed N bits.
+                    registerPartialMerge(s.id, mergedPacketSize, mergedPacketSize);
+                }
+            }
+            if (s.closed) {
+                closeGroup(s.id);
+            }
+        }
+    }
 
     /**
      * محاسبه loss براساس تعداد بیت‌های ادغام شده
@@ -157,7 +243,6 @@ public final class LargeGroupRegistry {
         return Math.max(0, st.originalSizeUnits - totalRecovered);
     }
 
-
     public int calculateActualLoss(int groupId) {
         GroupState st = groups.get(groupId);
         if (st == null) return 0;
@@ -176,6 +261,7 @@ public final class LargeGroupRegistry {
         int recovered = (int) Math.floor(i * Math.sqrt(product));
         return Math.max(0, st.originalSizeUnits - recovered);
     }
+
     public void closeAllOpenGroups() {
         for (var e : groups.entrySet()) {
             GroupState st = e.getValue();
@@ -184,6 +270,4 @@ public final class LargeGroupRegistry {
             }
         }
     }
-
-
 }

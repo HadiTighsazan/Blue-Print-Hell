@@ -29,13 +29,12 @@ public class WireModel implements Serializable {
 
     private static Set<PortModel> sourceInputPorts = Collections.emptySet();
 
-    private static Map<PortModel, SystemBoxModel> portToBoxMap = Collections.emptyMap();
+    private Map<PortModel, SystemBoxModel> portToBoxMap = Collections.emptyMap();
 
     private boolean isForPreviousLevels = false;
 
     private int largePacketPassCount = 0;
     private static final int MAX_LARGE_PACKET_PASSES = 3;
-
     public static void setSimulationController(SimulationController sc) {
         simulationController = sc;
     }
@@ -46,8 +45,8 @@ public class WireModel implements Serializable {
                 .collect(Collectors.toSet());
     }
 
-    public static void setPortToBoxMap(Map<PortModel, SystemBoxModel> map) {
-        portToBoxMap = (map != null) ? map : Collections.emptyMap();
+    public void setPortToBoxMap(Map<PortModel, SystemBoxModel> map) {
+        this.portToBoxMap = map;
     }
 
     public WireModel(PortModel src, PortModel dst) {
@@ -218,11 +217,56 @@ public class WireModel implements Serializable {
         return largePacketPassCount >= MAX_LARGE_PACKET_PASSES;
     }
 
-    public void resetLargePacketCounter() {
-        largePacketPassCount = 0;
+        /**
+     * Canonical, stable ID for snapshotting. Format:
+     * "<fromBoxId>:<fromOutIndex> -> <toBoxId>:<toInIndex>".
+     */
+    public String getCanonicalId() {
+        PortModel src = getSrcPort();
+        PortModel dst = getDstPort();
+
+        SystemBoxModel fromBox = resolveBox(src);
+        SystemBoxModel toBox   = resolveBox(dst);
+        if (fromBox == null || toBox == null) {
+            // fallback: coordinates (still stable across a session)
+            return src.hashCode() + " -> " + dst.hashCode();
+        }
+        int fromIdx = indexOfPort(fromBox.getOutPorts(), src);
+        int toIdx   = indexOfPort(toBox.getInPorts(),  dst);
+        return fromBox.getId() + ":" + fromIdx + " -> " + toBox.getId() + ":" + toIdx;
     }
 
+    /** index helper (returns -1 if not found to avoid NPEs in edge cases) */
+    private static int indexOfPort(List<PortModel> list, PortModel target) {
+        int i = 0;
+        for (PortModel p : list) { if (p == target) return i; i++; }
+        return -1;
+    }
 
+    private SystemBoxModel resolveBox(PortModel p) {
+        return (portToBoxMap != null) ? portToBoxMap.get(p) : null;
+    }
 
+    /**
+     * Helper indices for snapshot (optional but handy)
+     */
+    public int getFromOutIndex() {
+        SystemBoxModel from = resolveBox(getSrcPort());
+        return (from == null) ? -1 : indexOfPort(from.getOutPorts(), getSrcPort());
+    }
 
+    public int getToInIndex() {
+        SystemBoxModel to = resolveBox(getDstPort());
+        return (to == null) ? -1 : indexOfPort(to.getInPorts(), getDstPort());
+    }
+
+    /**
+     * Attach without any side-effects (for restore). Assumes 0<=progress<=1.
+     */
+    public void attachPacketSilently(PacketModel packet, double initialProgress) {
+        packet.attachToWire(this, initialProgress);
+        // Direct insert; do NOT trigger arrival checks or removals here.
+        this.packets.add(packet);
+    }
 }
+

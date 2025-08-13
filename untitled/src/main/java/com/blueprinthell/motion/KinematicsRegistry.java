@@ -62,4 +62,20 @@ public final class KinematicsRegistry {
         return Collections.unmodifiableMap(MAP);
 
     }
+
+    /**
+     * Returns enum name for snapshotting; may be null if no explicit profile set yet.
+     */
+    public static String getProfileId(PacketModel packet) {
+        KinematicsProfile k = getProfile(packet);
+        return (k != null) ? k.name() : null;
+    }
+
+    /**
+     * Restores profile from its enum name; if id is null, leaves current/default profile.
+     */
+    public static void setProfileById(PacketModel packet, String id) {
+        if (id == null) return;
+        setProfile(packet, KinematicsProfile.valueOf(id));
+    }
 }
