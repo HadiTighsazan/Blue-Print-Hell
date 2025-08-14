@@ -54,6 +54,10 @@ public final class LargeGroupRegistry {
             this.originalSizeUnits = originalSize;
             this.expectedBits = expectedBits;
             this.colorId = colorId;
+            this.receivedBits = 0;
+            this.mergedBits = 0;
+            this.lostBits = 0;
+            this.closed = false;
         }
 
         public int  getReceivedBits() { return receivedBits; }
@@ -195,26 +199,28 @@ public final class LargeGroupRegistry {
     public void restore(List<GroupSnapshot> data) {
         clear();
         if (data == null) return;
+
         for (GroupSnapshot s : data) {
-            createGroupWithId(s.id, s.originalSizeUnits, s.expectedBits, s.colorId);
-            if (s.mergedBits > 0) {
-                markMerged(s.id, s.mergedBits);
-            }
-            if (s.lostBits > 0) {
-                markBitLost(s.id, s.lostBits);
-            }
+            // ایجاد GroupState جدید
+            GroupState newState = new GroupState(s.id, s.originalSizeUnits, s.expectedBits, s.colorId);
+
+            // ⭐ بازیابی مستقیم state بدون فراخوانی register
+            newState.mergedBits = s.mergedBits;
+            newState.lostBits = s.lostBits;
+            newState.closed = s.closed;
+
+            // ⭐ کپی مستقیم partialMerges بدون registerPartialMerge
             if (s.partialMerges != null) {
-                for (int mergedPacketSize : s.partialMerges) {
-                    // Assumption: each partial merged packet of size N consumed N bits.
-                    registerPartialMerge(s.id, mergedPacketSize, mergedPacketSize);
-                }
+                newState.partialMerges.addAll(s.partialMerges);
             }
-            if (s.closed) {
-                closeGroup(s.id);
-            }
+
+            // ذخیره در map
+            groups.put(s.id, newState);
+
+            // به‌روزرسانی idSeq
+            idSeq.updateAndGet(v -> Math.max(v, s.id + 1));
         }
     }
-
     /**
      * محاسبه loss براساس تعداد بیت‌های ادغام شده
      */

@@ -98,38 +98,32 @@ public final class DistributorBehavior implements SystemBehavior {
         /* --- اطمینان از وجود/ثبت گروه در رجیستری --- */
         int groupId;
         int colorId;
-        Color groupColor;
-
         if (!large.hasGroup()) {
-                        int cid = large.getColorId();
-                        if (cid <= 0) {
-                                // اگر colorId نداریم، از hue رنگ فعلی استخراج کن تا پس از rewind ثابت بماند
-                                        Color cc = large.getCustomColor();
-                                if (cc != null) {
-                                        float[] hsb = Color.RGBtoHSB(cc.getRed(), cc.getGreen(), cc.getBlue(), null);
-                                        cid = Math.round(hsb[0] * 360f) % 360;
-                                    } else {
-                                        cid = rnd.nextInt(360);
-                                    }
-                           }
-                        colorId    = cid;
-                        groupColor = (large.getCustomColor() != null)
-                                        ? large.getCustomColor()
-                                        : Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
+            // پکت گروه ندارد - ایجاد گروه جدید
+            colorId = large.getColorId();
+            if (colorId <= 0) {
+                Color cc = large.getCustomColor();
+                if (cc != null) {
+                    float[] hsb = Color.RGBtoHSB(cc.getRed(), cc.getGreen(), cc.getBlue(), null);
+                    colorId = Math.round(hsb[0] * 360f) % 360;
+                } else {
+                    colorId = rnd.nextInt(360);
+                }
+            }
 
-                                groupId = registry.createGroup(parentSize, expectedBits, colorId);
-                        // حالا colorId سازگار روی خود پکت هم ثبت شود
-                               large.setGroupInfo(groupId, expectedBits, colorId);
-                      large.setCustomColor(groupColor);
-                   }
-        else {
-            groupId    = large.getGroupId();
-            colorId    = large.getColorId();
-            groupColor = large.getCustomColor();
+            groupId = registry.createGroup(parentSize, expectedBits, colorId);
+            large.setGroupInfo(groupId, expectedBits, colorId);
+        } else {
+            // پکت از قبل گروه دارد
+            groupId = large.getGroupId();
+            colorId = large.getColorId();
+
+            // ⭐ فقط اگر گروه واقعاً وجود ندارد، بازسازی کن
             if (registry.get(groupId) == null) {
                 registry.createGroupWithId(groupId, parentSize, expectedBits, colorId);
             }
         }
+
         boolean removed = box.removeFromBuffer(large);
         if (!removed) {
             // اگر نتوانست حذف کند، مشکلی وجود دارد

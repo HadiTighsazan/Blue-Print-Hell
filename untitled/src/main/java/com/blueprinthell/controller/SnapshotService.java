@@ -395,24 +395,32 @@ public final class SnapshotService {
             ps.parentSizeUnits = mp.getSizeUnits();
             return ps;
         }
+
+
+
+
         if (PacketOps.isLarge(p)) {
             ps.family = "LARGE";
             LargePacket lp = (LargePacket) p;
             ps.parentSizeUnits = lp.getOriginalSizeUnits();
-            if (lp.hasGroup()) {
-                ps.groupId = lp.getGroupId();
-                ps.expectedBits = lp.getExpectedBits();
-                ps.colorId = lp.getColorId();
-            }
-            else {
-                // گروه ندارد → رنگ دقیق را ذخیره کن تا بعد از Rewind ثابت بماند
-                java.awt.Color c = lp.getCustomColor();
-                if (c != null) ps.customRgb = c.getRGB();
-                ps.colorId = lp.getColorId();
-            }
+
+            // ⭐ همیشه groupId را ذخیره کن، حتی اگر -1 باشد
+            ps.groupId = lp.getGroupId();
+            ps.expectedBits = lp.getExpectedBits();
+            ps.colorId = lp.getColorId();
+
+            // رنگ دقیق را هم ذخیره کن
+            Color c = lp.getCustomColor();
+            if (c != null) ps.customRgb = c.getRGB();
+
             ps.rebuiltFromBits = lp.isRebuiltFromBits();
             return ps;
         }
+
+
+
+
+
         if (PacketOps.isProtected(p) || p instanceof ProtectedPacket) {
             ps.family = "PROTECTED";
             if (p instanceof ProtectedPacket pp) ps.protectedShield = pp.getShield();
@@ -467,30 +475,34 @@ public final class SnapshotService {
             int psize = (ps.parentSizeUnits != null) ? ps.parentSizeUnits : 0;
             return new MergedPacket(base.getType(), base.getBaseSpeed(), psize, gid, exp, col);
         }
+
+
+
+
+
         if ("LARGE".equals(ps.family)) {
             int psize = (ps.parentSizeUnits != null) ? ps.parentSizeUnits : 0;
             LargePacket lp = new LargePacket(base.getType(), base.getBaseSpeed(), psize);
-            Integer gid = ps.groupId;
-            Integer exp = ps.expectedBits;
-            Integer col = ps.colorId;
 
-            if (gid != null && exp != null && col != null) {
-                lp.setGroupInfo(gid, exp, col);
-            }
-            else {
-                // Large بدون گروه → هم colorId و هم رنگ دقیق را برگردان
-                if (col != null) {
-                    // groupId را منفی نگه می‌داریم ولی colorId را ست می‌کنیم
-                    lp.setGroupInfo(-1, psize, col);
-                }
-                if (ps.customRgb != null) {
-                    lp.setCustomColor(new java.awt.Color(ps.customRgb, false));
-                }
+            // ⭐ همیشه groupId را بازیابی کن
+            Integer gid = ps.groupId != null ? ps.groupId : -1;
+            Integer exp = ps.expectedBits != null ? ps.expectedBits : psize;
+            Integer col = ps.colorId != null ? ps.colorId : 0;
+
+            lp.setGroupInfo(gid, exp, col);
+
+            if (ps.customRgb != null) {
+                lp.setCustomColor(new Color(ps.customRgb, false));
             }
 
             if (Boolean.TRUE.equals(ps.rebuiltFromBits)) lp.markRebuilt();
             return lp;
         }
+
+
+
+
+
         if ("PROTECTED".equals(ps.family)) {
             double shield = (ps.protectedShield != null && ps.protectedShield > 0) ? ps.protectedShield : 1.0;
             return PacketOps.toProtected(base, shield);
