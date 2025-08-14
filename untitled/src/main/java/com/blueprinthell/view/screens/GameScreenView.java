@@ -8,7 +8,10 @@ import com.blueprinthell.view.HudView;
 import com.blueprinthell.view.PortView;
 import com.blueprinthell.view.SystemBoxView;
 import com.blueprinthell.view.WireView;
-
+import com.blueprinthell.controller.SystemBoxDragController;
+import com.blueprinthell.controller.WireEditorController;
+import com.blueprinthell.model.WireUsageModel;
+import com.blueprinthell.model.CoinModel;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -122,5 +125,54 @@ public class GameScreenView extends JPanel {
         Window w = SwingUtilities.getWindowAncestor(this);
         if (w instanceof JFrame f) return f;
         throw new IllegalStateException("GameScreenView is not inside a JFrame");
+    }
+    public void rebuildControllers(List<WireModel> wires,
+                                   WireUsageModel usageModel,
+                                   CoinModel coinModel,
+                                   Runnable networkChanged) {
+        // بازسازی SystemBoxDragController برای هر SystemBoxView
+        for (Component c : gameArea.getComponents()) {
+            if (c instanceof SystemBoxView sbv) {
+                // حذف listener های قبلی برای جلوگیری از duplicate
+                var listeners = sbv.getMouseListeners();
+                var motionListeners = sbv.getMouseMotionListeners();
+
+                // بررسی که آیا قبلاً controller دارد
+                boolean hasController = false;
+                for (var listener : listeners) {
+                    if (listener instanceof SystemBoxDragController) {
+                        hasController = true;
+                        break;
+                    }
+                }
+
+                if (!hasController) {
+                    new SystemBoxDragController(sbv.getModel(), sbv, wires, usageModel);
+                }
+            }
+        }
+
+        // بازسازی WireEditorController برای هر WireView
+        for (Component c : gameArea.getComponents()) {
+            if (c instanceof WireView wv) {
+                // حذف listener های قبلی
+                var listeners = wv.getMouseListeners();
+                var motionListeners = wv.getMouseMotionListeners();
+
+                // بررسی که آیا قبلاً controller دارد
+                boolean hasController = false;
+                for (var listener : listeners) {
+                    if (listener.getClass().getName().contains("WireEditorController")) {
+                        hasController = true;
+                        break;
+                    }
+                }
+
+                if (!hasController) {
+                    new WireEditorController(gameArea, wv.getModel(), wv,
+                            getSystemBoxViews(), coinModel, usageModel, networkChanged);
+                }
+            }
+        }
     }
 }

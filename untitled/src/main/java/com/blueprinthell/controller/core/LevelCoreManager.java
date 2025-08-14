@@ -163,10 +163,21 @@ public class LevelCoreManager {
                 gameController.getMainFrame(), gameController.getSimulation(), gameController.getCoinModel(), gameController.getCollisionCtrl(), gameController.getLossModel(), gameController.getWires(), gameController.getHudController()));
         gameController.getHudView().getStoreButton().addActionListener(e -> gameController.getShopController().openShop());
 
-        gameController.setSnapshotSvc(new SnapshotService( gameController.getDestMap(),
-                boxes, gameController.getWires(), gameController.getScoreModel(), gameController.getCoinModel(), gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(),
-                gameController.getHudView(), gameController.getGameView(), gameController.getPacketRenderer(), List.of(gameController.getProducerController())));
-
+        gameController.setSnapshotSvc(new SnapshotService(
+                gameController.getDestMap(),
+                boxes,
+                gameController.getWires(),
+                gameController.getScoreModel(),
+                gameController.getCoinModel(),
+                gameController.getLossModel(),
+                usageModel,
+                gameController.getSnapshotMgr(),
+                gameController.getHudView(),
+                gameController.getGameView(),
+                gameController.getPacketRenderer(),
+                List.of(gameController.getProducerController()),
+                gameController::updateStartEnabled  // ✅ اضافه کردن callback
+        ));
         gameController.setRegistrar(new SimulationRegistrar(gameController,
                 gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
                 gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));

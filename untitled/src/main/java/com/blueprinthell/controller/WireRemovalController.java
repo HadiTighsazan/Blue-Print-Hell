@@ -161,4 +161,19 @@ public class WireRemovalController {
             }
         });
     }
+    public void rebuildListeners() {
+        JPanel area = gameView.getGameArea();
+        JRootPane root = SwingUtilities.getRootPane(area);
+        JComponent glassPane = (JComponent) root.getGlassPane();
+
+        // حذف listener های قبلی
+        for (var listener : glassPane.getMouseListeners()) {
+            if (listener == removalMouseAdapter) {
+                glassPane.removeMouseListener(removalMouseAdapter);
+            }
+        }
+
+        // اضافه کردن دوباره
+        glassPane.addMouseListener(removalMouseAdapter);
+    }
 }

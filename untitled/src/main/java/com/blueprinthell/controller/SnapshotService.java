@@ -31,7 +31,7 @@ public final class SnapshotService {
     private final PacketRenderController         packetRenderer;
     private final List<PacketProducerController> producers;
     private final Map<WireModel, SystemBoxModel> destMap;
-
+    private final Runnable networkChangedCallback;
     public SnapshotService(Map<WireModel, SystemBoxModel> destMap,
                            List<SystemBoxModel> boxes,
                            List<WireModel> wires,
@@ -43,7 +43,7 @@ public final class SnapshotService {
                            HudView hudView,
                            GameScreenView gameView,
                            PacketRenderController renderer,
-                           List<PacketProducerController> producers) {
+                           List<PacketProducerController> producers,Runnable networkChangedCallback) {
         this.destMap         = destMap;
         this.boxes           = boxes;
         this.wires           = wires;
@@ -56,6 +56,7 @@ public final class SnapshotService {
         this.gameView        = gameView;
         this.packetRenderer  = renderer;
         this.producers       = (producers == null) ? List.of() : producers;
+        this.networkChangedCallback = networkChangedCallback;
     }
 
     public void capture() { snapshotManager.recordSnapshot(buildSnapshot()); }
@@ -257,6 +258,7 @@ public final class SnapshotService {
         SwingUtilities.invokeLater(() -> {
             gameView.reset(boxes, wires);
             packetRenderer.refreshAll();
+            gameView.rebuildControllers(wires, usageModel, coinModel, networkChangedCallback);
             hudView.setCoins(coinModel.getCoins());
             hudView.setPacketLoss(lossModel.getLostCount());
         });
