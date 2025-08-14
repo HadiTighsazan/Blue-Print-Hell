@@ -137,6 +137,15 @@ public final class SnapshotService {
             bs.outShapes.addAll(b.getOutShapes());
             for (PacketModel p : b.getBitBuffer())    bs.bitBuffer.add(toPacketState(p));
             for (LargePacket lp : b.getLargeBuffer()) bs.largeBuffer.add(toPacketState(lp));
+
+            // ذخیره returnBuffer - مهم!
+            Deque<PacketModel> returnBuf = b.getReturnBuffer();
+            if (returnBuf != null) {
+                for (PacketModel p : returnBuf) {
+                    bs.returnBuffer.add(toPacketState(p));
+                }
+            }
+
             snap.world.boxes.add(bs);
         }
 

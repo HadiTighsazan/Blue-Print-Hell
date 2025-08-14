@@ -212,7 +212,10 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
             outPorts.add(new PortModel(getX() + getWidth() - ps, getY() + yOff, outShapes.get(i), false));
         }
     }
+    public PacketModel pollReturned() { return returnBuffer.pollFirst(); }
 
+    /** دسترسی به returnBuffer برای snapshot */
+    public Deque<PacketModel> getReturnBuffer() { return returnBuffer; }
     @Override public void setX(int x){ super.setX(x); updatePortsPosition(); }
     @Override public void setY(int y){ super.setY(y); updatePortsPosition(); }
 
@@ -302,7 +305,6 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     public double getDisableTimer() {
         return this.disableTimer;
     }
-    public PacketModel pollReturned() { return returnBuffer.pollFirst(); }
         /** درج در ابتدای صف برگشتی‌ها (برای حفظ اولویت) */
         public boolean enqueueReturnedFront(PacketModel packet) {
                 if (packet == null) return false;
