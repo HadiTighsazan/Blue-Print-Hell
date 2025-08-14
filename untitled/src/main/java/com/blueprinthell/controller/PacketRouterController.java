@@ -350,7 +350,22 @@ public class PacketRouterController implements Updatable {
 
     @Override
     public void update(double dt) {
-        // CRITICAL: ابتدا پکت‌های تله‌پورت شده را پردازش کن
+
+               // 0) ابتدا پکت‌های برگشتی (ورود از خروجی) را با اولویت پردازش کن
+        while (true) {
+                        PacketModel ret = box.pollReturned();
+                        if (ret == null) break;
+                        boolean routed = routePacket(ret);
+                        if (!routed) {
+                                // برگرداندن به ابتدای صف برگشتی‌ها؛ اگر جا نبود، drop
+                            if (!box.enqueueReturnedFront(ret)) {
+                                        drop(ret);
+                                    }
+                               // برای جلوگیری از حلقه‌ی بدون پیشرفت، ادامه نمی‌دهیم
+                                       break;
+                            }
+                   }
+
         processTeleportedPacketsForThisBox();
 
         if (!hasAvailableRoute()) {

@@ -105,7 +105,6 @@ public final class LargeGroupRegistry {
     public int createGroup(int originalSizeUnits, int expectedBits, int colorId) {
         int id = idSeq.getAndIncrement();
         groups.putIfAbsent(id, new GroupState(id, originalSizeUnits, expectedBits, colorId));
-        if (DBG) System.out.println("[LGR][create] id=" + id + " size=" + originalSizeUnits + " exp=" + expectedBits + " color=" + colorId);
         return id;
     }
 
@@ -113,7 +112,6 @@ public final class LargeGroupRegistry {
         groups.computeIfAbsent(groupId, gid -> {
             // ensure idSeq ahead of manual ids
             idSeq.updateAndGet(v -> Math.max(v, gid + 1));
-            if (DBG) System.out.println("[LGR][createWithId] id=" + gid + " size=" + originalSizeUnits + " exp=" + expectedBits + " color=" + colorId);
             return new GroupState(gid, originalSizeUnits, expectedBits, colorId);
         });
     }
@@ -122,7 +120,6 @@ public final class LargeGroupRegistry {
         GroupState st = groups.get(groupId);
         if (st == null || st.closed) return false;
         st.addPacket(bit);
-        if (DBG) System.out.println("[LGR][arrival] gid=" + groupId + " recv=" + st.getReceivedBits());
         return st.isComplete();
     }
 
@@ -136,7 +133,6 @@ public final class LargeGroupRegistry {
         st.markMerged(bitCount);
         st.addPartialMerge(mergedPacketSize);
         totalBitsMerged += bitCount;
-        if (DBG) System.out.println("[LGR][merge] gid=" + groupId + " +bits=" + bitCount + " packet=" + mergedPacketSize + " merges=" + st.getPartialMerges());
     }
 
     /**
@@ -169,7 +165,6 @@ public final class LargeGroupRegistry {
         if (st != null) {
             boolean wasClosed = st.isClosed();
             st.close();
-            if (DBG) System.out.println("[LGR][close] gid=" + groupId + " (wasClosed=" + wasClosed + ")");
         }
     }
 
@@ -206,29 +201,7 @@ public final class LargeGroupRegistry {
         return out;
     }
 
-    /**
-     * Restore groups minimally so that subsequent merges/loss accounting continues correctly.
-     * Note: receivedBits is reconstructed later by scanning actual BitPackets during restore.
-     */
 
-    /** چاپ خلاصهٔ گروه‌های بسته و loss محاسبه‌شدهٔ هرکدام */
-    public void debugDumpClosed(String tag) {
-        if (!DBG) return;
-        int sum = 0, closedCount = 0;
-        for (var e : view().entrySet()) {
-            int gid = e.getKey();
-            var st = e.getValue();
-            if (!st.isClosed()) continue;
-            closedCount++;
-            int loss = calculateActualLoss(gid);
-            sum += loss;
-            System.out.println("[LGR][dump "+tag+"] gid=" + gid
-                    + " size=" + st.getOriginalSize()
-                    + " merges=" + st.getPartialMerges()
-                    + " -> loss=" + loss);
-        }
-        System.out.println("[LGR][dump "+tag+"] closed=" + closedCount + " deferredSum=" + sum);
-    }
 
     public void restore(List<GroupSnapshot> data) {
         clear();
@@ -250,8 +223,7 @@ public final class LargeGroupRegistry {
             groups.put(s.id, newState);
             idSeq.updateAndGet(v -> Math.max(v, s.id + 1));
         }
-        if (DBG) System.out.println("[LGR][restore] groups=" + groups.size());
-        debugDumpClosed("AFTER_RESTORE");
+
     }
     /**
      * محاسبه loss براساس تعداد بیت‌های ادغام شده

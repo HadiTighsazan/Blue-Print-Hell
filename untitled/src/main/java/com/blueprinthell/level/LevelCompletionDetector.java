@@ -94,7 +94,6 @@ public class LevelCompletionDetector implements Updatable {
             lossModel.finalizeDeferredLossNow();
                         if (lossModel != null) {
                                var reg = lossModel.getRegistryView(); // اگر ندارید: متدی اضافه کنید که LargeGroupRegistry را برگرداند/یا view() را proxied برگرداند
-                                if (reg != null) reg.debugDumpClosed("BEFORE_REPORT");
                             }
             // حالا نسبت Loss با احتساب مؤخره
             int producedUnits = producer.getProducedUnits();

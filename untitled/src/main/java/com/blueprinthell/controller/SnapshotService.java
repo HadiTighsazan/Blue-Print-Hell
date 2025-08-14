@@ -193,7 +193,6 @@ public final class SnapshotService {
                 registrySnapshots.add(gs);
             }
             largeGroupRegistry.restore(registrySnapshots);
-            largeGroupRegistry.debugDumpClosed("AFTER_RESTORE");
         }
 
         // Counters - حالا loss به درستی محاسبه می‌شود

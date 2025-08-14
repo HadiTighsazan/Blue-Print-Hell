@@ -19,7 +19,7 @@ public class PacketDispatcherController implements Updatable {
     private WireDurabilityController durability;
     private WireRemovalController wireRemover;
     private final List<WireModel> wiresForRemoval = new ArrayList<>();
-
+    private Map<WireModel, SystemBoxModel> sourceMap;
     public PacketDispatcherController(List<WireModel> wires,
                                       Map<WireModel, SystemBoxModel> destinationMap,
                                       CoinModel coinModel,
@@ -37,7 +37,9 @@ public class PacketDispatcherController implements Updatable {
     public void setWireRemover(WireRemovalController remover) {
         this.wireRemover = remover;
     }
-
+    public void setSourceMap(Map<WireModel, SystemBoxModel> sourceMap) {
+                this.sourceMap = sourceMap;
+            }
     @Override
     public void update(double dt) {
         for (WireModel wire : wires) {
@@ -46,6 +48,28 @@ public class PacketDispatcherController implements Updatable {
             PortModel dstPort = wire.getDstPort();
 
             for (PacketModel packet : arrived) {
+
+                // [PATCH] تحویل پکتِ برگشتی به باکسِ منبع (نه مقصد)
+                if (packet.isReturning()) {
+                    SystemBoxModel srcBox = (sourceMap != null) ? sourceMap.get(wire) : null;
+                    PortModel srcPort = wire.getSrcPort();
+                    if (srcBox != null && srcPort != null) {
+                        boolean ok = srcBox.enqueue(packet, srcPort); // ورود از خروجی ⇒ می‌رود داخل returnBuffer
+                        if (ok) {
+                            packet.setReturning(false);
+                            continue; // به منطق مقصد نرو
+                        } else {
+                            // بافر منبع پر بود ⇒ Loss طبق قانون نوع‌محور
+                            lossModel.incrementPacket(packet);
+                            SimulationController sim = WireModel.getSimulationController();
+                            if (sim != null && sim.getPacketProducerController() != null) {
+                                sim.getPacketProducerController().onPacketLost();
+                            }
+                            continue;
+                        }
+                    }
+                    // اگر srcBox/srcPort نبود، اجازه بده منطق مقصد ادامه یابد (fallback)
+                }
 
                 if (packet instanceof LargePacket lp && !lp.isRebuiltFromBits() && !(packet instanceof MergedPacket)) {
                     wire.incrementLargePacketPass();
@@ -90,8 +114,8 @@ public class PacketDispatcherController implements Updatable {
                     int coins = 0;
 
                     // برای پکت‌های حجیم
-                    if (packet instanceof LargePacket lp) {
-                        coins = lp.getOriginalSizeUnits();
+                    if (packet instanceof LargePacket lp2) {
+                        coins = lp2.getOriginalSizeUnits();
                     }
                     // برای پکت‌های محرمانه
                     else if (PacketOps.isConfidential(packet)) {
@@ -115,8 +139,7 @@ public class PacketDispatcherController implements Updatable {
                     if (coins > 0) {
                         coinModel.add(coins);
                     }
-                }
-                else {
+                } else {
                     if (!dest.isEnabled()) {
                         packet.setReturning(true);
                         wire.attachPacket(packet, 1.0);

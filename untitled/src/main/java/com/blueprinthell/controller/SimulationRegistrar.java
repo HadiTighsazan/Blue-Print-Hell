@@ -141,9 +141,9 @@ public class SimulationRegistrar {
             w.setPortToBoxMap(portToBoxMap);
         }
         WireModel.setSimulationController(simulation);
-        if (sources != null) {
-            WireModel.setSourceInputPorts(sources);
-        }
+        WireModel.setSourceInputPorts(sources);
+        WireModel.setSimulationController(simulation);
+
 
         // 1) خود باکس‌ها
         for (SystemBoxModel b : boxes) {
@@ -154,7 +154,18 @@ public class SimulationRegistrar {
         PacketDispatcherController dispatcher = new PacketDispatcherController(wires, destMap, coinModel, lossModel);
         this.dispatcherRef = dispatcher;
         simulation.register(dispatcher);
-
+        {
+                            Map<WireModel, SystemBoxModel> srcMap = new HashMap<>();
+                    for (WireModel w : wires) {
+                            PortModel sp = w.getSrcPort();
+                            if (sp == null) continue;
+                            SystemBoxModel owner = portToBoxMap.get(sp);
+                            if (owner != null) {
+                                    srcMap.put(w, owner);
+                               }
+                        }
+                    dispatcher.setSourceMap(srcMap);
+                }
         // 3) Behavior ها و Adapterها (از جمله VPN)
         for (SystemBoxModel box : boxes) {
             attachBehaviorsForBox(box, boxes, wires, destMap);

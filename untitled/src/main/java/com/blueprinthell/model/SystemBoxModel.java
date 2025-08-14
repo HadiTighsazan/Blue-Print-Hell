@@ -24,13 +24,13 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     private final List<PortModel> inPorts  = new ArrayList<>();
     private final List<PortModel> outPorts = new ArrayList<>();
 
-    /* ---------- بافر بیت ---------- */
+    /* ---------- بافر ها ---------- */
     private final Deque<PacketModel> bitBuffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
 
-    /* ---------- بافر پکت حجیم ---------- */
     private final Deque<LargePacket> largeBuffer =
             new ArrayDeque<>(Config.MAX_LARGE_BUFFER_CAPACITY);
 
+    private final Deque<PacketModel> returnBuffer = new ArrayDeque<>(Config.MAX_BUFFER_CAPACITY);
     /* ---------- وضعیت ---------- */
     private boolean enabled = true;
     private double  disableTimer = 0.0;
@@ -94,6 +94,15 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     /* ====== ENQUEUE— نقطهٔ ورودی مشترک ====== */
     public boolean enqueue(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return false;
+        if (enteredPort != null && !enteredPort.isInput()) {
+            if (returnBuffer.size() >= Config.MAX_BUFFER_CAPACITY) return false;
+            boolean added = returnBuffer.offerLast(packet);
+            if (added) {
+                SystemBehaviorAdapter.EnteredPortTracker.record(packet, enteredPort);
+                newEntries.offer(new PacketEntry(packet, enteredPort));
+                            }
+                        return added;
+                   }
         if (!enabled && enteredPort != null) return false;
 
         final boolean added;
@@ -153,6 +162,7 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     public void clearBuffer() {
         bitBuffer  .clear();
         largeBuffer.clear();
+        returnBuffer.clear();
         newEntries .clear();
         SystemBehaviorAdapter.EnteredPortTracker.clear();
     }
@@ -287,8 +297,17 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
     public void clearBuffers() {
         this.getBitBuffer().clear();
         this.getLargeBuffer().clear();
+        returnBuffer.clear();
     }
     public double getDisableTimer() {
         return this.disableTimer;
     }
+    public PacketModel pollReturned() { return returnBuffer.pollFirst(); }
+        /** درج در ابتدای صف برگشتی‌ها (برای حفظ اولویت) */
+        public boolean enqueueReturnedFront(PacketModel packet) {
+                if (packet == null) return false;
+                if (returnBuffer.size() >= Config.MAX_BUFFER_CAPACITY) return false;
+                returnBuffer.addFirst(packet);
+                return true;
+            }
 }
