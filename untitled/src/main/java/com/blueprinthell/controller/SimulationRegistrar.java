@@ -170,14 +170,13 @@ public class SimulationRegistrar {
         if (producer != null) {
             simulation.register(producer);
         }
-
+        lossModel.setLargeGroupRegistry(largeGroupRegistry);
         // 6) Consumer (Sink) و رجیستری گروه‌ها
         if (sink != null) {
             PacketConsumerController consumer = new PacketConsumerController(
                     sink, scoreModel, coinModel, lossModel, simulation);
             simulation.register(consumer);
             consumer.setLargeGroupRegistry(largeGroupRegistry);
-            lossModel.setLargeGroupRegistry(largeGroupRegistry);
         }
 
         // 7) سایر کنترلرهای اختیاری (timeout, durability, throttle, ...)

@@ -5,6 +5,7 @@ import com.blueprinthell.model.*;
 import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.model.large.MergedPacket;
+import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.motion.MotionStrategyFactory;
 import com.blueprinthell.snapshot.NetworkSnapshot;
 import com.blueprinthell.snapshot.NetworkSnapshot.*;
@@ -32,6 +33,8 @@ public final class SnapshotService {
     private final List<PacketProducerController> producers;
     private final Map<WireModel, SystemBoxModel> destMap;
     private final Runnable networkChangedCallback;
+    private final LargeGroupRegistry            largeGroupRegistry; // اضافه شده
+
     public SnapshotService(Map<WireModel, SystemBoxModel> destMap,
                            List<SystemBoxModel> boxes,
                            List<WireModel> wires,
@@ -43,7 +46,9 @@ public final class SnapshotService {
                            HudView hudView,
                            GameScreenView gameView,
                            PacketRenderController renderer,
-                           List<PacketProducerController> producers,Runnable networkChangedCallback) {
+                           List<PacketProducerController> producers,
+                           Runnable networkChangedCallback,
+                           LargeGroupRegistry largeGroupRegistry) { // اضافه شده
         this.destMap         = destMap;
         this.boxes           = boxes;
         this.wires           = wires;
@@ -57,6 +62,7 @@ public final class SnapshotService {
         this.packetRenderer  = renderer;
         this.producers       = (producers == null) ? List.of() : producers;
         this.networkChangedCallback = networkChangedCallback;
+        this.largeGroupRegistry = largeGroupRegistry; // اضافه شده
     }
 
     public void capture() { snapshotManager.recordSnapshot(buildSnapshot()); }
@@ -68,16 +74,34 @@ public final class SnapshotService {
         NetworkSnapshot snap = new NetworkSnapshot(scoreModel.getScore());
         // world counters
         snap.world.coins          = coinModel.getCoins();
-        snap.world.packetLoss     = lossModel.getLostCount();
+        snap.world.packetLoss     = lossModel.getLostCount(); // این شامل deferred loss هم می‌شود
         snap.world.wireUsageTotal = usageModel.getTotalWireLength();
         snap.world.wireUsageUsed  = usageModel.getUsedWireLength();
+
+        // -------------------- LARGE GROUP REGISTRY STATE --------------------
+        // ذخیره حالت registry برای بازسازی صحیح loss بعد از rewind
+        if (largeGroupRegistry != null) {
+            snap.largeGroups.clear();
+            for (LargeGroupRegistry.GroupSnapshot gs : largeGroupRegistry.snapshot()) {
+                LargeGroupState lgs = new LargeGroupState();
+                lgs.id = gs.id;
+                lgs.originalSizeUnits = gs.originalSizeUnits;
+                lgs.expectedBits = gs.expectedBits;
+                lgs.colorId = gs.colorId;
+                lgs.mergedBits = gs.mergedBits;
+                lgs.lostBits = gs.lostBits;
+                lgs.closed = gs.closed;
+                lgs.partialMerges.addAll(gs.partialMerges);
+                snap.largeGroups.add(lgs);
+            }
+        }
 
         // -------------------- PRODUCERS (CAPTURE) --------------------
         snap.world.producers.clear();
         for (PacketProducerController p : producers) {
             ProducerState ps = new ProducerState();
-            ps.packetsPerPort = p.getPacketsPerPort();   // فقط برای دیباگ/اعتبارسنجی
-            ps.totalToProduce = p.getTotalToProduce();   // فقط برای دیباگ/اعتبارسنجی
+            ps.packetsPerPort = p.getPacketsPerPort();
+            ps.totalToProduce = p.getTotalToProduce();
             ps.producedCount  = p.getProducedCount();
             ps.inFlight       = p.getInFlight();
             ps.running        = p.isRunning();
@@ -147,10 +171,65 @@ public final class SnapshotService {
     public void restore(NetworkSnapshot snap) {
         if (snap == null) return;
 
-        // Counters
-        scoreModel.reset();   scoreModel.addPoints(snap.world.score);
-        coinModel.reset();    coinModel.add(snap.world.coins);
-        lossModel.reset();    if (snap.world.packetLoss > 0) lossModel.incrementBy(snap.world.packetLoss);
+        // -------------------- RESTORE LARGE GROUP REGISTRY --------------------
+        // این باید قبل از restore کردن loss انجام شود
+        if (largeGroupRegistry != null && snap.largeGroups != null) {
+            List<LargeGroupRegistry.GroupSnapshot> registrySnapshots = new ArrayList<>();
+            for (LargeGroupState lgs : snap.largeGroups) {
+                LargeGroupRegistry.GroupSnapshot gs = new LargeGroupRegistry.GroupSnapshot(
+                        lgs.id,
+                        lgs.originalSizeUnits,
+                        lgs.expectedBits,
+                        lgs.colorId,
+                        lgs.mergedBits,
+                        lgs.lostBits,
+                        lgs.closed,
+                        lgs.partialMerges
+                );
+                registrySnapshots.add(gs);
+            }
+            largeGroupRegistry.restore(registrySnapshots);
+        }
+
+        // Counters - حالا loss به درستی محاسبه می‌شود
+        scoreModel.reset();
+        scoreModel.addPoints(snap.world.score);
+        coinModel.reset();
+        coinModel.add(snap.world.coins);
+
+        // مهم: immediateLoss را از snapshot restore می‌کنیم
+        // deferred loss از registry محاسبه می‌شود
+        lossModel.reset();
+
+        // محاسبه immediate loss از snapshot
+        // نکته: snap.world.packetLoss شامل total loss (immediate + deferred) است
+        // باید immediate را جدا کنیم
+        int totalLossInSnapshot = snap.world.packetLoss;
+        int deferredLossInSnapshot = 0;
+
+        // محاسبه deferred loss در زمان snapshot
+        if (snap.largeGroups != null) {
+            for (LargeGroupState lgs : snap.largeGroups) {
+                if (lgs.closed) {
+                    // محاسبه loss برای گروه بسته شده
+                    int i = lgs.partialMerges.size();
+                    if (i == 0) {
+                        deferredLossInSnapshot += lgs.originalSizeUnits;
+                    } else {
+                        double product = 1.0;
+                        for (int a : lgs.partialMerges) product *= a;
+                        int recovered = (int) Math.floor(i * Math.sqrt(product));
+                        deferredLossInSnapshot += Math.max(0, lgs.originalSizeUnits - recovered);
+                    }
+                }
+            }
+        }
+
+        // immediate loss = total - deferred
+        int immediateLossToRestore = Math.max(0, totalLossInSnapshot - deferredLossInSnapshot);
+        if (immediateLossToRestore > 0) {
+            lossModel.incrementBy(immediateLossToRestore);
+        }
 
         // WireUsage روی HUD/محدودیت‌ها اثر دارد
         usageModel.reset(snap.world.wireUsageTotal);
@@ -184,7 +263,6 @@ public final class SnapshotService {
                     }
                 }
 
-                // توجه: فیلدهای final در Producer از constructor آمده‌اند؛ اینجا فقط state متغیر را برمی‌گردانیم
                 p.restoreFrom(
                         st.producedCount,
                         st.inFlight,
@@ -204,8 +282,8 @@ public final class SnapshotService {
                 if (bs.disableTimer > 1e-6) box.disableFor(bs.disableTimer);
                 else box.disable();
             }
-             for (PacketState ps : bs.bitBuffer)   box.enqueueBitSilently(fromPacketState(ps));
-             for (PacketState ps : bs.largeBuffer) box.enqueueLargeSilently((LargePacket) fromPacketState(ps));
+            for (PacketState ps : bs.bitBuffer)   box.enqueueBitSilently(fromPacketState(ps));
+            for (PacketState ps : bs.largeBuffer) box.enqueueLargeSilently((LargePacket) fromPacketState(ps));
         }
 
         // بازسازی کامل سیم‌ها طبق snapshot
@@ -260,9 +338,11 @@ public final class SnapshotService {
             packetRenderer.refreshAll();
             gameView.rebuildControllers(wires, usageModel, coinModel, networkChangedCallback);
             hudView.setCoins(coinModel.getCoins());
-            hudView.setPacketLoss(lossModel.getLostCount());
+            hudView.setPacketLoss(lossModel.getLostCount()); // حالا این مقدار صحیح خواهد بود
         });
     }
+
+    // ... بقیه متدها بدون تغییر ...
 
     public SnapshotManager getSnapshotManager() { return snapshotManager; }
 
@@ -398,14 +478,14 @@ public final class SnapshotService {
                 lp.setGroupInfo(gid, exp, col);
             }
             else {
-                                // Large بدون گروه → هم colorId و هم رنگ دقیق را برگردان
-                                        if (col != null) {
-                                        // groupId را منفی نگه می‌داریم ولی colorId را ست می‌کنیم
-                                                lp.setGroupInfo(-1, psize, col);
-                                    }
-                                if (ps.customRgb != null) {
-                                        lp.setCustomColor(new java.awt.Color(ps.customRgb, false));
-                                    }
+                // Large بدون گروه → هم colorId و هم رنگ دقیق را برگردان
+                if (col != null) {
+                    // groupId را منفی نگه می‌داریم ولی colorId را ست می‌کنیم
+                    lp.setGroupInfo(-1, psize, col);
+                }
+                if (ps.customRgb != null) {
+                    lp.setCustomColor(new java.awt.Color(ps.customRgb, false));
+                }
             }
 
             if (Boolean.TRUE.equals(ps.rebuiltFromBits)) lp.markRebuilt();

@@ -12,6 +12,7 @@ import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
+import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.view.WireView;
 
 import javax.swing.*;
@@ -163,6 +164,10 @@ public class LevelCoreManager {
                 gameController.getMainFrame(), gameController.getSimulation(), gameController.getCoinModel(), gameController.getCollisionCtrl(), gameController.getLossModel(), gameController.getWires(), gameController.getHudController()));
         gameController.getHudView().getStoreButton().addActionListener(e -> gameController.getShopController().openShop());
 
+        LargeGroupRegistry largeRegistry = null;
+        if (gameController.getRegistrar() != null) {
+            largeRegistry = gameController.getRegistrar().getLargeGroupRegistry();
+        }
         gameController.setSnapshotSvc(new SnapshotService(
                 gameController.getDestMap(),
                 boxes,
@@ -176,7 +181,8 @@ public class LevelCoreManager {
                 gameController.getGameView(),
                 gameController.getPacketRenderer(),
                 List.of(gameController.getProducerController()),
-                gameController::updateStartEnabled  // ✅ اضافه کردن callback
+                gameController::updateStartEnabled,  // callback
+                largeRegistry  // اضافه کردن registry
         ));
         gameController.setRegistrar(new SimulationRegistrar(gameController,
                 gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
