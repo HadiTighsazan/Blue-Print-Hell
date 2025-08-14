@@ -5,6 +5,8 @@ import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
+import com.blueprinthell.model.large.BitPacket;
+import com.blueprinthell.model.large.LargePacket;
 
 import java.util.*;
 
@@ -57,7 +59,8 @@ public final class WireTimeoutController implements Updatable {
 
         for (Removal r : toRemove) {
             if (r.wire.removePacket(r.packet)) {
-                lossModel.increment();
+                if (DBG_LOSS) System.out.println("[LOSS][WireTimeout] " + dbg(r.packet));
+                lossModel.incrementPacket(r.packet);
 
                 // اطلاع به producer
                 SimulationController sim = WireModel.getSimulationController();
@@ -93,4 +96,14 @@ public final class WireTimeoutController implements Updatable {
         final PacketModel packet;
         Removal(WireModel w, PacketModel p) { this.wire = w; this.packet = p; }
     }
+        private static final boolean DBG_LOSS = true;
+    private static String dbg(PacketModel p) {
+                if (p instanceof LargePacket lp) {
+                        return "Large{orig=" + lp.isOriginal() + ",group=" + lp.getGroupId() + ",size=" + lp.getOriginalSizeUnits() + "}";
+                    } else if (p instanceof BitPacket bp) {
+                        return "Bit{group=" + bp.getGroupId() + "}";
+                    } else {
+                        return p.getClass().getSimpleName();
+                    }
+            }
 }

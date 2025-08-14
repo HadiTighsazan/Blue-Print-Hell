@@ -23,7 +23,6 @@ public final class MergerBehavior implements SystemBehavior {
     /* === State ======================================================= */
     private final Map<Integer, GroupContext> groups  = new HashMap<>();
     private final Deque<Integer>             rrQueue = new ArrayDeque<>();
-
     public MergerBehavior(SystemBoxModel box,
                           LargeGroupRegistry registry,
                           PacketLossModel lossModel) {
@@ -37,9 +36,11 @@ public final class MergerBehavior implements SystemBehavior {
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (!(packet instanceof BitPacket bp)) return;
 
-        /* حذف امن بیت از بافر بیت */
+        if (bp.isProcessedByMerger()) return;  // اضافه شد
+
         if (!box.removeFromBuffer(bp)) return;
 
+        bp.markProcessedByMerger();  // اضافه شد
         final int gid = bp.getGroupId();
         GroupContext ctx = groups.computeIfAbsent(gid, GroupContext::new);
         ctx.bits.addLast(bp);

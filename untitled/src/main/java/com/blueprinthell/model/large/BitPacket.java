@@ -12,6 +12,7 @@ import java.util.Objects;
 
 public class BitPacket extends PacketModel implements Serializable {
     private static final long serialVersionUID = 12L;
+    private boolean processedByMerger = false;
 
     private final int groupId;
     private final int parentSizeUnits;
@@ -39,7 +40,8 @@ public class BitPacket extends PacketModel implements Serializable {
         this.setWidth(visualSize);
         this.setHeight(visualSize);
     }
-
+    public boolean isProcessedByMerger() { return processedByMerger; }
+    public void markProcessedByMerger() { this.processedByMerger = true; }
 
     public static BitPacket fromSample(PacketModel sample,
                                        int groupId,

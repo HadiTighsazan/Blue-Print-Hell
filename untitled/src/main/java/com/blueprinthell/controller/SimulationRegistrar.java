@@ -2,6 +2,7 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.systems.*;
+import com.blueprinthell.controller.systems.TeleportTracking;
 import com.blueprinthell.level.Level;
 import com.blueprinthell.model.*;
 import com.blueprinthell.level.LevelCompletionDetector;
@@ -31,6 +32,7 @@ public class SimulationRegistrar {
     // اضافه کردن فیلدهای WireRemovalController و WireDurabilityController
     private WireRemovalController wireRemover;
     private WireDurabilityController durability;
+    private WireTimeoutController    timeout;
     private PacketDispatcherController dispatcherRef;
 
     private final BehaviorRegistry behaviorRegistry = new BehaviorRegistry();
@@ -135,9 +137,9 @@ public class SimulationRegistrar {
             for (PortModel p : b.getOutPorts()) portToBoxMap.put(p, b);
         }
         collisionController.setPortToBoxMap(portToBoxMap);
-         for (WireModel w : wires) {
-             w.setPortToBoxMap(portToBoxMap);
-             }
+        for (WireModel w : wires) {
+            w.setPortToBoxMap(portToBoxMap);
+        }
         WireModel.setSimulationController(simulation);
         if (sources != null) {
             WireModel.setSourceInputPorts(sources);
@@ -354,6 +356,13 @@ public class SimulationRegistrar {
         }
     }
 
+    /** Clear per-frame transient states before restoring from a snapshot. */
+    public void clearTransientState() {
+        if (timeout != null)    timeout.clear();     // elapsed/lastWire ریست
+        if (durability != null) durability.clear();  // شمارنده‌های عبور و صف حذف
+        TeleportTracking.clearAll();                 // وضعیت تلپورت‌ها پاک
+    }
+
     public void registerOptionalControllers(List<WireModel> wires,
                                             List<SystemBoxModel> boxes,
                                             Map<WireModel, SystemBoxModel> destMap) {
@@ -361,7 +370,7 @@ public class SimulationRegistrar {
         throttle.setEnabled(true);
         simulation.register(throttle);
 
-        WireTimeoutController timeout = new WireTimeoutController(wires, lossModel);
+        timeout = new WireTimeoutController(wires, lossModel);
         simulation.register(timeout);
 
         // *** تغییر مهم: ایجاد WireDurabilityController با کانکشن به WireRemovalController ***

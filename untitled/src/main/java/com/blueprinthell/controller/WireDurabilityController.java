@@ -2,6 +2,7 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargePacket;
 
 import java.util.*;
@@ -30,8 +31,8 @@ public class WireDurabilityController implements Updatable {
     }
 
     public void onPacketArrived(PacketModel packet, WireModel wire) {
-                // شمارش عبورها از اینجا انجام نمی‌شود؛ PacketDispatcher + WireModel منبع واحد هستند
-                        // این متد عمداً no-op می‌ماند تا از دوباره‌شماری جلوگیری شود.
+        // شمارش عبورها از اینجا انجام نمی‌شود؛ PacketDispatcher + WireModel منبع واحد هستند
+        // این متد عمداً no-op می‌ماند تا از دوباره‌شماری جلوگیری شود.
     }
 
 
@@ -91,10 +92,10 @@ public class WireDurabilityController implements Updatable {
                         lp.isOriginal() && lp.getGroupId() < 0 &&
                         (lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_8 ||
                                 lp.getOriginalSizeUnits() == Config.LARGE_PACKET_SIZE_10)) {
-                    return;
                 }
 
-                lossModel.increment();
+                if (DBG_LOSS) System.out.println("[LOSS][WireDurability +1 bare] پکت بدون نوع دقیق (increment) ثبت شد.(incrementPacket in savePacketsBeforeRemoval)");
+                lossModel.incrementPacket(p);
 
                 // اطلاع به producer
                 SimulationController sim = WireModel.getSimulationController();
@@ -106,4 +107,14 @@ public class WireDurabilityController implements Updatable {
             wire.clearPackets();
         }
     }
+        private static final boolean DBG_LOSS = true;
+    private static String dbg(PacketModel p) {
+                if (p instanceof LargePacket lp) {
+                        return "Large{orig=" + lp.isOriginal() + ",group=" + lp.getGroupId() + ",size=" + lp.getOriginalSizeUnits() + "}";
+                    } else if (p instanceof BitPacket bp) {
+                        return "Bit{group=" + bp.getGroupId() + "}";
+                    } else {
+                        return p.getClass().getSimpleName();
+                    }
+            }
 }

@@ -3,6 +3,7 @@ package com.blueprinthell.controller;
 import com.blueprinthell.controller.core.LevelCoreManager;
 import com.blueprinthell.controller.core.SimulationCoreManager;
 import com.blueprinthell.controller.core.SnapshotCoreController;
+import com.blueprinthell.controller.systems.TeleportTracking;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.*;
@@ -188,11 +189,6 @@ public class GameController implements NetworkController {
         return snapshotCoreController.captureSnapshot();
     }
 
-    @Override
-    public void restoreState(NetworkSnapshot snap) {
-        snapshotCoreController.restoreState(snap);
-    }
-
 
     public GameScreenView getGameView() { return gameView; }
     public List<WireModel> getWires()  {
@@ -246,5 +242,11 @@ public class GameController implements NetworkController {
         this.wireCreator = wireCreator;
     }
 
+       public void restoreState(NetworkSnapshot snap) {
+                SimulationRegistrar reg = getRegistrar();
+               if (reg != null) reg.clearTransientState();
+                TeleportTracking.clearAll();
+                snapshotCoreController.restoreState(snap);
+            }
     public void setScreenController(ScreenController sc) { this.screenController = sc; }
 }

@@ -15,4 +15,5 @@ public class MergedPacket extends LargePacket {
         super(type, baseSpeed, sizeUnits, groupId, expectedBits, colorId, /*rebuiltFromBits=*/true);
     }
 
+
 }

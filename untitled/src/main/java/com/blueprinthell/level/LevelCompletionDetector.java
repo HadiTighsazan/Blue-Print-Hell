@@ -92,7 +92,10 @@ public class LevelCompletionDetector implements Updatable {
             // --- تسویه‌ی خسارت مؤخره در نقطه‌ی سکون ---
             // این متد (پچ 3) همه‌ی گروه‌های باز رجیستری را می‌بندد (idempotent)
             lossModel.finalizeDeferredLossNow();
-
+                        if (lossModel != null) {
+                               var reg = lossModel.getRegistryView(); // اگر ندارید: متدی اضافه کنید که LargeGroupRegistry را برگرداند/یا view() را proxied برگرداند
+                                if (reg != null) reg.debugDumpClosed("BEFORE_REPORT");
+                            }
             // حالا نسبت Loss با احتساب مؤخره
             int producedUnits = producer.getProducedUnits();
             double lossRatio = producedUnits > 0

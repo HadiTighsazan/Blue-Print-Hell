@@ -7,14 +7,20 @@ import com.blueprinthell.model.large.LargeGroupRegistry;
 public class PacketLossModel {
     private int immediateLoss = 0;
     private LargeGroupRegistry registry; // تزریق از SimulationRegistrar
-
+    private static final boolean DBG_LOSS = true;
     public void setLargeGroupRegistry(LargeGroupRegistry reg) {
         this.registry = reg;
     }
 
     // فقط برای پکت‌های غیر بیت/غیر حجیم
     public void increment() {
+
         immediateLoss++;
+               if (DBG_LOSS) {
+                        System.out.println("[LOSS][Immediate +1] increment() بدون پکت صدا زده شد.");
+                       // برای پیدا کردن منبع دقیق:
+                                // new Exception().printStackTrace(System.out);
+                                   }
     }
 
     public void incrementBy(int n) {
@@ -30,11 +36,31 @@ public class PacketLossModel {
     }
 
     public void incrementPacket(PacketModel p) {
-        if (p instanceof BitPacket) return;          // مؤخره
-        if (p instanceof LargePacket) return;        // مؤخره (اولیه یا مرج‌شده)
-        immediateLoss++;                              // فقط پکت معمولی
-    }
+            if (p instanceof BitPacket) {
+                        if (DBG_LOSS) System.out.println("[LOSS][Deferred][Bit] group=" + ((BitPacket)p).getGroupId());
+                       return;          // مؤخره
+                    }
+               if (p instanceof LargePacket lp) {
+                        if (DBG_LOSS) {
+                                System.out.println("[LOSS][Deferred][Large] orig=" + lp.isOriginal()
+                                                + " group=" + lp.getGroupId()
+                                                + " size=" + lp.getOriginalSizeUnits());
+                            }
+                        return;        // مؤخره (اولیه یا مرج‌شده)
+                    }
+                immediateLoss++;
+                if (DBG_LOSS) {
+                       System.out.println("[LOSS][Immediate +1][Non-Large/Non-Bit] type=" + p.getClass().getSimpleName());
+                   }
+          }
 
+           /** اگر دارید در SnapshotService مقدار فوری را ست می‌کنید، یک لاگ بزنید: */
+           public void restoreImmediateLoss(int value) {
+               this.immediateLoss = Math.max(0, value);
+               if (DBG_LOSS) {
+                       System.out.println("[RESTORE][LossSet] immediate=" + this.immediateLoss);
+                  }
+            }
     /**
      * محاسبه کل loss (immediate + deferred)
      */
@@ -100,11 +126,6 @@ public class PacketLossModel {
         }
     }
 
-    /**
-     * متد برای restore مستقیم state
-     * این متد فقط در restore استفاده می‌شود
-     */
-    public void restoreImmediateLoss(int value) {
-        this.immediateLoss = Math.max(0, value);
-    }
+    public LargeGroupRegistry getRegistryView() { return this.registry; }
+
 }

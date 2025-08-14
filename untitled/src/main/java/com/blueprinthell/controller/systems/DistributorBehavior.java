@@ -99,7 +99,7 @@ public final class DistributorBehavior implements SystemBehavior {
         int groupId;
         int colorId;
         if (!large.hasGroup()) {
-            // پکت گروه ندارد - ایجاد گروه جدید
+            // پکت گروه ندارد - ابتدا تلاش برای الحاق به گروه باز موجود (بر اساس رنگ/سایز)
             colorId = large.getColorId();
             if (colorId <= 0) {
                 Color cc = large.getCustomColor();
@@ -110,8 +110,12 @@ public final class DistributorBehavior implements SystemBehavior {
                     colorId = rnd.nextInt(360);
                 }
             }
-
-            groupId = registry.createGroup(parentSize, expectedBits, colorId);
+            Integer adopt = registry.findOpenGroupByColorAndSize(colorId, parentSize);
+            if (adopt != null) {
+                groupId = adopt;
+            } else {
+                groupId = registry.createGroup(parentSize, expectedBits, colorId);
+            }
             large.setGroupInfo(groupId, expectedBits, colorId);
         } else {
             // پکت از قبل گروه دارد
@@ -121,6 +125,9 @@ public final class DistributorBehavior implements SystemBehavior {
             // ⭐ فقط اگر گروه واقعاً وجود ندارد، بازسازی کن
             if (registry.get(groupId) == null) {
                 registry.createGroupWithId(groupId, parentSize, expectedBits, colorId);
+            } else if (registry.get(groupId).isClosed()) {
+                // گروه در snapshot بسته شده — دوباره split نکن
+                return;
             }
         }
 

@@ -445,7 +445,7 @@ public class PacketRouterController implements Updatable {
                 if (!routeTeleportedPacket(packet)) {
                     // اگر نتوانست route کند، در بافر قرار بده
                     if (!box.enqueue(packet)) {
-                        lossModel.increment();
+                        lossModel.incrementPacket(packet);
                     } else {
                         // پکت در بافر قرار گرفت، در چرخه بعدی route خواهد شد
                     }

@@ -200,6 +200,7 @@ public final class NetworkSnapshot implements Serializable {
         public int originalSizeUnits;
         public int expectedBits;
         public int colorId;
+        public int receivedBits;
         public int mergedBits;
         public int lostBits;
         public boolean closed;

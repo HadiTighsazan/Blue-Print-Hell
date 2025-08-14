@@ -88,6 +88,7 @@ public final class SnapshotService {
                 lgs.originalSizeUnits = gs.originalSizeUnits;
                 lgs.expectedBits = gs.expectedBits;
                 lgs.colorId = gs.colorId;
+                lgs.receivedBits = gs.receivedBits;
                 lgs.mergedBits = gs.mergedBits;
                 lgs.lostBits = gs.lostBits;
                 lgs.closed = gs.closed;
@@ -181,6 +182,7 @@ public final class SnapshotService {
                         lgs.originalSizeUnits,
                         lgs.expectedBits,
                         lgs.colorId,
+                        lgs.receivedBits,
                         lgs.mergedBits,
                         lgs.lostBits,
                         lgs.closed,
@@ -189,6 +191,7 @@ public final class SnapshotService {
                 registrySnapshots.add(gs);
             }
             largeGroupRegistry.restore(registrySnapshots);
+            largeGroupRegistry.debugDumpClosed("AFTER_RESTORE");
         }
 
         // Counters - حالا loss به درستی محاسبه می‌شود
@@ -225,13 +228,10 @@ public final class SnapshotService {
             }
         }
 
-        // immediate loss = total - deferred
+        // immediate loss = total - deferred  (SET, don't add)
         int immediateLossToRestore = Math.max(0, totalLossInSnapshot - deferredLossInSnapshot);
-        if (immediateLossToRestore > 0) {
-            lossModel.incrementBy(immediateLossToRestore);
-        }
-
-        // WireUsage روی HUD/محدودیت‌ها اثر دارد
+        lossModel.restoreImmediateLoss(immediateLossToRestore);
+// WireUsage روی HUD/محدودیت‌ها اثر دارد
         usageModel.reset(snap.world.wireUsageTotal);
         if (snap.world.wireUsageUsed > 0) usageModel.useWire(snap.world.wireUsageUsed);
 
@@ -333,6 +333,23 @@ public final class SnapshotService {
         wires.clear();
         wires.addAll(rebuilt);
 
+        // --- Fixup: rebind orphan LargePackets to existing open groups (by color & size) ---
+        if (largeGroupRegistry != null) {
+            for (WireModel w : wires) {
+                for (PacketModel p : w.getPackets()) {
+                    if (p instanceof LargePacket lp) {
+                        int gid = lp.getGroupId();
+                        LargeGroupRegistry.GroupState st = (gid > 0) ? largeGroupRegistry.get(gid) : null;
+                        if (st == null || st.isClosed()) {
+                            Integer adopt = largeGroupRegistry.findOpenGroupByColorAndSize(lp.getColorId(), lp.getOriginalSizeUnits());
+                            if (adopt != null) {
+                                lp.setGroupInfo(adopt, lp.getExpectedBits(), lp.getColorId());
+                            }
+                        }
+                    }
+                }
+            }
+        }
         SwingUtilities.invokeLater(() -> {
             gameView.reset(boxes, wires);
             packetRenderer.refreshAll();
