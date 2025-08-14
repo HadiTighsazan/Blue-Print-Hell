@@ -14,7 +14,7 @@ import java.util.*;
  *  - Avoid java.awt.Point to keep JSON lean and toolkit-agnostic.
  */
 public final class NetworkSnapshot implements Serializable {
-    public static final String SCHEMA_VERSION = "model-v2";
+    public static final String SCHEMA_VERSION = "model-v3";
 
     /** Top-level meta information. */
     public Meta meta;
@@ -102,7 +102,8 @@ public final class NetworkSnapshot implements Serializable {
         public SystemKind primaryKind;    // kind at capture time
         public boolean enabled;           // SystemBoxModel.isEnabled()
         public double disableTimer;       // remaining cooldown/disable secs
-
+        public int x;
+        public int y;
         public List<PortShape> inShapes = new ArrayList<>();
         public List<PortShape> outShapes = new ArrayList<>();
 

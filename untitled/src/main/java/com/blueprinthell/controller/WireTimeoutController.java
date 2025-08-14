@@ -19,6 +19,9 @@ public final class WireTimeoutController implements Updatable {
 
     private final Map<PacketModel, Double> elapsed = new HashMap<>();
     private final Map<PacketModel, WireModel> lastWire = new HashMap<>();
+    private final Map<PacketModel, Double>     lastProgress = new HashMap<>();
+    // محدودهٔ گِریس نزدیک ابتدا/انتها (روی این بازه، تایم‌اوت نمی‌گیریم)
+    private static final double ENDPOINT_GRACE = 0.025; // ≈۲.۵٪ طول مسیر
 
     public WireTimeoutController(List<WireModel> wires,
                                  PacketLossModel lossModel) {

@@ -131,6 +131,8 @@ public final class SnapshotService {
             bs.primaryKind  = b.getPrimaryKind();
             bs.enabled      = b.isEnabled();
             try { bs.disableTimer = b.isEnabled() ? 0.0 : b.getDisableTimer(); } catch (Throwable ignore) {}
+            bs.x = b.getX();
+            bs.y = b.getY();
             bs.inShapes.addAll(b.getInShapes());
             bs.outShapes.addAll(b.getOutShapes());
             for (PacketModel p : b.getBitBuffer())    bs.bitBuffer.add(toPacketState(p));
@@ -274,9 +276,14 @@ public final class SnapshotService {
         }
 
         // Box buffers
+        boolean hasBoxXY = (snap.meta != null && "model-v3".equals(snap.meta.schemaVersion));
         for (BoxState bs : snap.world.boxes) {
             SystemBoxModel box = idToBox.get(bs.id);
             if (box == null) continue;
+            if (hasBoxXY) {
+                box.setX(bs.x);
+                box.setY(bs.y);
+            }
             box.clearBuffer();
             if (!bs.enabled) {
                 if (bs.disableTimer > 1e-6) box.disableFor(bs.disableTimer);

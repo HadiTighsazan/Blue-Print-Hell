@@ -496,7 +496,6 @@ public class PacketRouterController implements Updatable {
 
         // پاک کردن علامت teleported
         TeleportTracking.clearTeleported(packet);
-
         // به‌روزرسانی آمار
         packetsRouted++;
         if (!compatible) {
