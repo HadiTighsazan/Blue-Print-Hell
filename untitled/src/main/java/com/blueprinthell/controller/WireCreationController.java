@@ -33,6 +33,7 @@ public class WireCreationController {
     private final MouseMotionListener previewListener;
 
     private final JPanel area;
+    private final Map<PortModel, SystemBoxModel> portToBoxMap;
 
     public WireCreationController(GameScreenView gameView,
                                   SimulationController simulation,
@@ -54,10 +55,15 @@ public class WireCreationController {
         this.area = gameView.getGameArea();
         area.setLayout(null);
 
+        // ساخت نقشه Port→Box برای استفاده در سیم‌های جدید
+        this.portToBoxMap = buildPortToBoxMap(boxes);
+
         for (WireModel w : wires) {
             destMap.put(w, findDestBox(w.getDstPort()));
             lockedInputs.add(w.getDstPort());
             usageModel.useWire(w.getLength());
+            // تنظیم portToBoxMap برای سیم‌های موجود
+            w.setPortToBoxMap(portToBoxMap);
         }
 
         overlay = new Overlay();
@@ -71,7 +77,6 @@ public class WireCreationController {
         attachToPorts(area);
         area.addMouseListener(new MouseAdapter(){@Override public void mouseClicked(MouseEvent e){if(drawing) cancelPreview();}});
     }
-
     private void attachToPorts(Container c){for(Component comp:c.getComponents()){if(comp instanceof PortView pv){pv.addMouseListener(new MouseAdapter(){@Override public void mouseClicked(MouseEvent e){handlePortClick(pv);} });} else if(comp instanceof Container inner && comp!=overlay){attachToPorts(inner);} }}
 
     private void handlePortClick(PortView pv){
@@ -112,6 +117,10 @@ public class WireCreationController {
                         cancelPreview();
                         return;
                     }
+
+                    // تنظیم portToBoxMap برای سیم جدید - این خط حیاتی است!
+                    wm.setPortToBoxMap(portToBoxMap);
+
                     wires.add(wm);
                     destMap.put(wm,findDestBox(pm));
                     lockedInputs.add(pm);
@@ -124,7 +133,8 @@ public class WireCreationController {
                     area.repaint();
                     if(networkChanged!=null) networkChanged.run();
                     new WireEditorController(area, wm, wv, gameView.getSystemBoxViews(), coinModel, usageModel, networkChanged);
-                } else {
+                }
+                else {
                     // اگر به هر دلیل دیگری PortModel اجازه اتصال ندهد
                     Toolkit.getDefaultToolkit().beep();
                     cancelPreview();
@@ -147,5 +157,13 @@ public class WireCreationController {
     private static class Overlay extends JComponent{
         private Point p1,p2; @Override public boolean contains(int x,int y){return false;} void beginPreview(){ } void endPreview(){ } @Override protected void paintComponent(Graphics g){super.paintComponent(g); if(p1!=null&&p2!=null){Graphics2D g2=(Graphics2D)g.create(); g2.setColor(Color.RED); g2.setStroke(new BasicStroke(Config.STROKE_WIDTH_WIRE)); g2.drawLine(p1.x,p1.y,p2.x,p2.y); g2.dispose();}}
         void updateLine(Point a,Point b){p1=a;p2=b; repaint();} void clearLine(){p1=p2=null; repaint();}
+    }
+    private static Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {
+        Map<PortModel, SystemBoxModel> map = new HashMap<>();
+        for (SystemBoxModel b : boxes) {
+            for (PortModel p : b.getInPorts())  map.put(p, b);
+            for (PortModel p : b.getOutPorts()) map.put(p, b);
+        }
+        return map;
     }
 }

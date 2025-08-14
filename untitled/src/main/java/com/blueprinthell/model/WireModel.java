@@ -110,46 +110,31 @@ public class WireModel implements Serializable {
                 if ((p.isReturning() || destDisabled) && p.getProgress() <= 0.0) {
                     PortModel srcPort = getSrcPort();
                     SystemBoxModel srcBox = (portToBoxMap != null) ? portToBoxMap.get(srcPort) : null;
-                    if(srcBox != null){
-                        System.out.println("srcBox is not null in wireModel.update");
-                    }
-                    else {
-                        System.out.println("srcBox is null in wireModel.update");
-                    }
 
                     boolean accepted = false;
 
                     if (srcBox != null && srcPort != null) {
-                        // ✅ ورود از "پورت خروجی" منبع ⇒ می‌رود داخل returnBuffer
+                        // ورود از پورت خروجی منبع به returnBuffer
                         accepted = srcBox.enqueue(p, srcPort);
-                        System.out.println("in wireModel.update : "+accepted);
+
                         if (accepted) {
                             it.remove();
                             p.attachToWire(null, 0.0);
                             p.setReturning(false);
-                            if (simulationController != null) simulationController.onPacketReturned();
-                        } else {
-                            // جا نبود ⇒ بذار روی 0.0 بماند تا در فریم‌های بعدی دوباره تلاش شود
-                            p.setProgress(0.0);
+                            if (simulationController != null) {
+                                simulationController.onPacketReturned();
+                            }
                         }
                     }
 
-
-                    if (accepted) {
-                        it.remove();
-                        p.attachToWire(null, 0.0);
-                        p.setReturning(false);
-
-                        if (simulationController != null) {
-                            // برای همه پکت‌ها، نه فقط غیر-messenger
-                            simulationController.onPacketReturned();
-                        }
-                    } else {
+                    if (!accepted) {
+                        // اگر نتوانست وارد شود، در موقعیت 0.0 بماند
                         p.setProgress(0.0);
                     }
                 }
 
                 continue;
+
             }
             double cc = p.getCollisionCooldown();
             if (cc > 1e-9 && p.isHoldWhileCooldown()) {
