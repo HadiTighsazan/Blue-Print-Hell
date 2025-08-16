@@ -16,6 +16,10 @@ public class MenuController {
     private final LevelManager     levelManager;
     private final GameController   gameController;
 
+    // --- Patch: guards for restoration & countdown ---
+    private boolean restorationInProgress = false; // جلوگیری از اجرای همزمان بازیابی
+    private boolean countdownShown = false;        // جلوگیری از نمایش دوبارهٔ شمارش معکوس
+
     public MenuController(ScreenController screenController,
                           GameController gameController) {
         this.screenController = screenController;
@@ -97,6 +101,7 @@ public class MenuController {
         levelSelect.backButton.addActionListener(e ->
                 screenController.showScreen(ScreenController.MAIN_MENU));
     }
+
     private void handleStartGame() {
         System.out.println("[MenuController] Start button clicked");
 
@@ -133,8 +138,11 @@ public class MenuController {
         screenController.showScreen(ScreenController.GAME_SCREEN);
     }
 
-    // بازیابی بازی ذخیره شده
+    // --- Patch: اصلاح روند بازیابی بازی ذخیره‌شده ---
     private void resumeSavedGame() {
+        if (restorationInProgress) return; // جلوگیری از اجرای همزمان
+        restorationInProgress = true;
+
         NetworkSnapshot snapshot = AutoSaveController.loadSavedProgress();
         if (snapshot == null) {
             JOptionPane.showMessageDialog(null,
@@ -142,26 +150,51 @@ public class MenuController {
                     "Load Error",
                     JOptionPane.ERROR_MESSAGE);
             startNewGame();
+            restorationInProgress = false;
             return;
         }
 
         // نمایش صفحه بازی
         screenController.showScreen(ScreenController.GAME_SCREEN);
 
-        // بازیابی وضعیت (این متد خودش simulation را stop می‌کند)
-        gameController.restoreFromSavedProgress();
+        // ⭐ حذف فراخوانی مستقیم restoreFromSavedProgress
+        // gameController.restoreFromSavedProgress(); // این خط حذف شد
 
-        // نمایش پیام با شمارش معکوس و شروع بازی
-        showRestoredGameCountdown();
-    }    private void showRestoredGameCountdown() {
+        // ⭐ ابتدا level را load کنیم
+        int lvl = 1;
+        try {
+            if (snapshot.meta != null && snapshot.meta.levelNumber > 0) {
+                lvl = snapshot.meta.levelNumber;
+            }
+        } catch (Exception ignore) {}
+
+        // Load level بدون restore (فقط ساختار)
+        gameController.getLevelManager().loadLevel(lvl);
+
+        // سپس بازیابی state و نمایش شمارش معکوس در چرخهٔ بعدی EDT
+        SwingUtilities.invokeLater(() -> {
+            // Restore state
+            gameController.restoreState(snapshot);
+
+            // نمایش countdown (یک‌بار)
+            showRestoredGameCountdownOnce();
+
+            restorationInProgress = false;
+        });
+    }
+
+    // شمارش معکوس شروع پس از بازیابی — فقط یک‌بار نمایش داده می‌شود
+    private void showRestoredGameCountdownOnce() {
+        if (countdownShown) return; // جلوگیری از نمایش دوباره
+        countdownShown = true;
+
         SwingUtilities.invokeLater(() -> {
             GameScreenView gameView = gameController.getGameView();
 
-            // بررسی که gameView واقعاً نمایش داده شده است
+            // اگر صفحه هنوز نمایش داده نشده، مستقیم شروع کن
             if (!gameView.isShowing()) {
-                // اگر هنوز نمایش داده نشده، مستقیماً شروع کن
-                gameController.getSimulation().start();
-                gameController.resumeAutoSave();
+                startRestoredGame();
+                countdownShown = false; // reset flag
                 return;
             }
 
@@ -201,6 +234,7 @@ public class MenuController {
                     startRestoredGame();
 
                     countdown.stop();
+                    countdownShown = false; // reset flag
                 }
             });
 
@@ -208,7 +242,7 @@ public class MenuController {
         });
     }
 
-    // متد جدید برای شروع تمیز بازی
+    // متد شروع تمیز بازی پس از بازیابی
     private void startRestoredGame() {
         // شروع simulation
         gameController.getSimulation().start();

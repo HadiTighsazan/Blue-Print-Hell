@@ -36,6 +36,7 @@ public class GameController implements NetworkController {
 
 
     private HudController                 hudController;
+    private boolean restoreInProgress = false;
 
     public ScreenController getScreenController() {
         return screenController;
@@ -316,6 +317,9 @@ public class GameController implements NetworkController {
             }
         }
 
+        SwingUtilities.invokeLater(() -> {
+            checkCompletionAfterRestore();
+        });
         System.out.println("[GameController] Game restored from saved progress");
     }
 
@@ -382,5 +386,44 @@ public class GameController implements NetworkController {
             setSnapshotSvc(svc);
         }
     }
+    private void checkCompletionAfterRestore() {
+        // بررسی وضعیت تکمیل بلافاصله بعد از restore
+        if (getProducerController() != null && getProducerController().isFinished()) {
+            // بررسی که آیا همه پکت‌ها مصرف شده‌اند
+            boolean allWiresEmpty = getWires().stream()
+                    .allMatch(w -> w.getPackets().isEmpty());
 
+            boolean allBoxesEmpty = getBoxes().stream()
+                    .allMatch(b -> {
+                        if (b.getOutPorts().isEmpty()) { // Sink
+                            return !b.hasUnprocessedEntries();
+                        }
+                        return b.getBitBuffer().isEmpty() &&
+                                b.getLargeBuffer().isEmpty() &&
+                                !b.hasUnprocessedEntries();
+                    });
+
+            if (allWiresEmpty && allBoxesEmpty) {
+                // بازی تمام شده - بررسی loss ratio
+                getLossModel().finalizeDeferredLossNow();
+
+                int producedUnits = getProducerController().getProducedUnits();
+                double lossRatio = producedUnits > 0
+                        ? (double) getLossModel().getLostCount() / producedUnits
+                        : 0.0;
+
+                double threshold = getLevelManager().getCurrentLevel().getMaxLossRatio();
+
+                if (lossRatio < threshold) {
+                    // موفقیت
+                    SwingUtilities.invokeLater(() ->
+                            getLevelManager().reportLevelCompleted());
+                } else {
+                    // شکست
+                    SwingUtilities.invokeLater(() ->
+                            getScreenController().showScreen(ScreenController.GAME_OVER));
+                }
+            }
+        }
+    }
 }
