@@ -4,9 +4,11 @@ import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.CoinModel;
 import com.blueprinthell.model.WireModel;
+import com.blueprinthell.view.screens.GameScreenView;
 import com.blueprinthell.view.screens.ShopView;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,17 +24,19 @@ public class ShopController {
 
     private final ShopView shopView;
     private final JDialog dialog;
+    private final GameScreenView gameView;
 
     private final List<String> activeNames  = new ArrayList<>();
     private final List<Integer> activeTimes = new ArrayList<>();
-
+    private AccelerationFreezeController freezeController;
+    private FreezePointSelector freezeSelector;
     public ShopController(JFrame parentFrame,
                           SimulationController simulation,
                           CoinModel coinModel,
                           CollisionController collisionController,
                           PacketLossModel lossModel,
                           List<WireModel> wires,
-                          HudController hudController) {
+                          HudController hudController,GameScreenView gameView) {
         this.simulation          = simulation;
         this.coinModel          = coinModel;
         this.collisionController = collisionController;
@@ -40,7 +44,7 @@ public class ShopController {
         this.wires               = wires;
         this.hudController       = hudController;
         this.shopView            = new ShopView();
-
+        this.gameView = gameView;
         dialog = new JDialog(parentFrame, "Store", true);
         dialog.setContentPane(shopView);
         dialog.pack();
@@ -50,6 +54,8 @@ public class ShopController {
         shopView.addBuyOAiryamanListener(e -> buyOAiryaman());
         shopView.addBuyOAnahitaListener(e -> buyOAnahita());
         shopView.addCloseListener(e -> closeShop());
+        shopView.addBuyFreezeAccelListener(e -> buyFreezeAcceleration());
+
     }
 
     public void openShop() {
@@ -107,7 +113,69 @@ public class ShopController {
         lossModel.reset();
         deactivateFeature("O’Anahita");
     }
+    public void setFreezeController(AccelerationFreezeController controller) {
+        this.freezeController = controller;
+    }
 
+    // حذف متد findGameView() و تغییر متد buyFreezeAcceleration:
+    private void buyFreezeAcceleration() {
+        int cost = 10;
+
+        if (freezeController == null) {
+            shopView.setMessage("Freeze acceleration not available!");
+            return;
+        }
+
+        if (!freezeController.canActivate()) {
+            double cooldown = freezeController.getCooldownRemaining();
+            shopView.setMessage("On cooldown! Wait " + String.format("%.1f", cooldown) + " seconds");
+            return;
+        }
+
+        if (!deductCoins(cost)) {
+            shopView.setMessage("Not enough coins (need " + cost + ")");
+            return;
+        }
+
+        shopView.setMessage("Select a point on wire...");
+        closeShop();
+
+        // استفاده از gameView که حالا فیلد کلاس است
+        SwingUtilities.invokeLater(() -> {
+            freezeSelector = new FreezePointSelector(
+                    gameView,  // استفاده مستقیم از فیلد
+                    wires,
+                    point -> {
+                        if (freezeController.activateFreezeAt(point)) {
+                            // نمایش افکت بصری (اختیاری)
+                            showFreezeEffect(point);
+                        }
+                    }
+            );
+            freezeSelector.startSelection();
+        });
+    }
+
+    // متد اختیاری برای نمایش افکت:
+    private void showFreezeEffect(Point point) {
+        // می‌توانید یک انیمیشن یا پیام نمایش دهید
+        System.out.println("[Freeze] Activated at: " + point);
+    }
+
+    // متد کمکی برای یافتن GameScreenView:
+    private GameScreenView findGameView() {
+        // برگرداندن gameView از طریق parent hierarchy
+        Container parent = dialog.getParent();
+        while (parent != null) {
+            for (Component comp : parent.getComponents()) {
+                if (comp instanceof GameScreenView) {
+                    return (GameScreenView) comp;
+                }
+            }
+            parent = parent.getParent();
+        }
+        return null;
+    }
     private boolean deductCoins(int cost) {
         if (!coinModel.spend(cost)) {
             shopView.setMessage("Not enough coins (need " + cost + ")");
@@ -130,4 +198,5 @@ public class ShopController {
             hudController.setActiveFeatures(List.copyOf(activeNames), List.copyOf(activeTimes));
         }
     }
+
 }

@@ -37,6 +37,7 @@ public class GameController implements NetworkController {
 
     private HudController                 hudController;
     private boolean restoreInProgress = false;
+    private AccelerationFreezeController freezeController;
 
     public ScreenController getScreenController() {
         return screenController;
@@ -191,7 +192,13 @@ public class GameController implements NetworkController {
         return snapshotCoreController.captureSnapshot();
     }
 
+    public AccelerationFreezeController getFreezeController() {
+        return freezeController;
+    }
 
+    public void setFreezeController(AccelerationFreezeController controller) {
+        this.freezeController = controller;
+    }
     public GameScreenView getGameView() { return gameView; }
     public List<WireModel> getWires()  {
         return simulationCoreManager.getWires();

@@ -161,7 +161,18 @@ public class LevelCoreManager {
 
         gameController.setHudController(new HudController(usageModel, gameController.getLossModel(), gameController.getCoinModel(), levelManager, gameController.getHudView()));
         gameController.setShopController(new ShopController(
-                gameController.getMainFrame(), gameController.getSimulation(), gameController.getCoinModel(), gameController.getCollisionCtrl(), gameController.getLossModel(), gameController.getWires(), gameController.getHudController()));
+                gameController.getMainFrame(),
+                gameController.getSimulation(),
+                gameController.getCoinModel(),
+                gameController.getCollisionCtrl(),
+                gameController.getLossModel(),
+                gameController.getWires(),
+                gameController.getHudController(),
+                gameController.getGameView()  // اضافه شدن gameView
+        ));        AccelerationFreezeController freezeController = new AccelerationFreezeController(gameController.getWires());
+        gameController.getSimulation().register(freezeController);
+        gameController.setFreezeController(freezeController);
+        gameController.getShopController().setFreezeController(freezeController);
         gameController.getHudView().getStoreButton().addActionListener(e -> gameController.getShopController().openShop());
 
         LargeGroupRegistry largeRegistry = null;
