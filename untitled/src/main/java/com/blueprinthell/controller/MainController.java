@@ -54,7 +54,31 @@ public class MainController {
 
             screenController.showScreen(ScreenController.MAIN_MENU);
 
+            // اضافه کردن Shutdown Hook برای ذخیره در هنگام خروج غیرمنتظره
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                // هیچ‌گاه فایل را پاک نمی‌کنیم در shutdown
+                // فقط لاگ می‌زنیم
+                System.out.println("[ShutdownHook] Application shutting down - AutoSave preserved");
+            }));
+
+            // Window Listener برای خروج از دکمه X پنجره
+            frame.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowClosing(java.awt.event.WindowEvent e) {
+                    handleExitPreserve(gameController);
+                }
+            });
+
             frame.setVisible(true);
         });
+    }
+    private static void handleNormalExit(GameController gameController) {
+        gameController.stopAutoSave(); // حذف فایل ذخیره
+        System.exit(0);
+    }
+    private static void handleExitPreserve(GameController gameController) {
+        // فقط توقف — فایل‌ها باقی بمانند
+        gameController.stopAutoSave();
+        System.exit(0);
     }
 }

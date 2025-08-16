@@ -25,7 +25,7 @@ public class LevelManager {
     }
 
 
-    private void loadLevel(int levelNumber) {
+    public void loadLevel(int levelNumber) {
         if (!LevelRegistry.isValidLevel(levelNumber)) {
             throw new IllegalStateException("Invalid level number: " + levelNumber);
         }

@@ -181,9 +181,11 @@ public class LevelCoreManager {
                 gameController.getGameView(),
                 gameController.getPacketRenderer(),
                 List.of(gameController.getProducerController()),
-                gameController::updateStartEnabled,  // callback
-                largeRegistry  // اضافه کردن registry
+                gameController::updateStartEnabled,
+                () -> levelManager.getLevelIndex() + 1, // ★ تامین شماره لِول
+                largeRegistry
         ));
+
         gameController.setRegistrar(new SimulationRegistrar(gameController,
                 gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
                 gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));
@@ -200,6 +202,9 @@ public class LevelCoreManager {
         gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
 
         updateStartEnabled();
+
+
+        gameController.startAutoSave();
     }
 
     public void buildWireControllers() {

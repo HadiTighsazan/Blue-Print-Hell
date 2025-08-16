@@ -16,6 +16,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.*;
 import java.util.List;
+import java.util.function.IntSupplier;
 
 public final class SnapshotService {
 
@@ -34,7 +35,7 @@ public final class SnapshotService {
     private final Map<WireModel, SystemBoxModel> destMap;
     private final Runnable networkChangedCallback;
     private final LargeGroupRegistry            largeGroupRegistry; // اضافه شده
-
+    private final IntSupplier currentLevelSupplier;
     public SnapshotService(Map<WireModel, SystemBoxModel> destMap,
                            List<SystemBoxModel> boxes,
                            List<WireModel> wires,
@@ -47,7 +48,7 @@ public final class SnapshotService {
                            GameScreenView gameView,
                            PacketRenderController renderer,
                            List<PacketProducerController> producers,
-                           Runnable networkChangedCallback,
+                           Runnable networkChangedCallback,IntSupplier currentLevelSupplier,
                            LargeGroupRegistry largeGroupRegistry) { // اضافه شده
         this.destMap         = destMap;
         this.boxes           = boxes;
@@ -62,7 +63,8 @@ public final class SnapshotService {
         this.packetRenderer  = renderer;
         this.producers       = (producers == null) ? List.of() : producers;
         this.networkChangedCallback = networkChangedCallback;
-        this.largeGroupRegistry = largeGroupRegistry; // اضافه شده
+        this.currentLevelSupplier = currentLevelSupplier;
+        this.largeGroupRegistry = largeGroupRegistry;
     }
 
     public void capture() { snapshotManager.recordSnapshot(buildSnapshot()); }
@@ -72,6 +74,19 @@ public final class SnapshotService {
         Map<PortModel, SystemBoxModel> portToBox = buildPortToBoxMap(this.boxes);
 
         NetworkSnapshot snap = new NetworkSnapshot(scoreModel.getScore());
+        try {
+            int lvl = (currentLevelSupplier != null) ? currentLevelSupplier.getAsInt() : 1;
+            if (lvl <= 0) lvl = 1;
+            snap.meta.levelNumber = lvl;
+        } catch (Exception ignore) { snap.meta.levelNumber = 1; }
+
+// مجموع برنامه‌ریزی تولید برای محاسبهٔ progress (برای metadata)
+        if (producers != null && !producers.isEmpty()) {
+            PacketProducerController p = producers.get(0);
+            snap.meta.producedUnits = p.getTotalToProduce();     // مخرج درصد
+            // اگر لازم داری:
+            // int producedCount = p.getProducedCount();         // صورت درصد (در متادیتا استفاده می‌کنیم)
+        }
         // world counters
         snap.world.coins          = coinModel.getCoins();
         snap.world.packetLoss     = lossModel.getLostCount(); // این شامل deferred loss هم می‌شود

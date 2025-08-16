@@ -7,6 +7,7 @@ import com.blueprinthell.controller.systems.TeleportTracking;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.*;
+import com.blueprinthell.model.large.LargeGroupRegistry;
 import com.blueprinthell.snapshot.NetworkSnapshot;
 import com.blueprinthell.view.HudView;
 import com.blueprinthell.view.screens.GameScreenView;
@@ -24,7 +25,7 @@ public class GameController implements NetworkController {
     private final SnapshotCoreController snapshotCoreController = new SnapshotCoreController();
 
     private ScreenController              screenController;
-
+    private AutoSaveController autoSaveController;
     public LevelCoreManager getLevelSessionManager() {
         return levelCoreManager;
     }
@@ -249,4 +250,126 @@ public class GameController implements NetworkController {
                 snapshotCoreController.restoreState(snap);
             }
     public void setScreenController(ScreenController sc) { this.screenController = sc; }
+    public void startAutoSave() {
+        if (autoSaveController == null) {
+            autoSaveController = new AutoSaveController(
+                    snapshotCoreController.getSnapshotSvc(),
+                    5  // هر 5 ثانیه ذخیره شود
+            );
+        }
+        autoSaveController.start();
+        System.out.println("[GameController] AutoSave started");
+    }
+
+
+
+    public void restoreFromSavedProgress() {
+        NetworkSnapshot snapshot = AutoSaveController.loadSavedProgress();
+        if (snapshot == null) return;
+
+        // 1) تعیین سطح از متای اسنپ‌شات (fallback به 1)
+        int lvl = 1;
+        try {
+            if (snapshot.meta != null && snapshot.meta.levelNumber > 0) {
+                lvl = snapshot.meta.levelNumber;
+            }
+        } catch (Exception ignore) { /* lvl=1 */ }
+
+        // 2) اسکلت درست: لول باید از مسیر LevelManager load شود
+        //    این کار currentLevel را ست می‌کند و داخلش GameController.startLevel(def) را هم صدا می‌زند
+        if (getLevelManager() != null) {
+            getLevelManager().loadLevel(lvl);
+        } else {
+            // اگر به هر دلیل LevelManager هنوز تزریق نشده بود، حداقل از مسیر قبلی بیفتیم جلو
+            // (ولی در معماری درست، setLevelManager قبلاً انجام می‌شود)
+            startLevel(lvl);
+        }
+
+        // 3) برای restore تمیز، شبیه‌سازی و اتوسیو را مکث کن
+        getSimulation().stop();
+        pauseAutoSave();
+
+        // 4) پاکسازی حالت‌های گذرا (اگر Registrar داری)
+        try {
+            if (getRegistrar() != null) {
+                getRegistrar().clearTransientState();
+            }
+        } catch (Throwable ignore) {}
+
+        // 5) اطمینان از ساخته شدن SnapshotService
+        if (snapshotCoreController.getSnapshotSvc() == null) {
+            throw new IllegalStateException("SnapshotService not initialized after loading level " + lvl);
+        }
+
+        // 6) بازیابی
+        restoreState(snapshot);
+
+        System.out.println("[GameController] Game restored from saved progress");
+    }
+
+
+
+    public void pauseAutoSave() {
+        if (autoSaveController != null) {
+            autoSaveController.pause();
+        }
+    }
+
+    public void resumeAutoSave() {
+        if (autoSaveController != null) {
+            autoSaveController.resume();
+        }
+    }
+
+    public void stopAutoSave() {
+        if (autoSaveController != null) {
+            autoSaveController.stop(); // DO NOT clear files here
+            System.out.println("[GameController] AutoSave stopped (preserved)");
+        }
+    }
+
+    // متد جدید: فقط وقتی می‌خوایم عمداً پاک کنیم (Exit منو یا New Game)
+    public void stopAutoSaveAndClear() {
+        if (autoSaveController != null) {
+            autoSaveController.stop();
+        }
+        AutoSaveController.clearSavedProgress();
+        System.out.println("[GameController] AutoSave stopped and cleared");
+    }
+    // اضافه کردن getter برای autoSaveController (اختیاری)
+    public boolean isAutoSaveRunning() {
+        return autoSaveController != null && autoSaveController.isRunning();
+    }
+    // در GameController.java اضافه کن:
+    private void ensureSnapshotService() {
+        if (snapshotCoreController.getSnapshotSvc() == null) {
+            LargeGroupRegistry largeRegistry = (getRegistrar() != null) ? getRegistrar().getLargeGroupRegistry() : null;
+            SnapshotService svc = new SnapshotService(
+                    getDestMap(),
+                    getBoxes(),
+                    getWires(),
+                    getScoreModel(),
+                    getCoinModel(),
+                    getLossModel(),
+                    getUsageModel(),
+                    getSnapshotMgr(),
+                    getHudView(),
+                    getGameView(),
+                    getPacketRenderer(),
+                    (getProducerController() != null) ? java.util.List.of(getProducerController()) : java.util.List.of(),
+                    this::updateStartEnabled,
+                    // تامین‌کنندهٔ شماره لول فعلی (در پچ 2 به SnapshotService اضافه می‌کنیم)
+                    () -> {
+                        try {
+                            return getLevelManager() != null ? (getLevelManager().getLevelIndex() + 1) : 1;
+                        } catch (Exception e) {
+                            return 1;
+                        }
+                    },
+                    largeRegistry
+            );
+            setSnapshotSvc(svc);
+        }
+    }
+
 }
