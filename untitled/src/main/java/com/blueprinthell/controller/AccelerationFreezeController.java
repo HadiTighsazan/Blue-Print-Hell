@@ -1,132 +1,201 @@
-// فایل: untitled/src/main/java/com/blueprinthell/controller/AccelerationFreezeController.java
+// فایل: src/main/java/com/blueprinthell/controller/AccelerationFreezeController.java
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
+import com.blueprinthell.motion.MotionStrategy;
 import com.blueprinthell.motion.ConstantSpeedStrategy;
 
-import java.awt.*;
+import java.awt.Point;
 import java.util.*;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * کنترلر مدیریت نقاط انجماد شتاب روی سیم‌ها
- * وقتی پکتی از این نقاط عبور می‌کند، شتابش صفر می‌شود
+ * کنترلر «انجماد شتاب» در یک نقطه روی سیم‌ها:
+ * - با پرداخت هزینه و انتخاب یک نقطه، برای مدت مشخصی روی آن نقطه acceleration=0 اعمال نمی‌کنیم،
+ *   بلکه استراتژی حرکت پکت‌ها را به «سرعت ثابت» سوییچ می‌کنیم تا با سرعت ثابت ادامه بدهند.
+ * - بعد از خروج از ناحیه یا اتمام مدت اثر، استراتژی اصلی پکت به‌طور دقیق برگردانده می‌شود.
+ * - دارای cooldown برای فعال‌سازی مجدد.
  */
 public class AccelerationFreezeController implements Updatable {
 
-    private static final double FREEZE_RADIUS = 30.0; // شعاع تأثیر نقطه انجماد (پیکسل)
-    private static final double FREEZE_DURATION = 20.0; // مدت زمان فعال بودن (ثانیه)
-    private static final double COOLDOWN_DURATION = 30.0; // مدت زمان cooldown (ثانیه)
+    // --- تنظیمات ---
+    private static final double EFFECT_RADIUS_PX    = 30.0;  // شعاع اثر روی سیم (px) - با رندر هم‌راستا نگه دار
+    private static final double EFFECT_DURATION_SEC = 20.0;  // مدت اثر هر نقطه (ثانیه)
+    private static final double COOLDOWN_SEC        = 30.0;  // مدت کول‌داون بین دو اکتیو (ثانیه)
+    private static final double MIN_SPEED_FLOOR     = 0.8;   // کف سرعت محافظتی (px/s) اگر همه منابع سرعت صفر بودند
 
     private final List<WireModel> wires;
-    private final Map<Point, Double> freezePoints; // نقاط انجماد و زمان باقیمانده
-    private final Set<PacketModel> affectedPackets; // پکت‌هایی که تحت تأثیر قرار گرفته‌اند
+
+    /** نقاط فریز فعال به‌همراه زمان باقی‌ماندهٔ هرکدام (ثانیه) */
+    private final Map<Point, Double> freezePoints = new ConcurrentHashMap<>();
+
+    /** پکت‌هایی که الان داخل ناحیهٔ فریز هستند */
+    private final Set<PacketModel> frozen = Collections.newSetFromMap(new WeakHashMap<>());
+
+    /** استراتژی اصلی هر پکت (برای بازگردانی پس از خروج از ناحیه) */
+    private final Map<PacketModel, MotionStrategy> originalStrategy = new WeakHashMap<>();
+
+    /** رهگیری progress قبلی جهت تخمین سرعت واقعی از Δprogress/Δt */
+    private final Map<PacketModel, Double> lastProgress   = new WeakHashMap<>();
+    private final Map<PacketModel, Double> lastKnownSpeed = new WeakHashMap<>();
+
+    /** کول‌داون فعال‌سازی مجدد (ثانیه) */
     private double cooldownRemaining = 0.0;
+
+    /** اگر UI منتظر انتخاب نقطه توسط بازیکن است (برای هماهنگی با Selector/Shop) */
     private boolean waitingForSelection = false;
 
     public AccelerationFreezeController(List<WireModel> wires) {
-        this.wires = Objects.requireNonNull(wires);
-        this.freezePoints = new ConcurrentHashMap<>();
-        this.affectedPackets = Collections.newSetFromMap(new WeakHashMap<>());
+        this.wires = Objects.requireNonNull(wires, "wires");
     }
 
+    // ---------------- Updatable ----------------
     @Override
     public void update(double dt) {
-        // کاهش cooldown
+        // 1) کاهش کول‌داون
         if (cooldownRemaining > 0) {
-            cooldownRemaining = Math.max(0, cooldownRemaining - dt);
+            cooldownRemaining = Math.max(0.0, cooldownRemaining - dt);
         }
 
-        // کاهش زمان نقاط فعال
+        // 2) کم‌کردن تایمر نقاط فریز و حذف منقضی‌ها
+        boolean anyExpired = false;
         Iterator<Map.Entry<Point, Double>> it = freezePoints.entrySet().iterator();
         while (it.hasNext()) {
-            Map.Entry<Point, Double> entry = it.next();
-            double newTime = entry.getValue() - dt;
-            if (newTime <= 0) {
-                it.remove(); // حذف نقاط منقضی شده
+            Map.Entry<Point, Double> e = it.next();
+            double rem = e.getValue() - dt;
+            if (rem <= 0) {
+                it.remove();
+                anyExpired = true;
             } else {
-                entry.setValue(newTime);
+                e.setValue(rem);
             }
         }
-
-        // بررسی پکت‌های روی سیم‌ها
-        for (WireModel wire : wires) {
-            for (PacketModel packet : wire.getPackets()) {
-                checkAndFreezePacket(packet, wire);
-            }
+        // اگر همه نقاط تمام شدند، همه پکت‌های فریز را آزاد کن
+        if (anyExpired && freezePoints.isEmpty()) {
+            unfreezeAll();
         }
-    }
 
-    /**
-     * بررسی و اعمال انجماد به پکت در صورت عبور از نقطه انجماد
-     */
-    private void checkAndFreezePacket(PacketModel packet, WireModel wire) {
-        if (packet == null || wire == null) return;
+        if (freezePoints.isEmpty()) {
+            // در این فریم چیزی برای اعمال نیست
+            return;
+        }
 
-        Point packetPos = wire.pointAt(packet.getProgress());
+        // 3) پردازش پکت‌ها روی هر سیم
+        for (WireModel w : wires) {
+            // snapshot برای جلوگیری از ConcurrentModification
+            final List<PacketModel> packets = new ArrayList<>(w.getPackets());
+            final double wireLen = Math.max(1.0, w.getLength());
 
-        for (Point freezePoint : freezePoints.keySet()) {
-            double distance = packetPos.distance(freezePoint);
-
-            if (distance <= FREEZE_RADIUS) {
-                if (!affectedPackets.contains(packet)) {
-                    // انجماد شتاب پکت
-                    packet.setAcceleration(0.0);
-
-                    // تغییر استراتژی حرکت به سرعت ثابت
-                    double currentSpeed = packet.getSpeed();
-                    packet.setMotionStrategy(new ConstantSpeedStrategy(currentSpeed));
-
-                    affectedPackets.add(packet);
-
-                    System.out.println("[AccelerationFreeze] Packet frozen at speed: " + currentSpeed);
+            for (PacketModel p : packets) {
+                // 3-الف) تخمین سرعت از Δprogress (برای fallback سرعت ثابت)
+                final double prev = lastProgress.getOrDefault(p, p.getProgress());
+                lastProgress.put(p, p.getProgress());
+                if (dt > 0) {
+                    final double dp = p.getProgress() - prev;
+                    final double v  = Math.abs(dp) * wireLen / dt; // px/s
+                    if (v > 0) lastKnownSpeed.put(p, v);
                 }
-                return; // پکت تحت تأثیر قرار گرفت
+
+                boolean inside = isInsideAnyFreezePoint(w, p);
+                if (inside) {
+                    if (!frozen.contains(p)) {
+                        freezePacket(w, p);
+                    }
+                } else {
+                    if (frozen.contains(p)) {
+                        unfreezePacket(p);
+                    }
+                }
             }
         }
-
-        // اگر پکت از محدوده خارج شد، از لیست تحت تأثیر حذف شود
-        affectedPackets.remove(packet);
     }
 
+    // ---------------- منطق فریز/آزادسازی ----------------
+
+    /** آیا این پکت نسبت به یکی از نقاط فعال داخل شعاع اثر است؟ */
+    private boolean isInsideAnyFreezePoint(WireModel wire, PacketModel p) {
+        if (wire == null || p == null) return false;
+        if (freezePoints.isEmpty())     return false;
+
+        final Point pos = wire.pointAt(p.getProgress());
+        for (Point fp : freezePoints.keySet()) {
+            int dx = pos.x - fp.x, dy = pos.y - fp.y;
+            if ((dx * dx + dy * dy) <= EFFECT_RADIUS_PX * EFFECT_RADIUS_PX) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** سوییچ استراتژی پکت به سرعت ثابت امن و ذخیرهٔ استراتژی اصلی */
+    private void freezePacket(WireModel w, PacketModel p) {
+        // 1) سرعت امن: ترجیح با سرعت فعلی، سپس آخرین سرعت معتبر، سپس baseSpeed، و در نهایت کف
+        double v = p.getSpeed();
+        if (v <= 0) v = lastKnownSpeed.getOrDefault(p, 0.0);
+        if (v <= 0) v = p.getBaseSpeed();
+        if (v <= 0) v = MIN_SPEED_FLOOR;
+
+        // 2) ذخیرهٔ استراتژی اصلی (اگر وجود دارد)
+        final MotionStrategy cur = p.getMotionStrategy();
+        if (cur != null) originalStrategy.put(p, cur);
+
+        // 3) اعمال استراتژی سرعت ثابت
+        p.setMotionStrategy(new ConstantSpeedStrategy(v));
+        p.setSpeed(v); // برای سازگاری با کنترلرها/هوک‌هایی که از speed می‌خوانند
+
+        frozen.add(p);
+        // System.out.println("[Freeze] packet=" + p + " v=" + v + " wire=" + w);
+    }
+
+    /** بازگردانی استراتژی اصلی پکت پس از خروج از ناحیهٔ اثر */
+    private void unfreezePacket(PacketModel p) {
+        final MotionStrategy orig = originalStrategy.remove(p);
+        if (orig != null) {
+            p.setMotionStrategy(orig);
+        } else {
+            // اگر قبلاً استراتژی نداشت، به حالت پیش‌فرض موتور برگردد
+            p.setMotionStrategy(null);
+        }
+        frozen.remove(p);
+        // System.out.println("[Unfreeze] packet=" + p);
+    }
+
+    /** آزادسازی همهٔ پکت‌های فریز (مثلاً وقتی همه نقاط منقضی شدند) */
+    private void unfreezeAll() {
+        // کپی برای جلوگیری از ConcurrentModification
+        for (PacketModel p : new ArrayList<>(frozen)) {
+            unfreezePacket(p);
+        }
+    }
+
+    // ---------------- API عمومی (برای UI/Shop/Renderer) ----------------
+
     /**
-     * فعال کردن انجماد در یک نقطه
+     * تلاش برای فعال‌سازی اثر در نقطهٔ داده‌شده.
+     * اگر در کول‌داون باشیم false برمی‌گرداند.
      */
     public boolean activateFreezeAt(Point point) {
-        if (cooldownRemaining > 0) {
-            System.out.println("[AccelerationFreeze] Still on cooldown: " +
-                    String.format("%.1f", cooldownRemaining) + "s remaining");
-            return false;
-        }
+        if (point == null) return false;
+        if (cooldownRemaining > 0) return false;
 
-        freezePoints.put(point, FREEZE_DURATION);
-        cooldownRemaining = COOLDOWN_DURATION;
-        affectedPackets.clear();
-
-        System.out.println("[AccelerationFreeze] Activated at point: " + point);
+        freezePoints.put(new Point(point), EFFECT_DURATION_SEC);
+        cooldownRemaining = COOLDOWN_SEC;
         return true;
     }
 
-    /**
-     * آیا می‌توان از قابلیت استفاده کرد؟
-     */
+    /** آیا هم‌اکنون می‌توان قابلیت را فعال کرد؟ (کول‌داون تمام شده) */
     public boolean canActivate() {
-        return cooldownRemaining <= 0;
+        return cooldownRemaining <= 0.0;
     }
 
-    /**
-     * دریافت زمان باقیمانده cooldown
-     */
+    /** زمان باقیماندهٔ کول‌داون (ثانیه) */
     public double getCooldownRemaining() {
-        return cooldownRemaining;
+        return Math.max(0.0, cooldownRemaining);
     }
 
-    /**
-     * تنظیم حالت انتظار برای انتخاب نقطه
-     */
+    /** وضعیت انتظار برای انتخاب نقطه (هماهنگی با FreezePointSelector) */
     public void setWaitingForSelection(boolean waiting) {
         this.waitingForSelection = waiting;
     }
@@ -135,10 +204,13 @@ public class AccelerationFreezeController implements Updatable {
         return waitingForSelection;
     }
 
-    /**
-     * دریافت نقاط فعال (برای رندرینگ)
-     */
+    /** برای رندرر: کپی از نقاط فعال و زمان باقی‌ماندهٔ هرکدام */
     public Map<Point, Double> getActiveFreezePoints() {
         return new HashMap<>(freezePoints);
+    }
+
+    /** برای کنترلرهای دیگر (در صورت نیاز به هماهنگی): آیا این پکت در حالت فریز است؟ */
+    public boolean isFrozen(PacketModel p) {
+        return frozen.contains(p);
     }
 }

@@ -1,13 +1,12 @@
 package com.blueprinthell.view.screens;
 
 import com.blueprinthell.config.KeyBindings;
+import com.blueprinthell.controller.AccelerationFreezeController;
+import com.blueprinthell.controller.GameController;
 import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
-import com.blueprinthell.view.HudView;
-import com.blueprinthell.view.PortView;
-import com.blueprinthell.view.SystemBoxView;
-import com.blueprinthell.view.WireView;
+import com.blueprinthell.view.*;
 import com.blueprinthell.controller.SystemBoxDragController;
 import com.blueprinthell.controller.WireEditorController;
 import com.blueprinthell.model.WireUsageModel;
@@ -25,6 +24,7 @@ public class GameScreenView extends JPanel {
     private final JPanel gameArea;
 
     private final BiConsumer<Integer, Integer> keyListener = this::applyKeyBindings;
+    private AccelerationFreezeController freezeController;
 
     public GameScreenView(HudView hudView) {
         super(new BorderLayout());
@@ -80,9 +80,21 @@ public class GameScreenView extends JPanel {
             }
         }
     }
+    public void setFreezeController(AccelerationFreezeController fc) {
+        this.freezeController = fc;
+    }
 
     public void reset(List<SystemBoxModel> boxes, List<WireModel> wires) {
         gameArea.removeAll();
+        if (freezeController != null) {
+            FreezePointRenderer renderer = new FreezePointRenderer(freezeController);
+            renderer.setBounds(0, 0, gameArea.getWidth(), gameArea.getHeight());
+            gameArea.add(renderer, 0);
+
+            // تایمر برای به‌روزرسانی افکت
+            Timer updateTimer = new Timer(100, e -> renderer.repaint());
+            updateTimer.start();
+        }
         for (SystemBoxModel b : boxes) {
             gameArea.add(new SystemBoxView(b));
         }

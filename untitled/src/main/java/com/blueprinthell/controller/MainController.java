@@ -46,9 +46,9 @@ public class MainController {
                     gameController.getCollisionController(),
                     gameController.getLossModel(),
                     gameController.getWires(),
-                    gameController.getHudController()
+                    gameController.getHudController(),
+                    gameController.getGameView()  // اضافه کردن این پارامتر
             );
-
             screenController.setAudioController(ui.getAudioController());
             ui.getAudioController().playBackgroundLoop();
 

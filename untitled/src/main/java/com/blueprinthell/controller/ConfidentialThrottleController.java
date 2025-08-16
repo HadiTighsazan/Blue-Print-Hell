@@ -52,6 +52,7 @@ public class ConfidentialThrottleController implements Updatable {
             // از اسنپ‌شات استفاده می‌کنیم که اگر لیست داخلی تغییر کرد، ConcurrentModification نگیریم
             final List<PacketModel> packets = new ArrayList<>(w.getPackets());
             for (PacketModel p : packets) {
+
                 // فقط محرمانه‌ها؛ VPNها منطق فاصله‌گذاری خودشان را دارند
                 if (!(p instanceof ConfidentialPacket)) continue;
                 if (PacketOps.isConfidentialVpn(p)) continue;
@@ -83,4 +84,5 @@ public class ConfidentialThrottleController implements Updatable {
             }
         }
     }
+
 }

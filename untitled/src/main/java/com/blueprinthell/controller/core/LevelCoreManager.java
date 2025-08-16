@@ -169,7 +169,9 @@ public class LevelCoreManager {
                 gameController.getWires(),
                 gameController.getHudController(),
                 gameController.getGameView()  // اضافه شدن gameView
-        ));        AccelerationFreezeController freezeController = new AccelerationFreezeController(gameController.getWires());
+        ));
+        AccelerationFreezeController freezeController = new AccelerationFreezeController(gameController.getWires());
+
         gameController.getSimulation().register(freezeController);
         gameController.setFreezeController(freezeController);
         gameController.getShopController().setFreezeController(freezeController);

@@ -1,3 +1,4 @@
+// فایل: untitled/src/main/java/com/blueprinthell/controller/UIController.java
 package com.blueprinthell.controller;
 
 import com.blueprinthell.media.AudioController;
@@ -5,9 +6,9 @@ import com.blueprinthell.view.HudView;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.CoinModel;
 import com.blueprinthell.model.PacketLossModel;
+import com.blueprinthell.view.screens.GameScreenView;
 import javax.swing.*;
 import java.util.List;
-
 
 public class UIController {
     private final JFrame          mainFrame;
@@ -21,7 +22,8 @@ public class UIController {
                         CollisionController collisionCtrl,
                         PacketLossModel lossModel,
                         List<WireModel> wires,
-                        HudController hudController) {
+                        HudController hudController,
+                        GameScreenView gameView) {  // اضافه کردن پارامتر
         this.mainFrame = parentFrame;
 
         this.shopController = new ShopController(
@@ -31,13 +33,13 @@ public class UIController {
                 collisionCtrl,
                 lossModel,
                 wires,
-                hudController
+                hudController,
+                gameView  // پاس دادن به ShopController
         );
         this.audioController = new AudioController();
 
         hudView.addStoreListener(e -> shopController.openShop());
     }
-
 
     public JFrame getMainFrame() {
         return mainFrame;

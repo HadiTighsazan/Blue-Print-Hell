@@ -1,3 +1,4 @@
+// فایل: untitled/src/main/java/com/blueprinthell/controller/FreezePointSelector.java
 package com.blueprinthell.controller;
 
 import com.blueprinthell.model.WireModel;
@@ -164,5 +165,4 @@ public class FreezePointSelector {
         int y = (int) (a.y + t * dy);
         return new Point(x, y);
     }
-
 }
