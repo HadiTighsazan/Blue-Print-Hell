@@ -43,40 +43,90 @@ public class WireCreationController {
                                   WireUsageModel usageModel,
                                   CoinModel coinModel,
                                   Runnable networkChanged) {
-        this.gameView  = gameView;
-        this.simulation = simulation;
-        this.boxes     = boxes;
-        this.wires     = wires;
-        this.destMap   = destMap;
-        this.usageModel = usageModel;
-        this.coinModel  = coinModel;
-        this.networkChanged = networkChanged;
+        // --- Null checks & sane defaults ---
+        this.gameView       = java.util.Objects.requireNonNull(gameView, "gameView is null");
+        this.simulation     = java.util.Objects.requireNonNull(simulation, "simulation is null");
+        this.boxes          = (boxes != null) ? boxes : new ArrayList<>();
+        this.wires          = (wires != null) ? wires : new ArrayList<>();
+        this.destMap        = (destMap != null) ? destMap : new java.util.HashMap<>();
+        this.usageModel     = java.util.Objects.requireNonNull(usageModel, "usageModel is null");
+        this.coinModel      = java.util.Objects.requireNonNull(coinModel, "coinModel is null");
+        this.networkChanged = (networkChanged != null) ? networkChanged : () -> {};
 
-        this.area = gameView.getGameArea();
+        this.area = this.gameView.getGameArea();
+        if (this.area == null) {
+            throw new IllegalStateException("gameView.getGameArea() returned null");
+        }
         area.setLayout(null);
 
         // ساخت نقشه Port→Box برای استفاده در سیم‌های جدید
-        this.portToBoxMap = buildPortToBoxMap(boxes);
+        this.portToBoxMap = buildPortToBoxMap(this.boxes);
 
-        for (WireModel w : wires) {
-            destMap.put(w, findDestBox(w.getDstPort()));
-            lockedInputs.add(w.getDstPort());
-            usageModel.useWire(w.getLength());
+        // --- پاکسازی سیم‌های نامعتبر از level قبل + ثبت مقصد و قفل ورودی‌ها ---
+        List<WireModel> invalidWires = new ArrayList<>();
+        for (WireModel w : new ArrayList<>(this.wires)) { // روی کپی loop می‌زنیم تا از CME جلوگیری شود
+            if (w == null) {
+                invalidWires.add(null);
+                continue;
+            }
+
+            PortModel dstPort = w.getDstPort();
+            SystemBoxModel destBox = (dstPort != null) ? findDestBox(dstPort) : null;
+
+            if (destBox == null) {
+                // این سیم نامعتبر است - box مقصد وجود ندارد
+                invalidWires.add(w);
+                continue;
+            }
+
+            // ثبت مقصد و قفل‌کردن پورت ورودی
+            this.destMap.put(w, destBox);
+            if (dstPort != null) {
+                lockedInputs.add(dstPort);
+            }
+
+            // ثبت مصرف طول سیم
+            this.usageModel.useWire(w.getLength());
+
             // تنظیم portToBoxMap برای سیم‌های موجود
-            w.setPortToBoxMap(portToBoxMap);
+            w.setPortToBoxMap(this.portToBoxMap);
         }
 
+        // حذف سیم‌های نامعتبر
+        if (!invalidWires.isEmpty()) {
+            this.wires.removeAll(invalidWires);
+        }
+
+        // --- Overlay setup ---
         overlay = new Overlay();
         area.add(overlay);
-        overlay.setBounds(0,0,area.getWidth(),area.getHeight());
+        overlay.setBounds(0, 0, area.getWidth(), area.getHeight());
         overlay.setVisible(false);
-        area.addComponentListener(new ComponentAdapter(){@Override public void componentResized(ComponentEvent e){overlay.setSize(area.getSize());}});
+        area.addComponentListener(new ComponentAdapter() {
+            @Override public void componentResized(ComponentEvent e) {
+                overlay.setSize(area.getSize());
+            }
+        });
 
-        previewListener = new MouseMotionAdapter(){@Override public void mouseMoved(MouseEvent e){if(!drawing)return; Point p=SwingUtilities.convertPoint(e.getComponent(),e.getPoint(),overlay); overlay.updateLine(startPt,p);}};
+        // --- Preview listener (حرکت موس برای خط پیش‌نمایش) ---
+        previewListener = new MouseMotionAdapter() {
+            @Override public void mouseMoved(MouseEvent e) {
+                if (!drawing) return;
+                Point p = SwingUtilities.convertPoint(e.getComponent(), e.getPoint(), overlay);
+                overlay.updateLine(startPt, p);
+            }
+        };
 
+        // --- اتصال به پورت‌ها و کنترل کلیک برای لغو پیش‌نمایش ---
         attachToPorts(area);
-        area.addMouseListener(new MouseAdapter(){@Override public void mouseClicked(MouseEvent e){if(drawing) cancelPreview();}});
+        area.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                if (drawing) cancelPreview();
+            }
+        });
     }
+
+
     private void attachToPorts(Container c){for(Component comp:c.getComponents()){if(comp instanceof PortView pv){pv.addMouseListener(new MouseAdapter(){@Override public void mouseClicked(MouseEvent e){handlePortClick(pv);} });} else if(comp instanceof Container inner && comp!=overlay){attachToPorts(inner);} }}
 
     private void handlePortClick(PortView pv){
@@ -150,7 +200,6 @@ public class WireCreationController {
 
     public void freePortsForWire(WireModel wm){lockedInputs.remove(wm.getDstPort()); usageModel.freeWire(wm.getLength()); if(networkChanged!=null) networkChanged.run();}
 
-    private SystemBoxModel findDestBox(PortModel pm){return boxes.stream().filter(b->b.getInPorts().contains(pm)).findFirst().orElseThrow();}
 
     private PortView findPortView(Container c, PortModel pm){for(Component comp:c.getComponents()){if(comp instanceof PortView pv && pv.getModel()==pm) return pv; if(comp instanceof Container inner){PortView f=findPortView(inner,pm); if(f!=null) return f;}} return null;}
 
@@ -165,5 +214,11 @@ public class WireCreationController {
             for (PortModel p : b.getOutPorts()) map.put(p, b);
         }
         return map;
+    }
+    private SystemBoxModel findDestBox(PortModel pm) {
+        return boxes.stream()
+                .filter(b -> b.getInPorts().contains(pm))
+                .findFirst()
+                .orElse(null); // به جای orElseThrow()
     }
 }

@@ -148,25 +148,28 @@ public class MenuController {
         // نمایش صفحه بازی
         screenController.showScreen(ScreenController.GAME_SCREEN);
 
-        // توقف موقت شبیه‌سازی
-        gameController.getSimulation().stop();
-
-        // بازیابی وضعیت
+        // بازیابی وضعیت (این متد خودش simulation را stop می‌کند)
         gameController.restoreFromSavedProgress();
 
-        // نمایش پیام با شمارش معکوس
+        // نمایش پیام با شمارش معکوس و شروع بازی
         showRestoredGameCountdown();
-    }
-
-    // نمایش شمارش معکوس بعد از بازیابی
-    private void showRestoredGameCountdown() {
+    }    private void showRestoredGameCountdown() {
         SwingUtilities.invokeLater(() -> {
             GameScreenView gameView = gameController.getGameView();
+
+            // بررسی که gameView واقعاً نمایش داده شده است
+            if (!gameView.isShowing()) {
+                // اگر هنوز نمایش داده نشده، مستقیماً شروع کن
+                gameController.getSimulation().start();
+                gameController.resumeAutoSave();
+                return;
+            }
 
             // ایجاد overlay برای نمایش پیام
             JPanel overlay = new JPanel(new BorderLayout());
             overlay.setOpaque(true);
-            overlay.setBackground(new Color(0, 0, 0, 180)); // پس‌زمینه نیمه شفاف
+            overlay.setBackground(new Color(0, 0, 0, 180));
+            overlay.setBounds(0, 0, gameView.getWidth(), gameView.getHeight());
 
             JLabel messageLabel = new JLabel("Game Restored - Starting in 3 seconds...");
             messageLabel.setFont(new Font("Arial", Font.BOLD, 32));
@@ -174,9 +177,9 @@ public class MenuController {
             messageLabel.setHorizontalAlignment(SwingConstants.CENTER);
             overlay.add(messageLabel, BorderLayout.CENTER);
 
-            // اضافه کردن overlay به بالاترین لایه
-            gameView.setComponentZOrder(overlay, 0);
+            // ابتدا اضافه کن، سپس Z-order را تنظیم کن
             gameView.add(overlay);
+            gameView.setComponentZOrder(overlay, 0);
             gameView.revalidate();
             gameView.repaint();
 
@@ -194,11 +197,8 @@ public class MenuController {
                     gameView.revalidate();
                     gameView.repaint();
 
-                    // شروع بازی
-                    gameController.getSimulation().start();
-
-                    // شروع AutoSave برای ادامه بازی
-                    gameController.startAutoSave();
+                    // شروع بازی و AutoSave
+                    startRestoredGame();
 
                     countdown.stop();
                 }
@@ -206,5 +206,27 @@ public class MenuController {
 
             countdown.start();
         });
+    }
+
+    // متد جدید برای شروع تمیز بازی
+    private void startRestoredGame() {
+        // شروع simulation
+        gameController.getSimulation().start();
+
+        // بررسی و شروع producer اگر هنوز تمام نشده
+        if (gameController.getProducerController() != null
+                && !gameController.getProducerController().isFinished()) {
+            gameController.getProducerController().startProduction();
+        }
+
+        // resume کردن AutoSave
+        gameController.resumeAutoSave();
+
+        // resume کردن timeline
+        gameController.getTimeline().resume();
+
+        // تنظیم دکمه pause
+        gameController.getHudCoord().setStartEnabled(false);
+        gameController.getHudView().setToggleText("Pause");
     }
 }

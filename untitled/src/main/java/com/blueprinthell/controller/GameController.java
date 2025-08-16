@@ -267,29 +267,30 @@ public class GameController implements NetworkController {
         NetworkSnapshot snapshot = AutoSaveController.loadSavedProgress();
         if (snapshot == null) return;
 
-        // 1) تعیین سطح از متای اسنپ‌شات (fallback به 1)
+        // 1) تعیین سطح از متای اسنپ‌شات
         int lvl = 1;
         try {
             if (snapshot.meta != null && snapshot.meta.levelNumber > 0) {
                 lvl = snapshot.meta.levelNumber;
             }
-        } catch (Exception ignore) { /* lvl=1 */ }
+        } catch (Exception ignore) { }
 
-        // 2) اسکلت درست: لول باید از مسیر LevelManager load شود
-        //    این کار currentLevel را ست می‌کند و داخلش GameController.startLevel(def) را هم صدا می‌زند
+        // 2) load کردن level
         if (getLevelManager() != null) {
             getLevelManager().loadLevel(lvl);
         } else {
-            // اگر به هر دلیل LevelManager هنوز تزریق نشده بود، حداقل از مسیر قبلی بیفتیم جلو
-            // (ولی در معماری درست، setLevelManager قبلاً انجام می‌شود)
             startLevel(lvl);
         }
 
-        // 3) برای restore تمیز، شبیه‌سازی و اتوسیو را مکث کن
+        // 3) توقف موقت شبیه‌سازی برای restore تمیز
         getSimulation().stop();
-        pauseAutoSave();
 
-        // 4) پاکسازی حالت‌های گذرا (اگر Registrar داری)
+        // توقف موقت AutoSave (نه pause که فایل را حفظ می‌کند)
+        if (autoSaveController != null && autoSaveController.isRunning()) {
+            autoSaveController.stop();
+        }
+
+        // 4) پاکسازی حالت‌های گذرا
         try {
             if (getRegistrar() != null) {
                 getRegistrar().clearTransientState();
@@ -297,16 +298,26 @@ public class GameController implements NetworkController {
         } catch (Throwable ignore) {}
 
         // 5) اطمینان از ساخته شدن SnapshotService
-        if (snapshotCoreController.getSnapshotSvc() == null) {
+        if (getSnapshotSvc() == null) {
             throw new IllegalStateException("SnapshotService not initialized after loading level " + lvl);
         }
 
-        // 6) بازیابی
+        // 6) بازیابی state
         restoreState(snapshot);
+
+        // 7) بازیابی وضعیت producer
+        if (getProducerController() != null && snapshot.world != null
+                && snapshot.world.producers != null && !snapshot.world.producers.isEmpty()) {
+            NetworkSnapshot.ProducerState ps = snapshot.world.producers.get(0);
+            // اگر producer قبلاً در حال اجرا بوده، وضعیت آن را حفظ کن
+            if (ps.running && !getProducerController().isFinished()) {
+                // این فقط flag را set می‌کند، واقعاً start نمی‌کند تا بعداً انجام شود
+                getProducerController().stopProduction(); // ابتدا متوقف کن
+            }
+        }
 
         System.out.println("[GameController] Game restored from saved progress");
     }
-
 
 
     public void pauseAutoSave() {

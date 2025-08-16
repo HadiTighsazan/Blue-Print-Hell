@@ -109,11 +109,26 @@ public final class NetworkSnapshot implements Serializable {
 
         // Buffers at the box (runtime order preserved)
         public List<PacketState> bitBuffer = new ArrayList<>();
-        public List<PacketState> largeBuffer = new ArrayList<>(); // LargePacket only
+        public List<PacketState> largeBuffer = new ArrayList<>();  // LargePacket only
         public List<PacketState> returnBuffer = new ArrayList<>(); // Packets returning to source
 
-        public BoxState() {}
+        // --- [PATCH] DistributorBehavior state ---
+        public Map<Integer, Integer> distributorRemainingBits;
+        public Map<Integer, Integer> distributorParentSizeByGrp;
+        public Map<Integer, Integer> distributorColorIdByGrp;
+        public Map<Integer, Integer> distributorNextIndexByGrp;
+        public List<Integer> distributorRrGroups;
+
+        public BoxState() {
+            // init for distributor maps/lists
+            distributorRemainingBits   = new HashMap<>();
+            distributorParentSizeByGrp = new HashMap<>();
+            distributorColorIdByGrp    = new HashMap<>();
+            distributorNextIndexByGrp  = new HashMap<>();
+            distributorRrGroups        = new ArrayList<>();
+        }
     }
+
 
     // ---------------------------------------------------------------------
     // WIRE

@@ -75,7 +75,10 @@ public final class HudCoordinator {
         hud.setPacketLoss(lossModel.getLostCount());
     }
 
+
     public void setStartEnabled(boolean enabled) {
-        SwingUtilities.invokeLater(() -> hud.getStartButton().setEnabled(enabled));
+        SwingUtilities.invokeLater(() -> {
+            hud.getStartButton().setEnabled(enabled);
+        });
     }
 }

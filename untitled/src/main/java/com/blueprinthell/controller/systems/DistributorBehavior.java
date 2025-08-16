@@ -10,9 +10,10 @@ import com.blueprinthell.motion.KinematicsRegistry;
 
 import java.awt.*;
 import java.util.*;
+import java.util.List;
 
 
-public final class DistributorBehavior implements SystemBehavior {
+public final class DistributorBehavior implements SystemBehavior, SnapshottableBehavior {
 
     private final SystemBoxModel     box;
     private final LargeGroupRegistry registry;
@@ -223,5 +224,40 @@ public final class DistributorBehavior implements SystemBehavior {
         colorIdByGrp.clear();
         nextIndexByGrp.clear();
         rrGroups.clear();
+    }
+
+    @Override
+    public Map<String, Object> captureState() {
+        Map<String, Object> state = new HashMap<>();
+        state.put("remainingBits", new HashMap<>(remainingBits));
+        state.put("parentSizeByGrp", new HashMap<>(parentSizeByGrp));
+        state.put("colorIdByGrp", new HashMap<>(colorIdByGrp));
+        state.put("nextIndexByGrp", new HashMap<>(nextIndexByGrp));
+        state.put("rrGroups", new ArrayList<>(rrGroups));
+        return state;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public void restoreState(Map<String, Object> state) {
+        if (state == null) return;
+
+        clear(); // پاکسازی state فعلی
+
+        // بازیابی state
+        Map<Integer, Integer> rb = (Map<Integer, Integer>) state.get("remainingBits");
+        if (rb != null) remainingBits.putAll(rb);
+
+        Map<Integer, Integer> ps = (Map<Integer, Integer>) state.get("parentSizeByGrp");
+        if (ps != null) parentSizeByGrp.putAll(ps);
+
+        Map<Integer, Integer> ci = (Map<Integer, Integer>) state.get("colorIdByGrp");
+        if (ci != null) colorIdByGrp.putAll(ci);
+
+        Map<Integer, Integer> ni = (Map<Integer, Integer>) state.get("nextIndexByGrp");
+        if (ni != null) nextIndexByGrp.putAll(ni);
+
+        List<Integer> rr = (List<Integer>) state.get("rrGroups");
+        if (rr != null) rrGroups.addAll(rr);
     }
 }

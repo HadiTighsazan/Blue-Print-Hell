@@ -1,6 +1,9 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
+import com.blueprinthell.controller.systems.BehaviorRegistry;
+import com.blueprinthell.controller.systems.SystemBehavior;
+import com.blueprinthell.controller.systems.SystemKind;
 import com.blueprinthell.model.*;
 import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargePacket;
@@ -292,7 +295,7 @@ public final class SnapshotService {
                         st.producedCount,
                         st.inFlight,
                         st.accumulatorSec,
-                        st.running,
+                        false, // همیشه false - بعداً در countdown start می‌شود
                         perPort
                 );
             }
