@@ -3,7 +3,22 @@ package com.blueprinthell.controller;
 import com.blueprinthell.controller.core.LevelCoreManager;
 import com.blueprinthell.controller.core.SimulationCoreManager;
 import com.blueprinthell.controller.core.SnapshotCoreController;
+import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
+import com.blueprinthell.controller.packet.PacketProducerController;
+import com.blueprinthell.controller.packet.PacketRenderController;
+import com.blueprinthell.controller.persistence.AutoSaveController;
+import com.blueprinthell.controller.persistence.SnapshotManager;
+import com.blueprinthell.controller.persistence.SnapshotService;
+import com.blueprinthell.controller.physics.CollisionController;
+import com.blueprinthell.controller.simulation.NetworkController;
+import com.blueprinthell.controller.simulation.SimulationController;
+import com.blueprinthell.controller.simulation.SimulationRegistrar;
+import com.blueprinthell.controller.simulation.TimelineController;
 import com.blueprinthell.controller.systems.TeleportTracking;
+import com.blueprinthell.controller.ui.ScreenController;
+import com.blueprinthell.controller.ui.hud.HudController;
+import com.blueprinthell.controller.ui.hud.HudCoordinator;
+import com.blueprinthell.controller.wire.WireCreationController;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.model.*;
@@ -24,7 +39,7 @@ public class GameController implements NetworkController {
     private final SimulationCoreManager simulationCoreManager = new SimulationCoreManager(this);
     private final SnapshotCoreController snapshotCoreController = new SnapshotCoreController();
 
-    private ScreenController              screenController;
+    private ScreenController screenController;
     private AutoSaveController autoSaveController;
     public LevelCoreManager getLevelSessionManager() {
         return levelCoreManager;
@@ -35,7 +50,7 @@ public class GameController implements NetworkController {
     private final GameScreenView          gameView;
 
 
-    private HudController                 hudController;
+    private HudController hudController;
     private boolean restoreInProgress = false;
     private AccelerationFreezeController freezeController;
 

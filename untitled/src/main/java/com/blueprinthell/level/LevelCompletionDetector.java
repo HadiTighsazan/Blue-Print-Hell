@@ -2,7 +2,7 @@
 
 package com.blueprinthell.level;
 
-import com.blueprinthell.controller.PacketProducerController;
+import com.blueprinthell.controller.packet.PacketProducerController;
 import com.blueprinthell.controller.systems.SystemKind;
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;

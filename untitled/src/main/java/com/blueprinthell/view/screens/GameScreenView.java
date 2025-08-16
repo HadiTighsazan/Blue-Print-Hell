@@ -1,14 +1,13 @@
 package com.blueprinthell.view.screens;
 
 import com.blueprinthell.config.KeyBindings;
-import com.blueprinthell.controller.AccelerationFreezeController;
-import com.blueprinthell.controller.GameController;
+import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
 import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.view.*;
-import com.blueprinthell.controller.SystemBoxDragController;
-import com.blueprinthell.controller.WireEditorController;
+import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
+import com.blueprinthell.controller.wire.WireEditorController;
 import com.blueprinthell.model.WireUsageModel;
 import com.blueprinthell.model.CoinModel;
 import javax.swing.*;

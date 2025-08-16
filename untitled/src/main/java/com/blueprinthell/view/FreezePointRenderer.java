@@ -1,6 +1,6 @@
 package com.blueprinthell.view;
 
-import com.blueprinthell.controller.AccelerationFreezeController;
+import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
 
 import javax.swing.*;
 import java.awt.*;

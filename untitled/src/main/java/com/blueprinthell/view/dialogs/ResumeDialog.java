@@ -1,7 +1,7 @@
 // untitled/src/main/java/com/blueprinthell/view/dialogs/ResumeDialog.java
 package com.blueprinthell.view.dialogs;
 
-import com.blueprinthell.controller.AutoSaveController.SaveMetadata;
+import com.blueprinthell.controller.persistence.AutoSaveController.SaveMetadata;
 import javax.swing.*;
 import java.awt.*;
 

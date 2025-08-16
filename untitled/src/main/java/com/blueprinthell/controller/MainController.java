@@ -1,6 +1,12 @@
 package com.blueprinthell.controller;
 
 import javax.swing.*;
+
+import com.blueprinthell.controller.packet.PacketProducerController;
+import com.blueprinthell.controller.simulation.SimulationController;
+import com.blueprinthell.controller.ui.MenuController;
+import com.blueprinthell.controller.ui.ScreenController;
+import com.blueprinthell.controller.ui.UIController;
 import com.blueprinthell.view.HudView;
 
 import java.awt.*;

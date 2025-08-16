@@ -1,6 +1,12 @@
 package com.blueprinthell.controller.core;
 
 import com.blueprinthell.controller.*;
+import com.blueprinthell.controller.packet.PacketProducerController;
+import com.blueprinthell.controller.packet.PacketRenderController;
+import com.blueprinthell.controller.physics.CollisionController;
+import com.blueprinthell.controller.simulation.SimulationController;
+import com.blueprinthell.controller.simulation.SimulationRegistrar;
+import com.blueprinthell.controller.simulation.TimelineController;
 import com.blueprinthell.model.*;
 
 import java.util.List;

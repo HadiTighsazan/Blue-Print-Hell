@@ -1,6 +1,7 @@
 package com.blueprinthell.controller;
 
 import com.blueprinthell.config.Config;
+import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.level.LevelDefinition;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;

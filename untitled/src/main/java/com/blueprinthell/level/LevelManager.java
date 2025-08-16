@@ -1,7 +1,7 @@
 package com.blueprinthell.level;
 
 import com.blueprinthell.controller.GameController;
-import com.blueprinthell.controller.ScreenController;
+import com.blueprinthell.controller.ui.ScreenController;
 import com.blueprinthell.view.screens.MissionPassedView;
 
 

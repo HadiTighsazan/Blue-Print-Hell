@@ -1,9 +1,9 @@
 package com.blueprinthell.controller.core;
 
-import com.blueprinthell.controller.NetworkController;
+import com.blueprinthell.controller.simulation.NetworkController;
 import com.blueprinthell.snapshot.NetworkSnapshot;
-import com.blueprinthell.controller.SnapshotManager;
-import com.blueprinthell.controller.SnapshotService;
+import com.blueprinthell.controller.persistence.SnapshotManager;
+import com.blueprinthell.controller.persistence.SnapshotService;
 
 public class SnapshotCoreController implements NetworkController {
     public final SnapshotManager snapshotMgr = new SnapshotManager();
