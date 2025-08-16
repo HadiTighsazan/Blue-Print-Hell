@@ -37,7 +37,7 @@ public class Level2 extends AbstractLevel {
                 Collections.singletonList(PortShape.TRIANGLE),
                 SystemKind.NORMAL
         );
-        boxes.add(withId("L1-B2-NORMAL", _b2)); // مطابق نسخه بدون خطا
+        boxes.add(withId("L1-B2-VPN", _b2));// مطابق نسخه بدون خطا
 
         // 2-3: Distributor (بدون تغییر)
         LevelDefinition.BoxSpec _b3 = createBox(
@@ -73,7 +73,7 @@ public class Level2 extends AbstractLevel {
                 Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE, PortShape.TRIANGLE),
                 SystemKind.SPY // قبلاً NORMAL بود
         );
-        boxes.add(withId("L1-B4-NORMAL", _b6)); // آیدی را دست نمی‌زنیم تا وایرها کرش نکنند
+        boxes.add(withId("L1-B4-VPN", _b6));  // آیدی را دست نمی‌زنیم تا وایرها کرش نکنند
 
         // 2-7: Merger
         LevelDefinition.BoxSpec _b7 = createBox(
