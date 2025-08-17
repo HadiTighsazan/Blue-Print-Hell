@@ -28,6 +28,12 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
         if (!(packet instanceof LargePacket)) {
             return;
         }
+
+        // *** تغییر اصلی: فقط برای سیستم‌های بدون پورت خروجی (Sink) فعال باشد ***
+        if (!box.getOutPorts().isEmpty()) {
+            return;  // اگر پورت خروجی دارد، هیچ کاری نکن
+        }
+
         clearBufferExceptLarge((LargePacket) packet);
     }
 
