@@ -111,13 +111,13 @@ public class PacketProducerController implements Updatable {
 
                             // ابتدا پکت پایه را بسازید
                             if (out.getShape() == PortShape.CIRCLE) {
-                                if (RND.nextInt(10) < 10) {
+                                if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
                             } else {
-                                if (RND.nextInt(10) < 10) {
+                                if (RND.nextInt(10) < 1) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);

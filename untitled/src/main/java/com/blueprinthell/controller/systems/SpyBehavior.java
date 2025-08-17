@@ -198,6 +198,7 @@ public final class SpyBehavior implements SystemBehavior {
         final SystemBoxModel targetSpy = chooseAnotherSpy();
 
         if (targetSpy == null) {
+            TeleportTracking.markTeleported(packet);
             teleportFailures++;
             return;
         }
