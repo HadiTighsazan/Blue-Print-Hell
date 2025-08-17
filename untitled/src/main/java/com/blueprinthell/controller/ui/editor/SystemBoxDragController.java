@@ -22,7 +22,7 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     private final WireUsageModel usageModel;
     private Point offset;
     private Map<WireModel, Double> oldLengths;
-
+    private static volatile boolean DRAG_ENABLED = true;
 
     public SystemBoxDragController(SystemBoxModel model,
                                    SystemBoxView view,
@@ -39,6 +39,7 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
 
     @Override
     public void mousePressed(MouseEvent e) {
+        if (!DRAG_ENABLED) return;
         offset = e.getPoint();
         oldLengths.clear();
         for (WireModel wire : wires) {
@@ -53,6 +54,7 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
 
     @Override
     public void mouseDragged(MouseEvent e) {
+        if (!DRAG_ENABLED) return;
         int newX = view.getX() + e.getX() - offset.x;
         int newY = view.getY() + e.getY() - offset.y;
         view.setLocation(newX, newY);
@@ -80,4 +82,6 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     @Override
     public void mouseMoved(MouseEvent e) {
     }
+    public static void setDragEnabled(boolean enabled) { DRAG_ENABLED = enabled; }
+    public static boolean isDragEnabled() { return DRAG_ENABLED; }
 }

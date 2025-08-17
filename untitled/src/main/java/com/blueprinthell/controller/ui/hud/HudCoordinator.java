@@ -3,6 +3,7 @@ package com.blueprinthell.controller.ui.hud;
 import com.blueprinthell.controller.packet.PacketProducerController;
 import com.blueprinthell.controller.simulation.SimulationController;
 import com.blueprinthell.controller.simulation.TimelineController;
+import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.model.CoinModel;
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.ScoreModel;
@@ -47,10 +48,14 @@ public final class HudCoordinator {
     }
 
     private final ActionListener startListener = e -> {
+        // قفل کردن درگ از لحظه‌ی استارت
+        SystemBoxDragController.setDragEnabled(false);
+
         if (producer != null) producer.startProduction();
         hud.getStartButton().setEnabled(false);
         simulation.start();
     };
+
 
     private final ActionListener toggleListener = e -> {
         if (simulation.isRunning()) {

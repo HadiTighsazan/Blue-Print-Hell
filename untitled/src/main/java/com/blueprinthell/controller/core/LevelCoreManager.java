@@ -10,6 +10,7 @@ import com.blueprinthell.controller.persistence.SnapshotService;
 import com.blueprinthell.controller.simulation.SimulationRegistrar;
 import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.controller.systems.VpnRevertHints;
+import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.controller.ui.hud.HudController;
 import com.blueprinthell.controller.wire.WireCreationController;
 import com.blueprinthell.controller.wire.WireRemovalController;
@@ -101,6 +102,7 @@ public class LevelCoreManager {
         if (boxes.size() > def.boxes().size()) {
             boxes = new ArrayList<SystemBoxModel>(boxes.subList(0, def.boxes().size()));
         }
+        SystemBoxDragController.setDragEnabled(true);
 
         gameController.getSimulation().stop();
         gameController.getSimulation().clearUpdatables();

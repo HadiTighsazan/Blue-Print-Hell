@@ -2,6 +2,7 @@ package com.blueprinthell.controller.ui;
 
 import com.blueprinthell.controller.persistence.AutoSaveController;
 import com.blueprinthell.controller.GameController;
+import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.level.LevelRegistry;
 import com.blueprinthell.media.SoundSettings;
 import com.blueprinthell.level.LevelManager;
@@ -249,9 +250,13 @@ public class MenuController {
         // شروع simulation
         gameController.getSimulation().start();
 
-        // بررسی و شروع producer اگر هنوز تمام نشده
+        // اگر Producer هنوز تمام نشده، تولید را ادامه بده
         if (gameController.getProducerController() != null
                 && !gameController.getProducerController().isFinished()) {
+
+            // قفل‌کردن درگ چون وارد اجرای مرحله می‌شویم
+            SystemBoxDragController.setDragEnabled(false);
+
             gameController.getProducerController().startProduction();
         }
 
