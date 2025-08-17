@@ -2,8 +2,10 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
 import com.blueprinthell.controller.gameplay.FreezePointSelector;
+import com.blueprinthell.controller.gameplay.SisyphusScrollController;
 import com.blueprinthell.controller.physics.CollisionController;
 import com.blueprinthell.controller.simulation.SimulationController;
+import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.controller.ui.hud.HudController;
 import com.blueprinthell.model.PacketLossModel;
 import com.blueprinthell.model.PacketModel;
@@ -60,8 +62,28 @@ public class ShopController {
         shopView.addBuyOAnahitaListener(e -> buyOAnahita());
         shopView.addCloseListener(e -> closeShop());
         shopView.addBuyFreezeAccelListener(e -> buyFreezeAcceleration());
+        shopView.addBuySisyphusListener(e -> buySisyphus());
 
     }
+    private void buySisyphus() {
+        int cost = 15;
+        if (!deductCoins(cost)) return;
+
+        // پیام اختیاری به بازیکن
+        shopView.setMessage("Scroll of Sisyphus فعال شد: یک‌بار درگ محدود (فقط باکس‌های غیرمرجع)");
+
+        // ⬅️ همین‌جاست که قابلیت را فعال می‌کنیم
+        SystemBoxDragController.enableSisyphusOneShot(
+                120, // شعاع جابه‌جایی (px) — اگر خواستی تغییر بده
+                m -> m != null
+                        && m.getInPorts()  != null && !m.getInPorts().isEmpty()
+                        && m.getOutPorts() != null && !m.getOutPorts().isEmpty(), // فقط غیرمرجع
+                wires,                         // لیست همهٔ WireModelها
+                gameView.getSystemBoxViews(),  // لیست SystemBoxViewها (فعلاً رزرو/اطلاعات کمکی)
+                () -> Toolkit.getDefaultToolkit().beep() // کال‌بک پایان (اختیاری)
+        );
+    }
+
 
     public void openShop() {
         simulation.stop();

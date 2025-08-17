@@ -61,6 +61,10 @@ public final class LevelBuilder {
         // ــ ریست View با فهرست نهایی
         gameView.reset(ordered, wires);
 
+        // آزادسازی هر قفل درگ از مرحلهٔ قبل و فعال‌کردن درگ برای مرحلهٔ تازه
+        SystemBoxDragController.clearDragLock();
+        SystemBoxDragController.setDragEnabled(true);
+
         // ــ اتصال دوبارهٔ درگ‌کنترلرها
         for (Component c : gameView.getGameArea().getComponents()) {
             if (c instanceof SystemBoxView sbv) {
