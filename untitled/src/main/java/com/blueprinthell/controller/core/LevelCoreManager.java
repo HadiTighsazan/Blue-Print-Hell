@@ -187,7 +187,6 @@ public class LevelCoreManager {
 // --- Eliphas (centering) ---
         // --- Eliphas (centering) ---
         EliphasCenteringController eliphas = new EliphasCenteringController(gameController.getWires());
-        gameController.getSimulation().register(eliphas);                 // وارد حلقهٔ آپدیت
         gameController.getShopController().setEliphasController(eliphas); // تا خرید، نقطه را فعال کند
 
 // HUD overlay: یک لایه‌ی سبک روی gameArea (و پاک‌کردن نسخه‌های قبلی)
@@ -255,6 +254,7 @@ public class LevelCoreManager {
         }
 
         gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
+        gameController.getSimulation().register(eliphas);
 
         updateStartEnabled();
 

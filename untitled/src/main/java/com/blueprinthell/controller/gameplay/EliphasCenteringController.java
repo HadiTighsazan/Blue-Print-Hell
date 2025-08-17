@@ -85,15 +85,21 @@ public class EliphasCenteringController implements Updatable {
         if (p == null || wire == null) return false;
         if (activePoints.isEmpty())    return false;
 
-        Point pc = wire.pointAt(p.getProgress()); // مرکز سنترلاین در progress فعلی
+        // ✅ به‌جای سنجشِ pointAt(progress)، مرکز واقعی پکت را بسنج
+        double cx = p.getX() + p.getWidth()  / 2.0;
+        double cy = p.getY() + p.getHeight() / 2.0;
+
+        double r2 = EFFECT_RADIUS_PX * EFFECT_RADIUS_PX;
         for (Point ap : activePoints.keySet()) {
-            int dx = pc.x - ap.x, dy = pc.y - ap.y;
-            if ((dx * dx + dy * dy) <= EFFECT_RADIUS_PX * EFFECT_RADIUS_PX) {
+            double dx = cx - ap.x;
+            double dy = cy - ap.y;
+            if (dx*dx + dy*dy <= r2) {
                 return true;
             }
         }
         return false;
     }
+
 
     private void ensureWrapped(PacketModel p) {
         if (affected.contains(p)) return;
