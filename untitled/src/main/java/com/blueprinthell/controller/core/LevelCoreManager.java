@@ -3,6 +3,7 @@ package com.blueprinthell.controller.core;
 import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.*;
 import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
+import com.blueprinthell.controller.gameplay.EliphasCenteringController;
 import com.blueprinthell.controller.packet.LossMonitorController;
 import com.blueprinthell.controller.packet.PacketProducerController;
 import com.blueprinthell.controller.packet.PacketRenderController;
@@ -23,6 +24,7 @@ import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
 import com.blueprinthell.model.large.LargeGroupRegistry;
+import com.blueprinthell.view.EliphasPointRenderer;
 import com.blueprinthell.view.WireView;
 
 import javax.swing.*;
@@ -182,6 +184,35 @@ public class LevelCoreManager {
                 gameController.getGameView()  // اضافه شدن gameView
         ));
         AccelerationFreezeController freezeController = new AccelerationFreezeController(gameController.getWires());
+// --- Eliphas (centering) ---
+        // --- Eliphas (centering) ---
+        EliphasCenteringController eliphas = new EliphasCenteringController(gameController.getWires());
+        gameController.getSimulation().register(eliphas);                 // وارد حلقهٔ آپدیت
+        gameController.getShopController().setEliphasController(eliphas); // تا خرید، نقطه را فعال کند
+
+// HUD overlay: یک لایه‌ی سبک روی gameArea (و پاک‌کردن نسخه‌های قبلی)
+        if (gameController.getGameView() != null) {
+            JComponent area = gameController.getGameView().getGameArea();
+            for (Component c : area.getComponents()) {
+                if (c instanceof EliphasPointRenderer) {
+                    area.remove(c);
+                }
+            }
+            EliphasPointRenderer overlay = new EliphasPointRenderer(eliphas);
+            overlay.setOpaque(false);
+            overlay.setBounds(0, 0, area.getWidth(), area.getHeight());
+            area.add(overlay);
+            area.setComponentZOrder(overlay, 0); // روی همه
+            area.addComponentListener(new java.awt.event.ComponentAdapter() {
+                @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                    overlay.setBounds(0, 0, area.getWidth(), area.getHeight());
+                }
+            });
+            area.revalidate();
+            area.repaint();
+        }
+
+
 
         gameController.getSimulation().register(freezeController);
         gameController.setFreezeController(freezeController);

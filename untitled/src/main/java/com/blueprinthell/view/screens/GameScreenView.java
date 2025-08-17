@@ -2,6 +2,7 @@ package com.blueprinthell.view.screens;
 
 import com.blueprinthell.config.KeyBindings;
 import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
+import com.blueprinthell.controller.gameplay.EliphasCenteringController;
 import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
@@ -94,6 +95,9 @@ public class GameScreenView extends JPanel {
             Timer updateTimer = new Timer(100, e -> renderer.repaint());
             updateTimer.start();
         }
+
+
+
         for (SystemBoxModel b : boxes) {
             gameArea.add(new SystemBoxView(b));
         }

@@ -1,8 +1,6 @@
 package com.blueprinthell.controller;
 
-import com.blueprinthell.controller.gameplay.AccelerationFreezeController;
-import com.blueprinthell.controller.gameplay.FreezePointSelector;
-import com.blueprinthell.controller.gameplay.SisyphusScrollController;
+import com.blueprinthell.controller.gameplay.*;
 import com.blueprinthell.controller.physics.CollisionController;
 import com.blueprinthell.controller.simulation.SimulationController;
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
@@ -37,6 +35,8 @@ public class ShopController {
     private final List<Integer> activeTimes = new ArrayList<>();
     private AccelerationFreezeController freezeController;
     private FreezePointSelector freezeSelector;
+    private EliphasCenteringController eliphasController;
+
     public ShopController(JFrame parentFrame,
                           SimulationController simulation,
                           CoinModel coinModel,
@@ -63,6 +63,7 @@ public class ShopController {
         shopView.addCloseListener(e -> closeShop());
         shopView.addBuyFreezeAccelListener(e -> buyFreezeAcceleration());
         shopView.addBuySisyphusListener(e -> buySisyphus());
+        shopView.addBuyEliphasListener(e -> buyEliphas());
 
     }
     private void buySisyphus() {
@@ -84,6 +85,30 @@ public class ShopController {
         );
     }
 
+    private void buyEliphas() {
+        final int cost = 20;
+        if (!deductCoins(cost)) return;
+
+        shopView.setMessage("Eliphas: روی یک نقطه از سنترلاین سیم کلیک کن (ESC=انصراف)...");
+        closeShop(); // حتماً دیالوگ شاپ بسته شود تا overlay فعال شود
+
+        SwingUtilities.invokeLater(() -> {
+            EliphasPointSelector selector = new EliphasPointSelector(
+                    gameView,
+                    wires,
+                    (Point p) -> {
+                        if (eliphasController != null && eliphasController.activateAt(p)) {
+                            // نمایش HUD به‌روزرسانی می‌شود (Renderer خودش Timer دارد)
+                            gameView.getGameArea().repaint();
+                        }
+                    },
+                    () -> {
+                        // انصراف: طبق رفتار تاییدشده، سکه برنمی‌گردد (عمداً خالی)
+                    }
+            );
+            selector.start();
+        });
+    }
 
     public void openShop() {
         simulation.stop();
@@ -225,5 +250,6 @@ public class ShopController {
             hudController.setActiveFeatures(List.copyOf(activeNames), List.copyOf(activeTimes));
         }
     }
+    public void setEliphasController(EliphasCenteringController c) { this.eliphasController = c; }
 
 }

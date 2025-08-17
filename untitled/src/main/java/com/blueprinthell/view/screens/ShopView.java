@@ -13,6 +13,7 @@ public class ShopView extends JPanel {
     private final JLabel messageLabel;
     public final JButton buyFreezeAccelButton = new JButton("Freeze Acceleration - 10 coins");
     public final JButton buySisyphusButton = new JButton("Scroll of Sisyphus - 15 coins");
+    public final JButton buyEliphasButton = new JButton("Scroll of Eliphas - 20 coins");
 
     public ShopView() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -44,6 +45,7 @@ public class ShopView extends JPanel {
         add(createButtonPanel(buyFreezeAccelButton));
         add(Box.createRigidArea(new Dimension(0, 10)));
         add(createButtonPanel(buySisyphusButton));
+        add(buyEliphasButton);
 
         add(Box.createRigidArea(new Dimension(0, 20)));
         add(createButtonPanel(closeButton));
@@ -67,6 +69,7 @@ public class ShopView extends JPanel {
     public void addBuyFreezeAccelListener(ActionListener l) {
         buyFreezeAccelButton.addActionListener(l);
     }
+    public void addBuyEliphasListener(ActionListener l) { buyEliphasButton.addActionListener(l); }
 
     public void addBuyOAtarListener(ActionListener l) { buyOAtarButton.addActionListener(l); }
     public void addBuyOAiryamanListener(ActionListener l) { buyOAiryamanButton.addActionListener(l); }

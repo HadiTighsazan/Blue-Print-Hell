@@ -117,7 +117,7 @@ public class PacketProducerController implements Updatable {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
                             } else {
-                                if (RND.nextInt(10) < 0) {
+                                if (RND.nextInt(10) < 10) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
