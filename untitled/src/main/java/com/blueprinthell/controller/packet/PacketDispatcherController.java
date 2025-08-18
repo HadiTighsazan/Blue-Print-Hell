@@ -107,8 +107,13 @@ public class PacketDispatcherController implements Updatable {
                 // -------------------------------------------------------------------
 
                 // ناسازگاری پورت → فقط بوست خروجی برای مسنجرها (رفتار قبلی حفظ می‌شود)
-                if (dstPort != null && !dstPort.isCompatible(packet) && PacketOps.isMessenger(packet)) {
-                    packet.setExitBoostMultiplier(2.0);
+                if (dstPort != null && PacketOps.isMessenger(packet)) {
+                    boolean enteredIncompat =
+                            dstPort.isInput() &&
+                                    (dstPort.getShape() != PortModel.shapeForPacket(packet));
+                    if (enteredIncompat) {
+                        packet.setExitBoostMultiplier(2.0);
+                    }
                 }
 
                 boolean accepted = dest.enqueue(packet, dstPort);
