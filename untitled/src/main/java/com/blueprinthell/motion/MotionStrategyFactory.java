@@ -268,7 +268,7 @@ public final class MotionStrategyFactory {
     private static final class KeepDistanceStrategy implements MotionStrategy {
         private final double baseSpeed;   // px/s
         private final double minGapPx;    // فاصله هدف روی سیم (px)
-
+        private double v ;
         // از Config خوانده می‌شود تا بیرونی و قابل‌تنظیم باشد
         private static final double HYST    = Config.CONF_VPN_HYSTERESIS_PX; // مثلا 5
         private static final double A_MAX   = Config.CONF_VPN_MAX_ACCEL;     // px/s^2
@@ -281,14 +281,14 @@ public final class MotionStrategyFactory {
 
         KeepDistanceStrategy(MotionRule rule, double gap) {
             this.baseSpeed = rule.speedStart;    // معمولاً = Config.CONF_VPN_SPEED
-            this.minGapPx  = gap;                // معمولاً = Config.CONF_VPN_KEEP_DIST_PX
+            this.minGapPx  = gap;
+            this.v = baseSpeed;
         }
 
         @Override
         public void update(PacketModel packet, double dt) {
             WireModel wire = packet.getCurrentWire();
             if (wire == null) return;
-
             final double len = wire.getLength();
             if (len <= 0) return;
 
@@ -298,13 +298,11 @@ public final class MotionStrategyFactory {
             double nearestFrontPx = Double.POSITIVE_INFINITY;
             double nearestBackPx  = Double.POSITIVE_INFINITY;
 
-            List<PacketModel> snapshot = new ArrayList<>(wire.getPackets());
+            java.util.List<PacketModel> snapshot = new java.util.ArrayList<>(wire.getPackets());
             for (PacketModel other : snapshot) {
                 if (other == packet) continue;
-
                 double dProg  = other.getProgress() - myProg; // جلو + ، عقب -
                 double pxDist = Math.abs(dProg) * len;
-
                 if (dProg > 0) {
                     if (pxDist < nearestFrontPx) nearestFrontPx = pxDist;
                 } else if (dProg < 0) {
@@ -312,48 +310,48 @@ public final class MotionStrategyFactory {
                 }
             }
 
-            // هدف سرعت (علامت‌دار)
-            double targetV = baseSpeed; // پیش‌فرض: جلو با سرعت پایه
-            boolean active = !packet.isReturning();
-
-            if (active) {
+            // محاسبهٔ سرعت هدف
+            double targetV = baseSpeed; // px/s رو به جلو
+            if (!packet.isReturning()) {
                 boolean tooCloseFront = nearestFrontPx < (minGapPx - HYST);
                 boolean tooCloseBack  = nearestBackPx  < (minGapPx - HYST);
 
                 if (tooCloseFront && tooCloseBack) {
-                    targetV = 0.0; // بین دو پکت گیر کرده‌ایم
+                    targetV = 0.0; // گیر افتاده بین دو پکت
                 } else if (tooCloseFront) {
                     double err = (minGapPx - nearestFrontPx);
                     targetV = -K_BACK * err; // عقب‌گرد
                 } else if (tooCloseBack) {
                     double err = (minGapPx - nearestBackPx);
-                    targetV = baseSpeed + K_FWD * err; // کمی تندتر جلو برو
-                } else {
-                    targetV = baseSpeed; // داخل باند هیسترزیس
+                    targetV =  baseSpeed + K_FWD * err; // کمی تندتر برای فاصله گرفتن از پشتی
                 }
-            } else {
-                targetV = baseSpeed; // returning
             }
 
-            // سقف سرعت مجاز
-            double vmax = Math.max(0.0, baseSpeed * VMAX_MUL);
-            if (Math.abs(targetV) > vmax) targetV = Math.copySign(vmax, targetV);
+            // محدود کردن شتاب/کاهش شتاب
+            // vPrev را در یک فیلد نگه دارید؛ اگر ندارید می‌توانید از packet.getSpeed() شروع کنید:
+            if (Double.isNaN(v)) v = baseSpeed;
+            double dv   = targetV - v;
+            double aReq = dv / Math.max(1e-6, dt);
+            double aCap = (dv >= 0) ? A_MAX : -D_MAX;
+            if (Math.abs(aReq) > Math.abs(aCap)) aReq = aCap;
+            v += aReq * dt;
 
-            // کلمپ dv (شتاب/ترمز) برای حذف پیک‌ها
-            double vNow  = packet.getSpeed(); // مقدار فعلی (بدون علامت)
-            double dvMax = ((Math.abs(targetV) > vNow) ? A_MAX : D_MAX) * dt;
-            double vNext = stepTowardSigned(vNow, targetV, dvMax);
+            // سقف/کف سرعت
+            double vCap = baseSpeed * VMAX_MUL;
+            if (v >  vCap) v =  vCap;
+            if (v < -vCap) v = -vCap;
 
-            // پیشروی روی سیم با سرعت علامت‌دار
-            double dp   = (vNext * dt) / len;
+            // اعمال به progress (اجازه به عقب‌گرد با v منفی)
+            packet.setSpeed(Math.abs(v)); // برای سازگاری با سایر کنترلرها
+            double dp   = (v * dt) / len; // توجه: v (نه baseSpeed)
             double next = myProg + dp;
             if (next < 0.0) next = 0.0;
             if (next > 1.0) next = 1.0;
-
-            // سرعت را بدون علامت ذخیره می‌کنیم (جهت را progress تعیین می‌کند)
-            packet.setSpeed(Math.abs(vNext));
             packet.setProgress(next);
+
+            // هیچ offset بصریِ اضافی اینجا اعمال نکنید؛ این استراتژی صرفاً فاصلهٔ طولی را تنظیم می‌کند.
         }
+
 
         private static double stepTowardSigned(double currentAbs, double targetSigned, double dvMax) {
             double currentSigned = currentAbs; // فرض رو به جلو؛ هدف علامت را تعیین می‌کند
