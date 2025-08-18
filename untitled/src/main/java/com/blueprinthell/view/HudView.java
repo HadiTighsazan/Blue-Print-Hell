@@ -18,6 +18,8 @@ public class HudView extends JPanel {
     private final JButton toggleButton;
     private final JButton storeButton;
 
+    private final JLabel rightWarningLabel;
+
     public HudView(int x, int y, int width, int height) {
         setLayout(new FlowLayout(FlowLayout.LEFT, 10, 5));
         setOpaque(true);
@@ -35,6 +37,15 @@ public class HudView extends JPanel {
         activeFeaturesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
         activeFeaturesPanel.setOpaque(false);
         add(activeFeaturesPanel);
+
+        rightWarningLabel = new JLabel();
+        rightWarningLabel.setVisible(false);
+        rightWarningLabel.setFont(new Font("Dialog", Font.BOLD, 12));
+        rightWarningLabel.setForeground(new Color(0xE53935)); // قرمز هشدار
+        rightWarningLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+
+        activeFeaturesPanel.add(Box.createHorizontalStrut(8));
+        activeFeaturesPanel.add(rightWarningLabel);
 
         startButton  = new JButton("Start");
         toggleButton = new JButton("Pause");
@@ -61,6 +72,17 @@ public class HudView extends JPanel {
     public void setWireLength(double len)  { wireLengthLabel.setText(String.format("Wire Left: %.2f", len)); }
     public void setPacketLoss(int loss)    { packetLossLabel.setText("Loss: " + loss); }
     public void setCoins(int coins)        { coinsLabel.setText("Coins: " + coins); }
+    public void setRightWarning(String msg) {
+        if (msg == null || msg.isBlank()) {
+            rightWarningLabel.setVisible(false);
+            rightWarningLabel.setText("");
+        } else {
+            rightWarningLabel.setText("<html>⚠ " + msg + "</html>");
+            rightWarningLabel.setVisible(true);
+        }
+        revalidate();
+        repaint();
+    }
 
 
     public void setActiveFeatures(List<String> names, List<Integer> remainingSeconds) {

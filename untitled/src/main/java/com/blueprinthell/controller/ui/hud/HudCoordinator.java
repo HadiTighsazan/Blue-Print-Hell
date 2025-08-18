@@ -55,6 +55,11 @@ public final class HudCoordinator {
         hud.getStartButton().setEnabled(false);
         simulation.start();
     };
+    public void setRightWarningMessage(String msg) {
+        SwingUtilities.invokeLater(() -> {
+            hud.setRightWarning(msg);
+        });
+    }
 
 
     private final ActionListener toggleListener = e -> {

@@ -13,6 +13,7 @@ import com.blueprinthell.controller.systems.RouteHints;
 import com.blueprinthell.controller.systems.VpnRevertHints;
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.controller.ui.hud.HudController;
+import com.blueprinthell.controller.validation.WireIntersectionValidator;
 import com.blueprinthell.controller.wire.WireCreationController;
 import com.blueprinthell.controller.wire.WireRemovalController;
 import com.blueprinthell.level.Level;
@@ -105,6 +106,7 @@ public class LevelCoreManager {
             boxes = new ArrayList<SystemBoxModel>(boxes.subList(0, def.boxes().size()));
         }
         SystemBoxDragController.setDragEnabled(true);
+        SystemBoxDragController.setNetworkChanged(gameController::updateStartEnabled);
 
         gameController.getSimulation().stop();
         gameController.getSimulation().clearUpdatables();
@@ -124,6 +126,7 @@ public class LevelCoreManager {
         }
 
         buildWireControllers();
+        gameController.getHudCoord().setRightWarningMessage(null);
 
         List<SystemBoxModel> sources = new ArrayList<SystemBoxModel>();
         SystemBoxModel sink = null;
@@ -257,6 +260,7 @@ public class LevelCoreManager {
         gameController.getSimulation().register(eliphas);
 
         updateStartEnabled();
+        SystemBoxDragController.setNetworkChanged(this::updateStartEnabled);
 
 
         gameController.startAutoSave();
@@ -277,8 +281,21 @@ public class LevelCoreManager {
         boolean allConnected = boxes.stream().allMatch(b ->
                 b.getInPorts().stream().allMatch(gameController::isPortConnected) &&
                         b.getOutPorts().stream().allMatch(gameController::isPortConnected));
-        gameController.getHudCoord().setStartEnabled(allConnected);
+
+        boolean wiresValid = WireIntersectionValidator.areAllWiresValid(
+                gameController.getWires(),
+                boxes
+        );
+
+        boolean canStart = allConnected && wiresValid;
+        gameController.getHudCoord().setStartEnabled(canStart);
+
+        String warn = wiresValid ? null
+                : WireIntersectionValidator.getValidationMessage(gameController.getWires(), boxes);
+        gameController.getHudCoord().setRightWarningMessage(warn);
     }
+
+
 
     public void purgeCurrentLevelWires() {
         JPanel area = gameController.getGameView().getGameArea();

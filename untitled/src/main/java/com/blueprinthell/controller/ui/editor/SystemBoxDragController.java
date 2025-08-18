@@ -53,6 +53,8 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     private static boolean SISY_USED  = false;  // مصرف شد
     private static boolean SISY_MOVED = false;  // در این تلاش واقعاً جابه‌جا شد
 
+    private static Runnable NETWORK_CHANGED = null;
+
     public SystemBoxDragController(SystemBoxModel model,
                                    SystemBoxView view,
                                    List<WireModel> wires,
@@ -67,7 +69,7 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
         view.addMouseMotionListener(this);
     }
 
-    // -------------------- Mouse Events --------------------
+    public static void setNetworkChanged(Runnable r) { NETWORK_CHANGED = r; }
 
     @Override
     public void mousePressed(MouseEvent e) {
@@ -187,6 +189,11 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
         if (GLOBAL_DRAG_LOCK) {
             DRAG_ENABLED = false;
         }
+        // پس از پایان درگ (چه معمولی، چه Sisyphus) وضعیت شبکه را بازمحاسبه کن
+        if (NETWORK_CHANGED != null) {
+            try { NETWORK_CHANGED.run(); } catch (Throwable ignore) {}
+        }
+
     }
 
     @Override
