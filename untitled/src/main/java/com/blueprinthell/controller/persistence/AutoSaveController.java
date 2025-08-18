@@ -114,10 +114,8 @@ public class AutoSaveController {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
 
-            System.out.println("[AutoSave] Progress saved at " + metadata.timestamp);
 
         } catch (Exception e) {
-            System.err.println("[AutoSave] Failed to save progress: " + e.getMessage());
         }
     }
 
@@ -166,7 +164,6 @@ public class AutoSaveController {
         try {
             Files.deleteIfExists(PROGRESS_SAVE_FILE);
             Files.deleteIfExists(METADATA_FILE);
-            System.out.println("[AutoSave] Saved progress cleared");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -206,14 +203,12 @@ public class AutoSaveController {
     public void pause() {
         enabled = false;
         saveTimer.stop();
-        System.out.println("[AutoSave] Paused (files preserved)");
     }
 
 
     public void resume() {
         enabled = true;
         saveTimer.start();
-        System.out.println("[AutoSave] Resumed");
     }
     public static SaveMetadata loadMetadataOrSynthesize() {
         SaveMetadata m = loadMetadata();

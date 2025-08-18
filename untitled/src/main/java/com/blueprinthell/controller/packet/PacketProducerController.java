@@ -111,13 +111,13 @@ public class PacketProducerController implements Updatable {
 
                             // ابتدا پکت پایه را بسازید
                             if (out.getShape() == PortShape.CIRCLE) {
-                                if (RND.nextInt(10) < 1) {
+                                if (RND.nextInt(10) < 0) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
                             } else {
-                                if (RND.nextInt(10) < 1) {
+                                if (RND.nextInt(10) < 0) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
@@ -126,7 +126,7 @@ public class PacketProducerController implements Updatable {
 
                             // حالا اگر می‌خواهید، آن را به محرمانه تبدیل کنید
                             // این کار باید بعد از ساخت پکت پایه انجام شود
-                            if (RND.nextInt(10) < 0) { // برای تست، همیشه محرمانه
+                            if (RND.nextInt(10) < 6) { // برای تست، همیشه محرمانه
                                 packet = PacketOps.toConfidential(packet);
                             }
 

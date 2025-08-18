@@ -63,8 +63,6 @@ public class MainController {
             // اضافه کردن Shutdown Hook برای ذخیره در هنگام خروج غیرمنتظره
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 // هیچ‌گاه فایل را پاک نمی‌کنیم در shutdown
-                // فقط لاگ می‌زنیم
-                System.out.println("[ShutdownHook] Application shutting down - AutoSave preserved");
             }));
 
             // Window Listener برای خروج از دکمه X پنجره

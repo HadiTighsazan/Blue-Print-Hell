@@ -281,7 +281,6 @@ public class GameController implements NetworkController {
             );
         }
         autoSaveController.start();
-        System.out.println("[GameController] AutoSave started");
     }
 
 
@@ -342,7 +341,6 @@ public class GameController implements NetworkController {
         SwingUtilities.invokeLater(() -> {
             checkCompletionAfterRestore();
         });
-        System.out.println("[GameController] Game restored from saved progress");
     }
 
 
@@ -361,7 +359,6 @@ public class GameController implements NetworkController {
     public void stopAutoSave() {
         if (autoSaveController != null) {
             autoSaveController.stop(); // DO NOT clear files here
-            System.out.println("[GameController] AutoSave stopped (preserved)");
         }
     }
 
@@ -371,7 +368,6 @@ public class GameController implements NetworkController {
             autoSaveController.stop();
         }
         AutoSaveController.clearSavedProgress();
-        System.out.println("[GameController] AutoSave stopped and cleared");
     }
     // اضافه کردن getter برای autoSaveController (اختیاری)
     public boolean isAutoSaveRunning() {

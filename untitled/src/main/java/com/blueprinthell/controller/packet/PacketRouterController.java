@@ -263,7 +263,7 @@ public class PacketRouterController implements Updatable {
 
     private boolean isWireEmpty(PortModel port) {
         WireModel w = findWire(port);
-        return w != null && w.getPackets().isEmpty();
+        return w != null && w.getPackets().size()<3;
     }
 
     private WireModel findWire(PortModel port) {

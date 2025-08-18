@@ -271,7 +271,6 @@ public class LevelCoreManager {
         this.wireRemovalController = new WireRemovalController(
                 gameController.getGameView(), gameController.getWires(), destMap, creator, usageModel, gameController::updateStartEnabled);
 
-        System.out.println("WireRemovalController created and stored: " + wireRemovalController);
     }
 
     public void updateStartEnabled() {
