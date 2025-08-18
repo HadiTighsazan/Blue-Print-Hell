@@ -93,19 +93,27 @@ public class ShopController {
         closeShop(); // حتماً دیالوگ شاپ بسته شود تا overlay فعال شود
 
         SwingUtilities.invokeLater(() -> {
+            final int costFinal = cost; // برای استفاده داخل لامبدا
+
             EliphasPointSelector selector = new EliphasPointSelector(
                     gameView,
                     wires,
                     (Point p) -> {
-                        if (eliphasController != null && eliphasController.activateAt(p)) {
-                            // نمایش HUD به‌روزرسانی می‌شود (Renderer خودش Timer دارد)
+                        boolean ok = (eliphasController != null) && eliphasController.activateAt(p);
+                        if (ok) {
                             gameView.getGameArea().repaint();
+                        } else {
+                            // انتخاب نامعتبر → بازگشت سکه‌ها
+                            refundCoins(costFinal, "Eliphas canceled/invalid point");
                         }
                     },
                     () -> {
-                        // انصراف: طبق رفتار تاییدشده، سکه برنمی‌گردد (عمداً خالی)
+                        // لغو با ESC → بازگشت سکه‌ها
+                        refundCoins(costFinal, "Eliphas canceled");
                     }
             );
+
+
             selector.start();
         });
     }
@@ -134,6 +142,15 @@ public class ShopController {
         });
         t.setRepeats(false);
         t.start();
+    }
+    private void refundCoins(int amount, String reason) {
+        if (amount <= 0) return;
+        coinModel.add(amount); // CoinModel خودش Listenerها را notify می‌کند → HUD آپدیت می‌شود
+        if (reason != null && !reason.isBlank()) {
+            shopView.setMessage(reason + " — " + amount + " coins refunded");
+        } else {
+            shopView.setMessage(amount + " coins refunded");
+        }
     }
 
     private void buyOAiryaman() {
@@ -194,16 +211,26 @@ public class ShopController {
 
         // استفاده از gameView که حالا فیلد کلاس است
         SwingUtilities.invokeLater(() -> {
+            final int costFinal = cost; // برای لامبدا
+
             freezeSelector = new FreezePointSelector(
-                    gameView,  // استفاده مستقیم از فیلد
+                    gameView,
                     wires,
                     point -> {
-                        if (freezeController.activateFreezeAt(point)) {
-                            // نمایش افکت بصری (اختیاری)
-                            showFreezeEffect(point);
+                        boolean ok = freezeController.activateFreezeAt(point);
+                        if (ok) {
+                            showFreezeEffect(point); // اختیاری
+                        } else {
+                            // نقطهٔ نامعتبر/کول‌داون غیرمنتظره → سکه برگردد
+                            refundCoins(costFinal, "Freeze failed");
                         }
+                    },
+                    () -> {
+                        // لغو با ESC → سکه برگردد
+                        refundCoins(costFinal, "Freeze canceled");
                     }
             );
+
             freezeSelector.startSelection();
         });
     }

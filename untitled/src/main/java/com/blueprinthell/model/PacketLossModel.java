@@ -16,11 +16,7 @@ public class PacketLossModel {
     public void increment() {
 
         immediateLoss++;
-               if (DBG_LOSS) {
-                        System.out.println("[LOSS][Immediate +1] increment() بدون پکت صدا زده شد.");
-                       // برای پیدا کردن منبع دقیق:
-                                // new Exception().printStackTrace(System.out);
-                                   }
+
     }
 
     public void incrementBy(int n) {
@@ -37,29 +33,23 @@ public class PacketLossModel {
 
     public void incrementPacket(PacketModel p) {
             if (p instanceof BitPacket) {
-                        if (DBG_LOSS) System.out.println("[LOSS][Deferred][Bit] group=" + ((BitPacket)p).getGroupId());
                        return;          // مؤخره
                     }
                if (p instanceof LargePacket lp) {
                         if (DBG_LOSS) {
-                                System.out.println("[LOSS][Deferred][Large] orig=" + lp.isOriginal()
-                                                + " group=" + lp.getGroupId()
-                                                + " size=" + lp.getOriginalSizeUnits());
+
                             }
                         return;        // مؤخره (اولیه یا مرج‌شده)
                     }
                 immediateLoss++;
                 if (DBG_LOSS) {
-                       System.out.println("[LOSS][Immediate +1][Non-Large/Non-Bit] type=" + p.getClass().getSimpleName());
                    }
           }
 
            /** اگر دارید در SnapshotService مقدار فوری را ست می‌کنید، یک لاگ بزنید: */
            public void restoreImmediateLoss(int value) {
                this.immediateLoss = Math.max(0, value);
-               if (DBG_LOSS) {
-                       System.out.println("[RESTORE][LossSet] immediate=" + this.immediateLoss);
-                  }
+
             }
     /**
      * محاسبه کل loss (immediate + deferred)

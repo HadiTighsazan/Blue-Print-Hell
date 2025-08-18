@@ -106,15 +106,12 @@ public class MenuController {
     }
 
     private void handleStartGame() {
-        System.out.println("[MenuController] Start button clicked");
 
         if (AutoSaveController.hasSavedProgress()) {
-            System.out.println("[MenuController] Found saved progress");
 
             AutoSaveController.SaveMetadata metadata =
                     AutoSaveController.loadMetadataOrSynthesize();
 
-            System.out.println("[MenuController] Showing resume dialog");
             JFrame parentFrame = (JFrame) SwingUtilities.getWindowAncestor(
                     screenController.getMainMenuView()
             );
@@ -122,15 +119,12 @@ public class MenuController {
             dialog.setVisible(true);
 
             if (dialog.isResumeSelected()) {
-                System.out.println("[MenuController] User selected resume");
                 resumeSavedGame(); // ← این متد از progress.json می‌خوانَد
             } else {
-                System.out.println("[MenuController] User selected new game");
                 AutoSaveController.clearSavedProgress();
                 startNewGame();
             }
         } else {
-            System.out.println("[MenuController] No saved progress found");
             startNewGame();
         }
     }

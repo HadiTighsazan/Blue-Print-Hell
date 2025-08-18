@@ -219,7 +219,6 @@ public class LevelCoreManager {
         gameController.getSimulation().register(freezeController);
         gameController.setFreezeController(freezeController);
         gameController.getShopController().setFreezeController(freezeController);
-        gameController.getHudView().getStoreButton().addActionListener(e -> gameController.getShopController().openShop());
 
         LargeGroupRegistry largeRegistry = null;
         if (gameController.getRegistrar() != null) {

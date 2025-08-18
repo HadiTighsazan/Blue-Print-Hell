@@ -21,14 +21,18 @@ public class FreezePointSelector {
     private final Consumer<Point> onPointSelected;
     private JComponent overlay;
     private MouseAdapter mouseHandler;
+    private final Runnable onCanceled;
 
     public FreezePointSelector(GameScreenView gameView,
                                List<WireModel> wires,
-                               Consumer<Point> onPointSelected) {
+                               Consumer<Point> onPointSelected,
+                               Runnable onCanceled) {
         this.gameView = gameView;
         this.wires = wires;
         this.onPointSelected = onPointSelected;
+        this.onCanceled = onCanceled;
     }
+
 
     /**
      * شروع فرآیند انتخاب نقطه
@@ -94,13 +98,16 @@ public class FreezePointSelector {
         // اضافه کردن ESC handler
         InputMap im = overlay.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap am = overlay.getActionMap();
+
         im.put(KeyStroke.getKeyStroke("ESCAPE"), "cancel");
         am.put("cancel", new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 endSelection();
+                if (onCanceled != null) onCanceled.run();
             }
         });
+
 
         gameArea.add(overlay);
         gameArea.setComponentZOrder(overlay, 0);
