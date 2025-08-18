@@ -220,10 +220,28 @@ public class LevelCoreManager {
         gameController.setFreezeController(freezeController);
         gameController.getShopController().setFreezeController(freezeController);
 
-        LargeGroupRegistry largeRegistry = null;
-        if (gameController.getRegistrar() != null) {
-            largeRegistry = gameController.getRegistrar().getLargeGroupRegistry();
-        }
+
+
+        gameController.setRegistrar(new SimulationRegistrar(
+                gameController,                                      // NetworkController
+                gameController.getSimulation(),                      // SimulationController
+                gameController.getScreenController(),                // ScreenController  ✅ بجای Dispatcher
+                gameController.getCollisionController(),             // CollisionController
+                gameController.getPacketRenderer(),                  // PacketRenderController
+                gameController.getScoreModel(),
+                gameController.getCoinModel(),
+                gameController.getLossModel(),
+                usageModel,
+                gameController.getSnapshotMgr(),
+                gameController.getHudView(),
+                levelManager
+        ));
+        gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
+
+// 2) حالا LargeGroupRegistry واقعی را بگیر
+        LargeGroupRegistry largeRegistry = gameController.getRegistrar().getLargeGroupRegistry();
+
+// 3) SnapshotService را با رجیستری «غیر-null» بساز
         gameController.setSnapshotSvc(new SnapshotService(
                 gameController.getDestMap(),
                 boxes,
@@ -238,13 +256,13 @@ public class LevelCoreManager {
                 gameController.getPacketRenderer(),
                 List.of(gameController.getProducerController()),
                 gameController::updateStartEnabled,
-                () -> levelManager.getLevelIndex() + 1, // ★ تامین شماره لِول
+                () -> levelManager.getLevelIndex() + 1,
                 largeRegistry
         ));
 
-        gameController.setRegistrar(new SimulationRegistrar(gameController,
-                gameController.getSimulation(), null, gameController.getCollisionCtrl(), gameController.getPacketRenderer(), gameController.getScoreModel(), gameController.getCoinModel(),
-                gameController.getLossModel(), usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));
+
+
+
         gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
 
         List<Updatable> systemControllers = new ArrayList<Updatable>();

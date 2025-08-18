@@ -140,11 +140,34 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
 
 
 
-        /* --- ثبت وضعیت تولید تدریجی بیت‌ها --- */
-        remainingBits.merge(groupId, expectedBits, Integer::sum);
+        // از رجیستری بخوان که تا الان چند بیت برای این گروه «دریافت» شده
+        int alreadyProduced = 0;
+        var gs = registry.get(groupId);
+        if (gs != null) {
+            if (gs.isClosed()) {
+                // گروه در snapshot بسته شده — دوباره split نکن
+                return;
+            }
+            alreadyProduced = Math.max(0, gs.getReceivedBits());
+        }
+
+// فقط «باقیمانده» را حساب کن
+        int toProduce = Math.max(0, expectedBits - alreadyProduced);
+
+// اگر چیزی باقی نمانده، فقط ایندکس را هم‌تراز کن و برگرد
         parentSizeByGrp.putIfAbsent(groupId, parentSize);
         colorIdByGrp   .putIfAbsent(groupId, colorId);
-        nextIndexByGrp .putIfAbsent(groupId, 0);
+        nextIndexByGrp .putIfAbsent(groupId, alreadyProduced);
+
+        if (toProduce <= 0) {
+            return; // دیگر نیازی به ورود به صف round-robin نیست
+        }
+
+// حالا واقعاً همان باقیمانده را برای تولید در نظر بگیر
+        remainingBits.merge(groupId, toProduce, Integer::sum);
+
+// در نهایت در صف round-robin قرار بده اگر قبلاً نیست
+        if (!rrGroups.contains(groupId)) rrGroups.addLast(groupId);
 
         if (!rrGroups.contains(groupId)) rrGroups.addLast(groupId);
     }
