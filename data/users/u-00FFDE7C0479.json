@@ -1,0 +1,58 @@
+{
+  "userId": "u-00FFDE7C0479",
+  "username": "Player_u-00FFDE",
+  "xpTotal": 480,
+  "xpByMode": {
+    "SOLO_OFFLINE": 300,
+    "SOLO_ONLINE": 180
+  },
+  "bestTimes": {
+    "1": 6726
+  },
+  "history": [
+    {
+      "resultId": "r-fcec1ca0-3b2d-49cd-832b-48d5a434562e",
+      "userId": "u-00FFDE7C0479",
+      "mode": "SOLO_OFFLINE",
+      "ruleset": "SP_V1",
+      "level": 1,
+      "durationMs": 41940,
+      "score": 0,
+      "delivered": 6,
+      "loss": 0,
+      "xp": 150,
+      "ts": 1755851065072
+    },
+    {
+      "resultId": "r-6e61b777-7f8e-476f-b3c9-fb3b434b2763",
+      "userId": "u-00FFDE7C0479",
+      "mode": "SOLO_ONLINE",
+      "ruleset": "SP_V1",
+      "level": 1,
+      "durationMs": 6726,
+      "score": 0,
+      "delivered": -2,
+      "loss": 2,
+      "xp": 180,
+      "ts": 1755849687972
+    },
+    {
+      "resultId": "r-55bd3e57-c86f-4a52-a14a-76ba707943c8",
+      "userId": "u-00FFDE7C0479",
+      "mode": "SOLO_OFFLINE",
+      "ruleset": "SP_V1",
+      "level": 1,
+      "durationMs": 40451,
+      "score": 0,
+      "delivered": 6,
+      "loss": 0,
+      "xp": 150,
+      "ts": 1755849356428
+    }
+  ],
+  "unlocks": [],
+  "activePerk": "none",
+  "type": "PROFILE",
+  "messageId": "da366a5b-b305-4301-bfd1-c23e0d93b608",
+  "timestamp": 1755849115820
+}
