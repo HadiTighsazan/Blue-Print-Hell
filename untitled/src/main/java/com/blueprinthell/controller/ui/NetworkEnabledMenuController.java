@@ -4,6 +4,7 @@ import com.blueprinthell.client.network.ConnectionManager;
 import com.blueprinthell.controller.GameController;
 import com.blueprinthell.controller.network.GameResultHandler;
 import com.blueprinthell.controller.persistence.AutoSaveController;
+import com.blueprinthell.controller.pvp.PvPClientController;
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.level.LevelRegistry;
@@ -65,6 +66,8 @@ public class NetworkEnabledMenuController {
         originalPanel.add(Box.createVerticalGlue());
         originalPanel.add(mainMenu.startButton);
         originalPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        originalPanel.add(mainMenu.pvpButton);
+        originalPanel.add(Box.createRigidArea(new Dimension(0, 10)));
         originalPanel.add(mainMenu.settingsButton);
         originalPanel.add(Box.createRigidArea(new Dimension(0, 10)));
         originalPanel.add(mainMenu.exitButton);
@@ -85,7 +88,23 @@ public class NetworkEnabledMenuController {
 
         // دکمه Start با بررسی حالت آنلاین/آفلاین
         mainMenu.startButton.addActionListener(e -> handleStartGame());
+        mainMenu.pvpButton.addActionListener(e -> {
+            if (connectionManager.getState() != ConnectionManager.ConnectionState.CONNECTED) {
+                JOptionPane.showMessageDialog(
+                        mainMenu,
+                        "Not connected to server.\nGo online in the panel on the right.",
+                        "Connection required",
+                        JOptionPane.WARNING_MESSAGE
+                );
 
+                // اختیاری: فوکوس/هایلایت بخش شبکه
+                return;
+            }
+
+            // شروع صف PvP
+            PvPClientController pvp = new PvPClientController(gameController, screenController, connectionManager);
+            pvp.startQueue();
+        });
         // دکمه Settings
         mainMenu.settingsButton.addActionListener(e ->
                 screenController.showScreen(ScreenController.SETTINGS));

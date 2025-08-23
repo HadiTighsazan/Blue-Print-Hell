@@ -2,7 +2,9 @@ package com.blueprinthell.controller;
 
 import com.blueprinthell.client.network.ConnectionManager;
 import com.blueprinthell.controller.packet.PacketProducerController;
+import com.blueprinthell.controller.pvp.PvPClientController;
 import com.blueprinthell.controller.simulation.SimulationController;
+import com.blueprinthell.controller.ui.MenuController;
 import com.blueprinthell.controller.ui.NetworkEnabledMenuController;
 import com.blueprinthell.controller.ui.ScreenController;
 import com.blueprinthell.controller.ui.UIController;
@@ -17,7 +19,8 @@ import java.awt.*;
  */
 public class NetworkMainController {
 
-    private static ConnectionManager connectionManager;
+    public static ConnectionManager connectionManager;
+    public static PvPClientController pvpController;
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
@@ -40,7 +43,12 @@ public class NetworkMainController {
             // Game Controller
             GameController gameController = new GameController(frame);
             gameController.setScreenController(screenController);
-
+            // ایجاد PvP Controller
+            pvpController = new PvPClientController(
+                    gameController,
+                    screenController,
+                    connectionManager
+            );
             // تنظیمات اولیه
             SimulationController simController = gameController.getSimulation();
             PacketProducerController producerController = gameController.getProducerController();
@@ -55,7 +63,6 @@ public class NetworkMainController {
                     gameController,
                     connectionManager
             );
-
             // UI Controller
             UIController ui = new UIController(
                     frame,

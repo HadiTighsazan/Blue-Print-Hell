@@ -1,5 +1,7 @@
 package com.blueprinthell.controller.ui;
 
+import com.blueprinthell.client.network.ConnectionManager;
+import com.blueprinthell.controller.NetworkMainController;
 import com.blueprinthell.controller.persistence.AutoSaveController;
 import com.blueprinthell.controller.GameController;
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
@@ -12,6 +14,8 @@ import com.blueprinthell.view.screens.*;
 
 import javax.swing.*;
 import java.awt.*;
+
+
 
 
 public class MenuController {
@@ -37,6 +41,19 @@ public class MenuController {
         mainMenu.startButton.addActionListener(
                 e -> handleStartGame()  // قبلاً ممکن است مستقیم levelManager.startGame() بوده
         );
+// اضافه کردن listener برای دکمه PvP
+        mainMenu.pvpButton.addActionListener(e -> {
+            if (NetworkMainController.connectionManager.getState() != ConnectionManager.ConnectionState.CONNECTED) {
+                JOptionPane.showMessageDialog(null,
+                        "Please connect to server first!",
+                        "Connection Required",
+                        JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // شروع queue برای PvP
+            NetworkMainController.pvpController.startQueue();
+        });
         mainMenu.settingsButton.addActionListener(e ->
                 screenController.showScreen(ScreenController.SETTINGS));
         // فقط دکمه Exit فایل را پاک می‌کند (خروج عادی)

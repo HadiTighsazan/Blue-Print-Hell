@@ -9,6 +9,8 @@ import java.awt.*;
 public class MainMenuView extends BackgroundPanel {
 
     public final JButton startButton    = makeButton("Start");
+    public final JButton pvpButton      = makeButton("PvP Match"); // NEW
+
     public final JButton settingsButton = makeButton("Settings");
     public final JButton exitButton     = makeButton("Exit");
 
@@ -19,6 +21,8 @@ public class MainMenuView extends BackgroundPanel {
 
         add(Box.createVerticalGlue());
         add(startButton);
+        add(Box.createRigidArea(new Dimension(0, 15)));
+        add(pvpButton);
         add(Box.createRigidArea(new Dimension(0, 15)));
         add(settingsButton);
         add(Box.createRigidArea(new Dimension(0, 15)));

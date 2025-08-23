@@ -189,7 +189,7 @@ public class PvPGameSession {
         simulation = new MessengerGameSimulation(layoutP1, layoutP2);
 
         // Initialize systems with ammo
-        for (BoxLayout box : layoutP1.boxes) {
+        for (SystemLayout box : layoutP1.boxes) {
             if (!box.isSource && !box.isSink) {
                 SystemStateInternal state = new SystemStateInternal(box.id);
                 state.ammoP1 = 3; // Starting ammo
@@ -197,7 +197,7 @@ public class PvPGameSession {
             }
         }
 
-        for (BoxLayout box : layoutP2.boxes) {
+        for (SystemLayout box : layoutP2.boxes) {
             if (!box.isSource && !box.isSink) {
                 SystemStateInternal state = systems.get(box.id);
                 if (state == null) {

@@ -90,7 +90,7 @@ public class NetworkProtocol {
         }
     }
 
-    public static class BoxLayout {
+    public static class SystemLayout {
         public String id;
         public String kind; // NORMAL, VPN, DISTRIBUTOR, etc.
         public int x, y, width, height;
@@ -160,7 +160,7 @@ public class NetworkProtocol {
     public static class SubmitLayout extends Message {
         public String matchId;
         public List<WireLayout> wires;
-        public List<BoxLayout> boxes;
+        public List<SystemLayout> boxes;
 
         public SubmitLayout(String matchId) {
             super(MessageType.SUBMIT_LAYOUT);
@@ -224,7 +224,7 @@ public class NetworkProtocol {
         public String matchId;
         public String mapId;
         public long seed;
-        public List<BoxLayout> opponentBoxes;
+        public List<SystemLayout> opponentBoxes;
         public List<WireLayout> opponentWires;
         public int countdownSeconds; // 3, 2, 1...
 
