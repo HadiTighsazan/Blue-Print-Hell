@@ -54,7 +54,19 @@ public class ConnectionManager {
     private final Object queueLock = new Object();
 
     public ConnectionManager(String userId) {
-        this.userId = userId != null ? userId : generateUserId();
+        // 1) بررسی JVM property اولویت دارد (مثلاً java -DuserId=u-TEST_A -jar ...)
+        String forced = System.getProperty("userId");
+        if (forced != null) forced = forced.trim();
+
+        // 2) انتخاب userId بر اساس اولویت: -DuserId > ctor param > generateUserId()
+        if (forced != null && !forced.isEmpty()) {
+            this.userId = forced;
+        } else if (userId != null && !userId.isBlank()) {
+            this.userId = userId;
+        } else {
+            this.userId = generateUserId();
+        }
+
         this.gson = new GsonBuilder().create();
         this.state = ConnectionState.DISCONNECTED;
         this.messageHandlers = new ConcurrentHashMap<>();
@@ -62,6 +74,7 @@ public class ConnectionManager {
 
         loadOfflineQueue();
     }
+
 
     /**
      * اتصال به سرور
