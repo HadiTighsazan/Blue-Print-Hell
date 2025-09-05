@@ -44,7 +44,7 @@ public class PvPMatchManager {
         matchmakingQueue.removeIf(p -> p.sessionId.equals(sessionId));
 
         // Add to queue
-        QueuedPlayer player = new QueuedPlayer(sessionId, userId, username);        matchmakingQueue.offer(player);
+        QueuedPlayer player = new QueuedPlayer(sessionId, userId, username);
         matchmakingQueue.offer(player);
         // Send queue status
         updateQueueStatus(sessionId);
@@ -96,8 +96,8 @@ public class PvPMatchManager {
         MatchFound foundP1 = new MatchFound(matchId, p2.userId, p2.username, 1);
         MatchFound foundP2 = new MatchFound(matchId, p1.userId, p1.username, 2);
 
-        eventHandler.sendMessageToPlayer(p1.userId, foundP1);
-        eventHandler.sendMessageToPlayer(p2.userId, foundP2);
+        eventHandler.sendMessageToPlayer(p1.sessionId, foundP1);
+        eventHandler.sendMessageToPlayer(p2.sessionId, foundP2);
 
         // Start build phase
         session.startBuildPhase();

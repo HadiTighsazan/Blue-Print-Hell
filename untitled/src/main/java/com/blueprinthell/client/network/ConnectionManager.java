@@ -266,7 +266,25 @@ public class ConnectionManager {
         receiveThread.setDaemon(true);
         receiveThread.start();
     }
+    private Message deserializeFullMessage(String json, MessageType type) {
+        try {
+            return switch (type) {
+                case QUEUE_STATUS -> gson.fromJson(json, QueueStatus.class);
+                case MATCH_FOUND -> gson.fromJson(json, MatchFound.class);
+                case BUILD_TICK -> gson.fromJson(json, BuildTick.class);
+                case MATCH_START -> gson.fromJson(json, MatchStart.class);
+                case TICK -> gson.fromJson(json, Tick.class);
+                case STATE_SYNC -> gson.fromJson(json, StateSync.class);
+                case MATCH_END -> gson.fromJson(json, MatchEnd.class);
+                case EXTEND_GRANTED -> gson.fromJson(json, ExtendGranted.class);
+                default -> gson.fromJson(json, Message.class);
 
+            };
+        } catch (Exception e) {
+            System.err.println("Failed to deserialize message type " + type + ": " + e.getMessage());
+            return null;
+        }
+    }
     private void handleReceivedMessage(String json) {
         try {
             Message msg = gson.fromJson(json, Message.class);
@@ -299,6 +317,19 @@ public class ConnectionManager {
                     Consumer<Message> handler = messageHandlers.get(MessageType.PROFILE);
                     if (handler != null) {
                         handler.accept(profile);
+                    }
+                }
+                // === اضافه کردن case های PvP ===
+                case QUEUE_STATUS, MATCH_FOUND, BUILD_TICK, MATCH_START,
+                     TICK, STATE_SYNC, MATCH_END, EXTEND_GRANTED -> {
+                    // این پیام‌ها مستقیماً به handler عمومی ارسال می‌شوند
+                    Consumer<Message> handler = messageHandlers.get(msg.type);
+                    if (handler != null) {
+                        // باید پیام کامل را deserialize کنیم
+                        Message fullMsg = deserializeFullMessage(json, msg.type);
+                        if (fullMsg != null) {
+                            handler.accept(fullMsg);
+                        }
                     }
                 }
             }

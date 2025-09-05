@@ -2,14 +2,33 @@
   "userId": "u-PLAYER_B",
   "username": "Player_u-PLAYER",
   "xpTotal": 0,
-  "xpByMode": {},
+  "xpByMode": {
+    "MULTIPLAYER_PVP": 0
+  },
   "bestTimes": {},
-  "history": [],
+  "history": [
+    {
+      "resultId": "r-26a70b7e-5195-40f9-b40a-f10d6aca375d",
+      "userId": "u-PLAYER_B",
+      "mode": "MULTIPLAYER_PVP",
+      "ruleset": "MP_MSG_ONLY_V1",
+      "level": 0,
+      "durationMs": 172816,
+      "score": 0,
+      "delivered": 0,
+      "loss": 0,
+      "xp": 0,
+      "ts": 1757056398545,
+      "matchId": "match-85b36ca8-066e-4378-85ac-f72a6f2ff723",
+      "isWinner": false,
+      "playerSide": 0
+    }
+  ],
   "unlocks": [],
   "activePerk": "none",
   "pvpWins": 0,
-  "pvpLosses": 0,
-  "pvpRating": 1000,
+  "pvpLosses": 1,
+  "pvpRating": 980,
   "type": "PROFILE",
   "messageId": "1d869760-8e2d-420b-bc48-74e99c870172",
   "timestamp": 1756275076047

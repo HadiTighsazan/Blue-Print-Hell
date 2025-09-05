@@ -228,7 +228,7 @@ public class BlueprintHellServerExtended {
 
         private void handleReadyState(String json) {
             ReadyState ready = gson.fromJson(json, ReadyState.class);
-            pvpManager.handlePlayerMessage(userId, ready);
+            pvpManager.handlePlayerMessage(sessionId, ready);
         }
 
         private void handleExtendRequest(String json) {
