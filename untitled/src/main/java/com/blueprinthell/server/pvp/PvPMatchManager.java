@@ -25,7 +25,7 @@ public class PvPMatchManager {
     private final MatchEventHandler eventHandler;
 
     public interface MatchEventHandler {
-        void sendMessageToPlayer(String userId, Message message);
+        void sendMessageToPlayer(String sessionId, Message message);
         void onMatchEnded(String matchId, GameResult resultP1, GameResult resultP2);
     }
 
@@ -39,23 +39,22 @@ public class PvPMatchManager {
     /**
      * Add player to matchmaking queue
      */
-    public void queuePlayer(String userId, String username) {
+    public void queuePlayer(String sessionId, String userId, String username) {
         // Remove from queue if already present
-        matchmakingQueue.removeIf(p -> p.userId.equals(userId));
+        matchmakingQueue.removeIf(p -> p.sessionId.equals(sessionId));
 
         // Add to queue
-        QueuedPlayer player = new QueuedPlayer(userId, username);
+        QueuedPlayer player = new QueuedPlayer(sessionId, userId, username);        matchmakingQueue.offer(player);
         matchmakingQueue.offer(player);
-
         // Send queue status
-        updateQueueStatus(userId);
+        updateQueueStatus(sessionId);
     }
 
     /**
      * Remove player from queue
      */
-    public void cancelQueue(String userId) {
-        matchmakingQueue.removeIf(p -> p.userId.equals(userId));
+    public void cancelQueue(String sessionId) {
+        matchmakingQueue.removeIf(p -> p.sessionId.equals(sessionId));
     }
 
     /**
@@ -75,7 +74,7 @@ public class PvPMatchManager {
         int position = 1;
         for (QueuedPlayer player : matchmakingQueue) {
             QueueStatus status = new QueueStatus(position++, position * 5);
-            eventHandler.sendMessageToPlayer(player.userId, status);
+            eventHandler.sendMessageToPlayer(player.sessionId, status);
         }
     }
 
@@ -90,8 +89,8 @@ public class PvPMatchManager {
         activeMatches.put(matchId, session);
 
         // Map players to match
-        playerToMatch.put(p1.userId, matchId);
-        playerToMatch.put(p2.userId, matchId);
+        playerToMatch.put(p1.sessionId, matchId);
+        playerToMatch.put(p2.sessionId, matchId);
 
         // Notify players
         MatchFound foundP1 = new MatchFound(matchId, p2.userId, p2.username, 1);
@@ -109,8 +108,8 @@ public class PvPMatchManager {
     /**
      * Handle player message
      */
-    public void handlePlayerMessage(String userId, Message message) {
-        String matchId = playerToMatch.get(userId);
+    public void handlePlayerMessage(String sessionId, Message message) {
+        String matchId = playerToMatch.get(sessionId);
         if (matchId == null) {
             return; // Player not in a match
         }
@@ -121,7 +120,7 @@ public class PvPMatchManager {
         }
 
         // Delegate to session
-        session.handlePlayerMessage(userId, message);
+        session.handlePlayerMessage(sessionId, message);
     }
 
     /**
@@ -131,9 +130,8 @@ public class PvPMatchManager {
         PvPGameSession session = activeMatches.remove(matchId);
         if (session != null) {
             // Clean up player mappings
-            playerToMatch.remove(session.getPlayer1().userId);
-            playerToMatch.remove(session.getPlayer2().userId);
-
+            playerToMatch.remove(session.getPlayer1().sessionId);
+            playerToMatch.remove(session.getPlayer2().sessionId);
             // Stop session
             session.stop();
         }
@@ -142,12 +140,12 @@ public class PvPMatchManager {
     /**
      * Update queue status for a player
      */
-    private void updateQueueStatus(String userId) {
+    private void updateQueueStatus(String sessionId) {
         int position = 1;
         for (QueuedPlayer player : matchmakingQueue) {
-            if (player.userId.equals(userId)) {
+            if (player.sessionId.equals(sessionId)) {
                 QueueStatus status = new QueueStatus(position, position * 5);
-                eventHandler.sendMessageToPlayer(userId, status);
+                eventHandler.sendMessageToPlayer(sessionId, status);
                 break;
             }
             position++;
@@ -168,11 +166,13 @@ public class PvPMatchManager {
      * Queued player data
      */
     static class QueuedPlayer {
+        final String sessionId;
         final String userId;
         final String username;
         final long queueTime;
 
-        QueuedPlayer(String userId, String username) {
+        QueuedPlayer(String sessionId, String userId, String username) {
+            this.sessionId = sessionId;
             this.userId = userId;
             this.username = username;
             this.queueTime = System.currentTimeMillis();

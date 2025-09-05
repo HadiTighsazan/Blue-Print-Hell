@@ -161,9 +161,8 @@ public class PvPGameSession {
         startP2.opponentBoxes = layoutP1 != null ? layoutP1.boxes : new ArrayList<>();
         startP2.opponentWires = layoutP1 != null ? layoutP1.wires : new ArrayList<>();
 
-        eventHandler.sendMessageToPlayer(player1.userId, startP1);
-        eventHandler.sendMessageToPlayer(player2.userId, startP2);
-
+        eventHandler.sendMessageToPlayer(player1.sessionId, startP1);
+        eventHandler.sendMessageToPlayer(player2.sessionId, startP2);
         // Start countdown
         executor.schedule(this::startMatch, COUNTDOWN_SECONDS, TimeUnit.SECONDS);
     }
@@ -348,9 +347,8 @@ public class PvPGameSession {
         endP2.winnerSide = winnerSide;
         endP2.xpEarned = xpP2;
 
-        eventHandler.sendMessageToPlayer(player1.userId, endP1);
-        eventHandler.sendMessageToPlayer(player2.userId, endP2);
-
+        eventHandler.sendMessageToPlayer(player1.sessionId, endP1);
+        eventHandler.sendMessageToPlayer(player2.sessionId, endP2);
         // Create game results
         GameResult resultP1 = createGameResult(player1, scoreP1, winnerSide == 1, xpP1);
         GameResult resultP2 = createGameResult(player2, scoreP2, winnerSide == 2, xpP2);
@@ -390,41 +388,40 @@ public class PvPGameSession {
     /**
      * Handle player message
      */
-    public void handlePlayerMessage(String userId, Message message) {
-        boolean isP1 = userId.equals(player1.userId);
-        boolean isP2 = userId.equals(player2.userId);
-
+    public void handlePlayerMessage(String sessionId, Message message) {
+        boolean isP1 = sessionId.equals(player1.sessionId);
+        boolean isP2 = sessionId.equals(player2.sessionId);
         if (!isP1 && !isP2) return;
 
         switch (message.type) {
-            case SUBMIT_LAYOUT -> handleSubmitLayout(userId, (SubmitLayout)message);
-            case READY_STATE -> handleReadyState(userId, (ReadyState)message);
-            case EXTEND_REQUEST -> handleExtendRequest(userId, (ExtendRequest)message);
-            case INJECT -> handleInject(userId, (Inject)message);
+            case SUBMIT_LAYOUT -> handleSubmitLayout(sessionId, (SubmitLayout)message);
+            case READY_STATE -> handleReadyState(sessionId, (ReadyState)message);
+            case EXTEND_REQUEST -> handleExtendRequest(sessionId, (ExtendRequest)message);
+            case INJECT -> handleInject(sessionId, (Inject)message);
         }
     }
 
-    private void handleSubmitLayout(String userId, SubmitLayout layout) {
+    private void handleSubmitLayout(String sessionId, SubmitLayout layout) {
         if (currentPhase != Phase.BUILD) return;
 
-        if (userId.equals(player1.userId)) {
+        if (sessionId.equals(player1.sessionId)) {
             layoutP1 = layout;
         } else {
             layoutP2 = layout;
         }
     }
 
-    private void handleReadyState(String userId, ReadyState ready) {
+    private void handleReadyState(String sessionId, ReadyState ready) {
         if (currentPhase != Phase.BUILD) return;
 
-        if (userId.equals(player1.userId)) {
+        if (sessionId.equals(player1.sessionId)) {
             p1Ready.set(ready.isReady);
         } else {
             p2Ready.set(ready.isReady);
         }
     }
 
-    private void handleExtendRequest(String userId, ExtendRequest request) {
+    private void handleExtendRequest(String sessionId, ExtendRequest request) {
         if (currentPhase != Phase.BUILD) return;
         if (extendStage.get() >= MAX_EXTENDS) return;
 
@@ -442,13 +439,13 @@ public class PvPGameSession {
 
         // Send extend granted
         ExtendGranted granted = new ExtendGranted(newStage, buildTimer.get(), activePenalty);
-        eventHandler.sendMessageToPlayer(userId, granted);
+        eventHandler.sendMessageToPlayer(sessionId, granted);
     }
 
-    private void handleInject(String userId, Inject inject) {
+    private void handleInject(String sessionId, Inject inject) {
         if (currentPhase != Phase.MATCH) return;
 
-        boolean isP1 = userId.equals(player1.userId);
+        boolean isP1 = sessionId.equals(player1.sessionId);
         SystemStateInternal state = systems.get(inject.systemId);
 
         if (state == null) return;
@@ -490,8 +487,8 @@ public class PvPGameSession {
      * Broadcast message to both players
      */
     private void broadcast(Message message) {
-        eventHandler.sendMessageToPlayer(player1.userId, message);
-        eventHandler.sendMessageToPlayer(player2.userId, message);
+        eventHandler.sendMessageToPlayer(player1.sessionId, message);
+        eventHandler.sendMessageToPlayer(player2.sessionId, message);
     }
 
     private PlayerScore createPlayerScore(PlayerScoreInternal internal) {

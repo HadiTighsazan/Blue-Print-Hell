@@ -40,8 +40,8 @@ public class BlueprintHellServerExtended {
         // Initialize PvP manager
         this.pvpManager = new PvPMatchManager(new PvPMatchManager.MatchEventHandler() {
             @Override
-            public void sendMessageToPlayer(String userId, Message message) {
-                ClientHandler client = activeClients.get(userId);
+            public void sendMessageToPlayer(String sessionId, Message message) {
+                ClientHandler client = activeClients.get(sessionId);
                 if (client != null) {
                     client.sendMessage(message);
                 }
@@ -90,6 +90,7 @@ public class BlueprintHellServerExtended {
         private final BufferedReader reader;
         private final PrintWriter writer;
         private String userId;
+        private String sessionId;
         private String username;
         private volatile boolean connected;
         private long lastHeartbeat;
@@ -157,19 +158,18 @@ public class BlueprintHellServerExtended {
         private void handleHello(String json) {
             Hello hello = gson.fromJson(json, Hello.class);
             this.userId = hello.userId;
-
+            this.sessionId = hello.sessionId;
             // Get username from profile
             Profile profile = profileManager.getProfile(userId);
             this.username = profile != null ? profile.username : "Player_" + userId.substring(0, 8);
 
-            // Register active client
-            activeClients.put(userId, this);
+            // Register active client by session
+            activeClients.put(sessionId, this);
 
             // Send HelloAck
             HelloAck ack = new HelloAck(VERSION, MOTD);
             sendMessage(ack);
-
-            System.out.println("User connected: " + userId + " (" + username +
+            System.out.println("User connected: " + userId + "[" + sessionId + "] (" + username +
                     ") - client v" + hello.clientVersion);
         }
 
@@ -213,17 +213,17 @@ public class BlueprintHellServerExtended {
             QueueForMatch queue = gson.fromJson(json, QueueForMatch.class);
 
             System.out.println("User " + username + " queued for PvP match");
-            pvpManager.queuePlayer(userId, username);
+            pvpManager.queuePlayer(sessionId, userId, username);
         }
 
         private void handleCancelQueue() {
             System.out.println("User " + username + " cancelled queue");
-            pvpManager.cancelQueue(userId);
+            pvpManager.cancelQueue(sessionId);
         }
 
         private void handleSubmitLayout(String json) {
             SubmitLayout layout = gson.fromJson(json, SubmitLayout.class);
-            pvpManager.handlePlayerMessage(userId, layout);
+            pvpManager.handlePlayerMessage(sessionId, layout);
         }
 
         private void handleReadyState(String json) {
@@ -233,12 +233,12 @@ public class BlueprintHellServerExtended {
 
         private void handleExtendRequest(String json) {
             ExtendRequest extend = gson.fromJson(json, ExtendRequest.class);
-            pvpManager.handlePlayerMessage(userId, extend);
+            pvpManager.handlePlayerMessage(sessionId, extend);
         }
 
         private void handleInject(String json) {
             Inject inject = gson.fromJson(json, Inject.class);
-            pvpManager.handlePlayerMessage(userId, inject);
+            pvpManager.handlePlayerMessage(sessionId, inject);
         }
 
         // === Utility Methods ===
@@ -275,9 +275,9 @@ public class BlueprintHellServerExtended {
             connected = false;
 
             // Remove from PvP queue if queued
-            if (userId != null) {
-                pvpManager.cancelQueue(userId);
-                activeClients.remove(userId);
+            if (sessionId != null) {
+                pvpManager.cancelQueue(sessionId);
+                activeClients.remove(sessionId);
             }
 
             try {

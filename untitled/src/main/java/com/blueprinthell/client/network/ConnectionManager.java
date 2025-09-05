@@ -37,6 +37,7 @@ public class ConnectionManager {
 
     private volatile ConnectionState state;
     private String userId;
+    private final String sessionId;
     private String serverHost;
     private int serverPort;
 
@@ -66,7 +67,7 @@ public class ConnectionManager {
         } else {
             this.userId = generateUserId();
         }
-
+        this.sessionId = "s-" + UUID.randomUUID();
         this.gson = new GsonBuilder().create();
         this.state = ConnectionState.DISCONNECTED;
         this.messageHandlers = new ConcurrentHashMap<>();
@@ -98,8 +99,7 @@ public class ConnectionManager {
                 writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
 
                 // ارسال Hello
-                Hello hello = new Hello(CLIENT_VERSION, userId);
-                sendMessage(hello);
+                Hello hello = new Hello(CLIENT_VERSION, userId, sessionId);                sendMessage(hello);
 
                 // شروع thread دریافت
                 startReceiveThread();
@@ -120,7 +120,9 @@ public class ConnectionManager {
             }
         });
     }
-
+    public String getSessionId() {
+        return sessionId;
+    }
     /**
      * قطع اتصال
      */

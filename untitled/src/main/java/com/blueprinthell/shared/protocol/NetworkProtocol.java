@@ -321,11 +321,12 @@ public class NetworkProtocol {
     public static class Hello extends Message {
         public String clientVersion;
         public String userId;
-
-        public Hello(String clientVersion, String userId) {
+        public String sessionId;
+        public Hello(String clientVersion, String userId,String sessionId) {
             super(MessageType.HELLO);
             this.clientVersion = clientVersion;
             this.userId = userId;
+            this.sessionId = sessionId;
         }
     }
 
