@@ -1,10 +1,18 @@
 package com.blueprinthell.server.pvp;
 
+import com.blueprinthell.server.pvp.PvPMatchManager.QueuedPlayer;
 import com.blueprinthell.shared.protocol.NetworkProtocol.*;
-import com.blueprinthell.server.pvp.PvPMatchManager.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
+import com.blueprinthell.server.pvp.MessengerGameSimulation.NetworkLayout;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * مدیریت یک session بازی PvP
@@ -16,13 +24,12 @@ public class PvPGameSession {
     private static final int EXTEND_TIME_SECONDS = 10;
     private static final int MAX_EXTENDS = 3;
     private static final int COUNTDOWN_SECONDS = 3;
-    private static final int AMMO_CAP = 10;
 
     // Session data
     private final String matchId;
     private final QueuedPlayer player1;
     private final QueuedPlayer player2;
-    private final MatchEventHandler eventHandler;
+    private final PvPMatchManager.MatchEventHandler eventHandler;
 
     // Build phase state
     private volatile Phase currentPhase = Phase.BUILD;
@@ -37,15 +44,10 @@ public class PvPGameSession {
 
     // Match phase state
     private final AtomicInteger frameId = new AtomicInteger(0);
-    private final Map<String, SystemStateInternal> systems = new ConcurrentHashMap<>();
-    private final PlayerScoreInternal scoreP1 = new PlayerScoreInternal();
-    private final PlayerScoreInternal scoreP2 = new PlayerScoreInternal();
+    private PvPGameState gameState; // وضعیت مرکزی بازی
 
     // Penalties
     private volatile String activePenalty = null;
-    private volatile double globalSpeedMultiplier = 1.0;
-    private volatile double cooldownMultiplierP1 = 1.0;
-    private volatile double cooldownMultiplierP2 = 1.0;
     private final Random peniaRandom = new Random();
 
     // Executor
@@ -59,7 +61,7 @@ public class PvPGameSession {
         BUILD, COUNTDOWN, MATCH, ENDED
     }
 
-    public PvPGameSession(String matchId, QueuedPlayer p1, QueuedPlayer p2, MatchEventHandler handler) {
+    public PvPGameSession(String matchId, QueuedPlayer p1, QueuedPlayer p2, PvPMatchManager.MatchEventHandler handler) {
         this.matchId = matchId;
         this.player1 = p1;
         this.player2 = p2;
@@ -72,43 +74,28 @@ public class PvPGameSession {
     public void startBuildPhase() {
         currentPhase = Phase.BUILD;
         buildTimer.set(BUILD_TIME_SECONDS);
-
-        // Start build timer
         gameLoopTask = executor.scheduleAtFixedRate(this::buildPhaseTick, 0, 1, TimeUnit.SECONDS);
     }
 
-    /**
-     * Build phase tick (every second)
-     */
     private void buildPhaseTick() {
         if (currentPhase != Phase.BUILD) return;
 
         int remaining = buildTimer.decrementAndGet();
 
-        // Check if both ready
         if (p1Ready.get() && p2Ready.get()) {
             startCountdown();
             return;
         }
 
-        // Check timer expiry
         if (remaining <= 0) {
-            // If someone not ready, show extend option (3 seconds)
-            if (!p1Ready.get() || !p2Ready.get()) {
-                // Send extend option to unready players
-                // Implementation would handle 3-second decision window
-                // For now, auto-start
-                startCountdown();
-                return;
-            }
+            startCountdown();
+            return;
         }
 
-        // Apply penalties if in extend phase
         if (extendStage.get() > 0) {
             applyExtendPenalty();
         }
 
-        // Send tick to both players
         BuildTick tick = new BuildTick(remaining);
         tick.p1Ready = p1Ready.get();
         tick.p2Ready = p2Ready.get();
@@ -118,259 +105,161 @@ public class PvPGameSession {
         broadcast(tick);
     }
 
-    /**
-     * Apply extend penalties
-     */
     private void applyExtendPenalty() {
         int stage = extendStage.get();
+        if (gameState == null) return; // اطمینان از اینکه gameState قبل از اعمال جریمه وجود دارد
 
         if (stage == 1) {
-            // Wrath of Penia (0-10s): Add random ammo to opponent
-            if (peniaRandom.nextInt(10) < 2) { // 20% chance per second
-                // Add to opponent of whoever requested extend
-                // For simplicity, add to both
-                scoreP1.ammo = Math.min(scoreP1.ammo + 1, AMMO_CAP);
-                scoreP2.ammo = Math.min(scoreP2.ammo + 1, AMMO_CAP);
+            if (peniaRandom.nextInt(10) < 2) {
+                gameState.scoreP1.ammo = Math.min(gameState.scoreP1.ammo + 1, 10);
+                gameState.scoreP2.ammo = Math.min(gameState.scoreP2.ammo + 1, 10);
             }
         } else if (stage == 2) {
-            // Wrath of Aergia (10-20s): Increase cooldowns
-            cooldownMultiplierP1 *= 1.01; // 1% per second
-            cooldownMultiplierP2 *= 1.01;
+            gameState.cooldownMultiplierP1 *= 1.01;
+            gameState.cooldownMultiplierP2 *= 1.01;
         } else if (stage == 3) {
-            // Wrath of Penia Speed (20-30s): Increase global speed
-            globalSpeedMultiplier *= 1.03; // 3% per second
+            gameState.globalSpeedMultiplier *= 1.03;
         }
     }
 
-    /**
-     * Start countdown before match
-     */
     private void startCountdown() {
         if (gameLoopTask != null) {
             gameLoopTask.cancel(false);
         }
-
         currentPhase = Phase.COUNTDOWN;
 
-        // Send opponent layouts
         MatchStart startP1 = new MatchStart(matchId);
         startP1.opponentBoxes = layoutP2 != null ? layoutP2.boxes : new ArrayList<>();
         startP1.opponentWires = layoutP2 != null ? layoutP2.wires : new ArrayList<>();
+        // ### START OF CHANGE ###
+        startP1.ownWires = layoutP1 != null ? layoutP1.wires : new ArrayList<>();
+        // ### END OF CHANGE ###
+        eventHandler.sendMessageToPlayer(player1.sessionId, startP1);
 
         MatchStart startP2 = new MatchStart(matchId);
         startP2.opponentBoxes = layoutP1 != null ? layoutP1.boxes : new ArrayList<>();
         startP2.opponentWires = layoutP1 != null ? layoutP1.wires : new ArrayList<>();
-
-        eventHandler.sendMessageToPlayer(player1.sessionId, startP1);
+        // ### START OF CHANGE ###
+        startP2.ownWires = layoutP2 != null ? layoutP2.wires : new ArrayList<>();
+        // ### END OF CHANGE ###
         eventHandler.sendMessageToPlayer(player2.sessionId, startP2);
-        // Start countdown
+
         executor.schedule(this::startMatch, COUNTDOWN_SECONDS, TimeUnit.SECONDS);
     }
 
-    /**
-     * Start match phase
-     */
     private void startMatch() {
         currentPhase = Phase.MATCH;
-
-        // Initialize simulation
-        initializeSimulation();
-
-        // Start game loop (60 FPS)
+        this.gameState = new PvPGameState(matchId, new NetworkLayout(layoutP1, 1), new NetworkLayout(layoutP2, 2));
+        this.simulation = new MessengerGameSimulation();
         gameLoopTask = executor.scheduleAtFixedRate(this::matchTick, 0, 16, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * Initialize game simulation
-     */
-    private void initializeSimulation() {
-        // Create simulation with both layouts
-        simulation = new MessengerGameSimulation(layoutP1, layoutP2);
-
-        // Initialize systems with ammo
-        for (SystemLayout box : layoutP1.boxes) {
-            if (!box.isSource && !box.isSink) {
-                SystemStateInternal state = new SystemStateInternal(box.id);
-                state.ammoP1 = 3; // Starting ammo
-                systems.put(box.id, state);
-            }
-        }
-
-        for (SystemLayout box : layoutP2.boxes) {
-            if (!box.isSource && !box.isSink) {
-                SystemStateInternal state = systems.get(box.id);
-                if (state == null) {
-                    state = new SystemStateInternal(box.id);
-                    systems.put(box.id, state);
-                }
-                state.ammoP2 = 3; // Starting ammo
-            }
-        }
-    }
-
-    /**
-     * Match phase tick (60 FPS)
-     */
     private void matchTick() {
         if (currentPhase != Phase.MATCH) return;
-
         int frame = frameId.incrementAndGet();
 
-        // Update simulation
         if (simulation != null) {
-            SimulationResult result = simulation.tick(1.0/60.0, globalSpeedMultiplier);
-
-            // Update scores
-            scoreP1.delivered += result.deliveredP1;
-            scoreP1.lost += result.lostP1;
-            scoreP1.totalScore = scoreP1.delivered - (int)(scoreP1.lost * 1.5);
-
-            scoreP2.delivered += result.deliveredP2;
-            scoreP2.lost += result.lostP2;
-            scoreP2.totalScore = scoreP2.delivered - (int)(scoreP2.lost * 1.5);
-
-            // Add ammo for deliveries
-            scoreP1.ammo = Math.min(scoreP1.ammo + result.deliveredP1, AMMO_CAP);
-            scoreP2.ammo = Math.min(scoreP2.ammo + result.deliveredP2, AMMO_CAP);
+            simulation.tick(gameState, 1.0 / 60.0);
         }
 
-        // Update system cooldowns
-        updateSystemCooldowns(16);
-
-        // Send tick every 100ms (6 times per second)
-        if (frame % 6 == 0) {
+        if (frame % 6 == 0) { // ارسال آپدیت حدوداً هر ۱۰۰ میلی‌ثانیه
             sendTickUpdate();
         }
 
-        // Check end conditions
         if (checkEndConditions()) {
             endMatch();
         }
     }
 
-    /**
-     * Update system cooldowns
-     */
-    private void updateSystemCooldowns(int deltaMs) {
-        for (SystemStateInternal state : systems.values()) {
-            state.systemCooldown = Math.max(0, state.systemCooldown - deltaMs);
-            state.packetCooldownP1 = Math.max(0,
-                    state.packetCooldownP1 - (int)(deltaMs * cooldownMultiplierP1));
-            state.packetCooldownP2 = Math.max(0,
-                    state.packetCooldownP2 - (int)(deltaMs * cooldownMultiplierP2));
-        }
+    private boolean checkEndConditions() {
+        return frameId.get() > 60 * 60 * 3; // پایان بازی پس از ۳ دقیقه
     }
 
-    /**
-     * Send tick update to players
-     */
     private void sendTickUpdate() {
-        Tick tick = new Tick(matchId, frameId.get());
+        PvPStateSnapshot snapshot = new PvPStateSnapshot();
+        snapshot.scoreP1 = gameState.scoreP1;
+        snapshot.scoreP2 = gameState.scoreP2;
+        snapshot.globalSpeedMultiplier = gameState.globalSpeedMultiplier;
 
-        // Set scores
-        tick.scoreP1 = new PlayerScore();
-        tick.scoreP1.delivered = scoreP1.delivered;
-        tick.scoreP1.lost = scoreP1.lost;
-        tick.scoreP1.totalScore = scoreP1.totalScore;
-        tick.scoreP1.ammo = scoreP1.ammo;
-
-        tick.scoreP2 = new PlayerScore();
-        tick.scoreP2.delivered = scoreP2.delivered;
-        tick.scoreP2.lost = scoreP2.lost;
-        tick.scoreP2.totalScore = scoreP2.totalScore;
-        tick.scoreP2.ammo = scoreP2.ammo;
-
-        // Set system states
-        tick.systems = new ArrayList<>();
-        for (SystemStateInternal internal : systems.values()) {
-            SystemState state = new SystemState();
-            state.id = internal.id;
-            state.ammoP1 = internal.ammoP1;
-            state.ammoP2 = internal.ammoP2;
-            state.systemCooldownMs = internal.systemCooldown;
-            state.packetCooldownMsP1 = internal.packetCooldownP1;
-            state.packetCooldownMsP2 = internal.packetCooldownP2;
-            tick.systems.add(state);
+        // ### START OF PATCH 10 ###
+        // بسته‌بندی و ارسال وضعیت پکت‌ها
+        List<PvPStateSnapshot.PacketState> packetStates = new ArrayList<>();
+        for (MessengerGameSimulation.SimPacket simPacket : gameState.activePackets.values()) {
+            PvPStateSnapshot.PacketState packetState = new PvPStateSnapshot.PacketState();
+            packetState.id = simPacket.id;
+            packetState.playerSide = simPacket.playerSide;
+            packetState.type = simPacket.type;
+            packetState.progress = simPacket.progress;
+            packetState.wireId = simPacket.wireId; // ارسال wireId
+            packetState.x = simPacket.x; // ارسال مختصات دقیق از سرور
+            packetState.y = simPacket.y;
+            packetStates.add(packetState);
         }
+        snapshot.packets = packetStates;
 
-        tick.globalSpeedMultiplier = globalSpeedMultiplier;
+        // بسته‌بندی و ارسال وضعیت سیستم‌ها (Cooldowns)
+        List<SystemState> systemStates = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        for (PvPGameState.SystemState state : gameState.systemStates.values()) {
+            SystemState ss = new SystemState();
+            ss.id = state.id;
+            ss.ammoP1 = state.ammoP1;
+            ss.ammoP2 = state.ammoP2;
+            ss.systemCooldownMs = (int) Math.max(0, state.systemCooldownUntil - now);
+            ss.packetCooldownMsP1 = (int) Math.max(0, state.packetCooldownUntilP1 - now);
+            ss.packetCooldownMsP2 = (int) Math.max(0, state.packetCooldownUntilP2 - now);
+            systemStates.add(ss);
+        }
+        snapshot.systems = systemStates;
+        // ### END OF PATCH 10 ###
 
+        Tick tick = new Tick(matchId, frameId.get());
+        tick.state = snapshot;
         broadcast(tick);
     }
 
-    /**
-     * Check end conditions
-     */
-    private boolean checkEndConditions() {
-        // End after 3 minutes or if simulation is complete
-        return frameId.get() > 60 * 60 * 3; // 3 minutes at 60 FPS
-    }
-
-    /**
-     * End match
-     */
     private void endMatch() {
         currentPhase = Phase.ENDED;
-
         if (gameLoopTask != null) {
             gameLoopTask.cancel(false);
         }
 
-        // Determine winner
         int winnerSide = 0;
-        if (scoreP1.totalScore > scoreP2.totalScore) {
+        if (gameState.scoreP1.totalScore > gameState.scoreP2.totalScore) {
             winnerSide = 1;
-        } else if (scoreP2.totalScore > scoreP1.totalScore) {
+        } else if (gameState.scoreP2.totalScore > gameState.scoreP1.totalScore) {
             winnerSide = 2;
         }
 
-        // Calculate XP
-        int xpP1 = calculateXP(scoreP1, winnerSide == 1);
-        int xpP2 = calculateXP(scoreP2, winnerSide == 2);
+        int xpP1 = calculateXP(gameState.scoreP1, winnerSide == 1);
+        int xpP2 = calculateXP(gameState.scoreP2, winnerSide == 2);
 
-        // Send match end
-        MatchEnd end = new MatchEnd(matchId);
-        end.finalScoreP1 = createPlayerScore(scoreP1);
-        end.finalScoreP2 = createPlayerScore(scoreP2);
-        end.winnerSide = winnerSide;
-
-        // Different XP for each player
         MatchEnd endP1 = new MatchEnd(matchId);
-        endP1.finalScoreP1 = end.finalScoreP1;
-        endP1.finalScoreP2 = end.finalScoreP2;
+        endP1.finalScoreP1 = gameState.scoreP1;
+        endP1.finalScoreP2 = gameState.scoreP2;
         endP1.winnerSide = winnerSide;
         endP1.xpEarned = xpP1;
+        eventHandler.sendMessageToPlayer(player1.sessionId, endP1);
 
         MatchEnd endP2 = new MatchEnd(matchId);
-        endP2.finalScoreP1 = end.finalScoreP1;
-        endP2.finalScoreP2 = end.finalScoreP2;
+        endP2.finalScoreP1 = gameState.scoreP1;
+        endP2.finalScoreP2 = gameState.scoreP2;
         endP2.winnerSide = winnerSide;
         endP2.xpEarned = xpP2;
-
-        eventHandler.sendMessageToPlayer(player1.sessionId, endP1);
         eventHandler.sendMessageToPlayer(player2.sessionId, endP2);
-        // Create game results
-        GameResult resultP1 = createGameResult(player1, scoreP1, winnerSide == 1, xpP1);
-        GameResult resultP2 = createGameResult(player2, scoreP2, winnerSide == 2, xpP2);
 
-        // Notify handler
+        GameResult resultP1 = createGameResult(player1, gameState.scoreP1, winnerSide == 1, xpP1);
+        GameResult resultP2 = createGameResult(player2, gameState.scoreP2, winnerSide == 2, xpP2);
         eventHandler.onMatchEnded(matchId, resultP1, resultP2);
     }
 
-    /**
-     * Calculate XP
-     */
-    private int calculateXP(PlayerScoreInternal score, boolean isWinner) {
+    private int calculateXP(PlayerScore score, boolean isWinner) {
         double xp = 1.0 * score.delivered - 1.5 * score.lost;
-        if (isWinner) xp += 20;
-        return Math.max(0, Math.min(200, (int)xp));
+        if (isWinner) xp += 50; // پاداش پیروزی
+        return Math.max(0, (int)xp);
     }
 
-    /**
-     * Create game result
-     */
-    private GameResult createGameResult(QueuedPlayer player, PlayerScoreInternal score,
-                                        boolean isWinner, int xp) {
+    private GameResult createGameResult(QueuedPlayer player, PlayerScore score, boolean isWinner, int xp) {
         GameResult result = new GameResult();
         result.userId = player.userId;
         result.mode = GameMode.MULTIPLAYER_PVP;
@@ -381,29 +270,23 @@ public class PvPGameSession {
         result.loss = score.lost;
         result.score = score.totalScore;
         result.xp = xp;
-        result.durationMs = frameId.get() * 16; // frames * ms per frame
+        result.durationMs = frameId.get() * 16;
         return result;
     }
 
-    /**
-     * Handle player message
-     */
     public void handlePlayerMessage(String sessionId, Message message) {
-        boolean isP1 = sessionId.equals(player1.sessionId);
-        boolean isP2 = sessionId.equals(player2.sessionId);
-        if (!isP1 && !isP2) return;
+        if (currentPhase == Phase.ENDED) return;
 
         switch (message.type) {
-            case SUBMIT_LAYOUT -> handleSubmitLayout(sessionId, (SubmitLayout)message);
-            case READY_STATE -> handleReadyState(sessionId, (ReadyState)message);
-            case EXTEND_REQUEST -> handleExtendRequest(sessionId, (ExtendRequest)message);
-            case INJECT -> handleInject(sessionId, (Inject)message);
+            case SUBMIT_LAYOUT -> handleSubmitLayout(sessionId, (SubmitLayout) message);
+            case READY_STATE -> handleReadyState(sessionId, (ReadyState) message);
+            case EXTEND_REQUEST -> handleExtendRequest(sessionId, (ExtendRequest) message);
+            case INJECT -> handleInject(sessionId, (Inject) message);
         }
     }
 
     private void handleSubmitLayout(String sessionId, SubmitLayout layout) {
         if (currentPhase != Phase.BUILD) return;
-
         if (sessionId.equals(player1.sessionId)) {
             layoutP1 = layout;
         } else {
@@ -413,7 +296,6 @@ public class PvPGameSession {
 
     private void handleReadyState(String sessionId, ReadyState ready) {
         if (currentPhase != Phase.BUILD) return;
-
         if (sessionId.equals(player1.sessionId)) {
             p1Ready.set(ready.isReady);
         } else {
@@ -422,22 +304,15 @@ public class PvPGameSession {
     }
 
     private void handleExtendRequest(String sessionId, ExtendRequest request) {
-        if (currentPhase != Phase.BUILD) return;
-        if (extendStage.get() >= MAX_EXTENDS) return;
+        if (currentPhase != Phase.BUILD || extendStage.get() >= MAX_EXTENDS) return;
 
         int newStage = extendStage.incrementAndGet();
         buildTimer.addAndGet(EXTEND_TIME_SECONDS);
 
-        // Set penalty
-        if (newStage == 1) {
-            activePenalty = "PENIA";
-        } else if (newStage == 2) {
-            activePenalty = "AERGIA";
-        } else {
-            activePenalty = "PENIA_SPEED";
-        }
+        if (newStage == 1) activePenalty = "PENIA";
+        else if (newStage == 2) activePenalty = "AERGIA";
+        else activePenalty = "PENIA_SPEED";
 
-        // Send extend granted
         ExtendGranted granted = new ExtendGranted(newStage, buildTimer.get(), activePenalty);
         eventHandler.sendMessageToPlayer(sessionId, granted);
     }
@@ -446,90 +321,45 @@ public class PvPGameSession {
         if (currentPhase != Phase.MATCH) return;
 
         boolean isP1 = sessionId.equals(player1.sessionId);
-        SystemStateInternal state = systems.get(inject.systemId);
-
+        PvPGameState.SystemState state = gameState.systemStates.get(inject.systemId);
         if (state == null) return;
 
-        // Check conditions
-        if (isP1) {
-            if (scoreP1.ammo <= 0 || state.systemCooldown > 0 || state.packetCooldownP1 > 0) {
-                return;
-            }
-            scoreP1.ammo--;
-            state.packetCooldownP1 = 5000; // 5 seconds
-        } else {
-            if (scoreP2.ammo <= 0 || state.systemCooldown > 0 || state.packetCooldownP2 > 0) {
-                return;
-            }
-            scoreP2.ammo--;
-            state.packetCooldownP2 = 5000; // 5 seconds
-        }
+        long now = System.currentTimeMillis();
+        PlayerScore playerScore = isP1 ? gameState.scoreP1 : gameState.scoreP2;
+        long playerCooldown = isP1 ? state.packetCooldownUntilP1 : state.packetCooldownUntilP2;
 
-        state.systemCooldown = 3000; // 3 seconds
+        if (playerScore.ammo > 0 && now >= state.systemCooldownUntil && now >= playerCooldown) {
+            playerScore.ammo--;
+            if (isP1) {
+                state.packetCooldownUntilP1 = now + 5000;
+            } else {
+                state.packetCooldownUntilP2 = now + 5000;
+            }
+            state.systemCooldownUntil = now + 3000;
 
-        // Inject packet in simulation
-        if (simulation != null) {
-            simulation.injectPacket(inject.systemId, isP1 ? 1 : 2);
+            if (simulation != null) {
+                // ### START OF FIX ###
+                // فراخوانی متد جدید با امضای صحیح:
+                // دیگر نیازی به ارسال systemId به شبیه‌ساز نیست.
+                // شناسه بازیکنی که اینجکت را انجام داده (1 یا 2) را ارسال می‌کنیم.
+                simulation.injectPacket(gameState, isP1 ? 1 : 2);
+                // ### END OF FIX ###
+            }
         }
     }
-
-    /**
-     * Stop session
-     */
     public void stop() {
         if (gameLoopTask != null) {
-            gameLoopTask.cancel(false);
+            gameLoopTask.cancel(true);
         }
         executor.shutdown();
     }
 
-    /**
-     * Broadcast message to both players
-     */
     private void broadcast(Message message) {
         eventHandler.sendMessageToPlayer(player1.sessionId, message);
         eventHandler.sendMessageToPlayer(player2.sessionId, message);
     }
 
-    private PlayerScore createPlayerScore(PlayerScoreInternal internal) {
-        PlayerScore score = new PlayerScore();
-        score.delivered = internal.delivered;
-        score.lost = internal.lost;
-        score.totalScore = internal.totalScore;
-        score.ammo = internal.ammo;
-        return score;
-    }
-
     // Getters
     public QueuedPlayer getPlayer1() { return player1; }
     public QueuedPlayer getPlayer2() { return player2; }
-
-    // Internal classes
-
-    static class PlayerScoreInternal {
-        int delivered = 0;
-        int lost = 0;
-        int totalScore = 0;
-        int ammo = 3;
-    }
-
-    static class SystemStateInternal {
-        final String id;
-        int ammoP1 = 0;
-        int ammoP2 = 0;
-        int systemCooldown = 0;
-        int packetCooldownP1 = 0;
-        int packetCooldownP2 = 0;
-
-        SystemStateInternal(String id) {
-            this.id = id;
-        }
-    }
-
-    static class SimulationResult {
-        int deliveredP1 = 0;
-        int lostP1 = 0;
-        int deliveredP2 = 0;
-        int lostP2 = 0;
-    }
 }

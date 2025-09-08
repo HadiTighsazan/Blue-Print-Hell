@@ -2,9 +2,11 @@ package com.blueprinthell.view.pvp;
 
 import com.blueprinthell.view.screens.GameScreenView;
 import com.blueprinthell.model.SystemBoxModel;
+import com.blueprinthell.shared.protocol.NetworkProtocol.SystemState;
 import javax.swing.*;
 import java.awt.*;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -199,14 +201,7 @@ public class PvPMatchView extends JPanel {
         // Send inject command
         if (injectCallback != null) {
             injectCallback.accept(systemId);
-
-            // Visual feedback
-            button.startCooldown(3000); // 3 seconds system cooldown
-            currentAmmo--;
-            updateAmmo(currentAmmo);
-
-            // Flash effect
-            button.flash();
+            // Visual feedback will now be handled by updateSystemCooldowns
         }
     }
 
@@ -277,15 +272,18 @@ public class PvPMatchView extends JPanel {
     }
 
     /**
-     * Update system cooldowns
+     * به‌روزرسانی وضعیت cooldown تمام دکمه‌های سیستم.
+     * @param systemStates لیست وضعیت‌ها از سرور
+     * @param playerSide شناسه بازیکن فعلی (1 یا 2)
      */
-    public void updateSystemCooldown(String systemId, int cooldownMs) {
-        SystemControlButton button = systemButtons.get(systemId);
-        if (button != null) {
-            if (cooldownMs > 0) {
-                button.startCooldown(cooldownMs);
-            } else {
-                button.endCooldown();
+    public void updateSystemCooldowns(List<SystemState> systemStates, int playerSide) {
+        for (SystemState state : systemStates) {
+            SystemControlButton button = systemButtons.get(state.id);
+            if (button != null) {
+                int playerCooldown = (playerSide == 1) ? state.packetCooldownMsP1 : state.packetCooldownMsP2;
+                int systemCooldown = state.systemCooldownMs;
+                // بیشترین زمان cooldown را برای نمایش انتخاب می‌کنیم
+                button.updateCooldown(Math.max(playerCooldown, systemCooldown));
             }
         }
     }
@@ -323,14 +321,19 @@ public class PvPMatchView extends JPanel {
     /**
      * Custom button for system control
      */
-    private class SystemControlButton extends JButton {
+    private static class SystemControlButton extends JButton {
         private final String systemId;
+        private final String systemType; // ذخیره نوع سیستم برای بازیابی متن
         private boolean onCooldown = false;
         private Timer cooldownTimer;
+        private int remainingMs = 0;
 
         SystemControlButton(String systemId, String systemType) {
-            super(getButtonLabel(systemType));
+            // ### START OF FIX ###
+            super(getButtonLabel(systemType)); // فراخوانی متد استاتیک
+            // ### END OF FIX ###
             this.systemId = systemId;
+            this.systemType = systemType; // ذخیره نوع
 
             setFont(new Font("Arial", Font.BOLD, 12));
             setBackground(new Color(60, 60, 60));
@@ -354,30 +357,33 @@ public class PvPMatchView extends JPanel {
             });
         }
 
-        void startCooldown(int durationMs) {
-            onCooldown = true;
-            setEnabled(false);
-            setBackground(new Color(40, 40, 40));
+        void updateCooldown(int newRemainingMs) {
+            this.remainingMs = newRemainingMs;
+            boolean shouldBeOnCooldown = newRemainingMs > 0;
 
-            if (cooldownTimer != null) {
+            if (shouldBeOnCooldown && !onCooldown) {
+                // شروع Cooldown
+                onCooldown = true;
+                setEnabled(false);
+                startTimer();
+            } else if (!shouldBeOnCooldown && onCooldown) {
+                // پایان Cooldown
+                endCooldown();
+            }
+        }
+
+        private void startTimer() {
+            if (cooldownTimer != null && cooldownTimer.isRunning()) {
                 cooldownTimer.stop();
             }
-
-            final int steps = 20;
-            final int stepMs = durationMs / steps;
-            final int[] remaining = {steps};
-
-            cooldownTimer = new Timer(stepMs, e -> {
-                remaining[0]--;
-
-                // Update visual
-                float progress = (float)(steps - remaining[0]) / steps;
-                int gray = (int)(40 + progress * 20);
-                setBackground(new Color(gray, gray, gray));
-
-                if (remaining[0] <= 0) {
+            cooldownTimer = new Timer(100, e -> {
+                remainingMs -= 100;
+                if (remainingMs <= 0) {
                     endCooldown();
-                    ((Timer)e.getSource()).stop();
+                } else {
+                    // به‌روزرسانی ظاهر دکمه
+                    setText(String.format("%.1fs", remainingMs / 1000.0));
+                    setBackground(new Color(40, 40, 40));
                 }
             });
             cooldownTimer.start();
@@ -385,7 +391,12 @@ public class PvPMatchView extends JPanel {
 
         void endCooldown() {
             onCooldown = false;
+            remainingMs = 0;
+            if (cooldownTimer != null) {
+                cooldownTimer.stop();
+            }
             setEnabled(true);
+            setText(getButtonLabel(this.systemType)); // بازیابی متن اصلی
             setBackground(new Color(60, 60, 60));
         }
 
@@ -393,17 +404,10 @@ public class PvPMatchView extends JPanel {
             return onCooldown;
         }
 
-        void flash() {
-            Color original = getBackground();
-            setBackground(Color.GREEN);
-
-            Timer flashTimer = new Timer(200, e -> {
-                setBackground(original);
-            });
-            flashTimer.setRepeats(false);
-            flashTimer.start();
-        }
-
+        // ### START OF FIX ###
+        /**
+         * متد استاتیک برای دریافت لیبل دکمه بر اساس نوع سیستم.
+         */
         private static String getButtonLabel(String systemType) {
             return switch (systemType) {
                 case "VPN" -> "VPN";
@@ -416,5 +420,6 @@ public class PvPMatchView extends JPanel {
                 default -> "SYS";
             };
         }
+        // ### END OF FIX ###
     }
 }

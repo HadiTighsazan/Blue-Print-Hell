@@ -18,6 +18,10 @@ public class PacketView extends GameObjectView<PacketModel> {
         setToolTipText(model.getType().name());
     }
 
+    public PacketModel getModel(){
+        return model;
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);

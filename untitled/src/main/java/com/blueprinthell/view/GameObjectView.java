@@ -14,6 +14,8 @@ public abstract class GameObjectView<T extends GameObjectModel> extends JCompone
     }
 
 
+
+
     public void refresh() {
         setBounds(model.getX(), model.getY(), model.getWidth(), model.getHeight());
         repaint();

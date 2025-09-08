@@ -2,12 +2,12 @@ package com.blueprinthell.server.pvp;
 
 import com.blueprinthell.shared.protocol.NetworkProtocol.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * شبیه‌سازی سبک بازی Messenger برای سرور
- * فقط پکت‌های پیام‌رسان را شبیه‌سازی می‌کند
+ * حالا با منطق کامل برخورد و معماری سرور-محور
  */
 public class MessengerGameSimulation {
 
@@ -15,13 +15,11 @@ public class MessengerGameSimulation {
     private static final double MESSENGER_BASE_SPEED = 100.0; // pixels per second
     private static final double PACKET_SPAWN_INTERVAL = 1.0; // seconds between auto spawns
     private static final int WIRE_LENGTH_PIXELS = 300; // average wire length
+    private static final int AMMO_CAP = 10;
+    private static final int COLLISION_CELL_SIZE = 50; // اندازه هر سلول گرید فضایی
+    private static final double COLLISION_RADIUS = 18.0; // شعاع برخورد پکت‌ها
+    private final SpatialHashGrid<SimPacket> collisionGrid = new SpatialHashGrid<>(COLLISION_CELL_SIZE);
 
-    // Player networks
-    private final NetworkLayout layoutP1;
-    private final NetworkLayout layoutP2;
-
-    // Active packets
-    private final Map<String, SimPacket> activePackets = new ConcurrentHashMap<>();
     private final AtomicInteger packetIdCounter = new AtomicInteger(0);
 
     // Automatic spawning
@@ -29,174 +27,180 @@ public class MessengerGameSimulation {
     private double spawnAccumulatorP2 = 0;
     private int autoSpawnTurn = 1; // Alternates between 1 and 2
 
-    // Score tracking
-    private int deliveredP1 = 0;
-    private int lostP1 = 0;
-    private int deliveredP2 = 0;
-    private int lostP2 = 0;
-
-    // System states for controlled systems
-    private final Map<String, ControlledSystem> controlledSystems = new ConcurrentHashMap<>();
-
     /**
-     * Create simulation from player layouts
+     * سازنده خالی.
      */
-    public MessengerGameSimulation(SubmitLayout layoutP1, SubmitLayout layoutP2) {
-        this.layoutP1 = new NetworkLayout(layoutP1, 1);
-        this.layoutP2 = new NetworkLayout(layoutP2, 2);
-
-        initializeControlledSystems();
+    public MessengerGameSimulation() {
+        // Constructor is now empty
     }
 
     /**
-     * Initialize controlled systems (non-source, non-sink)
-     */
-    private void initializeControlledSystems() {
-        // P1 systems
-        if (layoutP1 != null && layoutP1.layout.boxes != null) {
-            for (SystemLayout box : layoutP1.layout.boxes) {
-                if (!box.isSource && !box.isSink) {
-                    controlledSystems.put(box.id, new ControlledSystem(box.id));
-                }
-            }
-        }
-
-        // P2 systems
-        if (layoutP2 != null && layoutP2.layout.boxes != null) {
-            for (SystemLayout box : layoutP2.layout.boxes) {
-                if (!box.isSource && !box.isSink) {
-                    controlledSystems.put(box.id, new ControlledSystem(box.id));
-                }
-            }
-        }
-    }
-
-    /**
-     * Tick simulation forward
+     * یک گام شبیه‌سازی را اجرا می‌کند و مستقیماً gameState را تغییر می‌دهد.
+     * @param gameState حالت بازی که باید تغییر کند
      * @param dt Delta time in seconds
-     * @param globalSpeedMultiplier Speed multiplier from penalties
-     * @return Simulation results for this tick
      */
-    public PvPGameSession.SimulationResult tick(double dt, double globalSpeedMultiplier) {
-        PvPGameSession.SimulationResult result = new PvPGameSession.SimulationResult();
+    public void tick(PvPGameState gameState, double dt) {
+        // فاز ۱: به‌روزرسانی مختصات و پر کردن گرید برخورد
+        updatePacketCoordinatesAndGrid(gameState);
+
+        // فاز ۲: حرکت پکت‌ها، تشخیص برخورد و تحویل
+        moveAndProcessPackets(gameState, dt);
 
         // Handle automatic spawning from uncontrolled sources
-        handleAutoSpawning(dt);
+        handleAutoSpawning(gameState, dt);
 
-        // Update all active packets
-        List<String> toRemove = new ArrayList<>();
+        // Update scores
+        gameState.scoreP1.totalScore = gameState.scoreP1.delivered - (int)(gameState.scoreP1.lost * 1.5);
+        gameState.scoreP2.totalScore = gameState.scoreP2.delivered - (int)(gameState.scoreP2.lost * 1.5);
+    }
 
-        for (SimPacket packet : activePackets.values()) {
-            // Update packet position
-            double speed = MESSENGER_BASE_SPEED * globalSpeedMultiplier;
+    /**
+     * مختصات دقیق هر پکت را محاسبه کرده و آن را در گرید فضایی برای تشخیص برخورد درج می‌کند.
+     */
+    private void updatePacketCoordinatesAndGrid(PvPGameState gameState) {
+        collisionGrid.clear();
+        for (SimPacket packet : gameState.activePackets.values()) {
+            WireLayout wire = findWire(gameState, packet.wireId, packet.playerSide);
+            if (wire != null) {
+                WireLayout.Point2D pos = WirePathHelper.pointAt(wire, packet.progress);
+                packet.x = pos.x;
+                packet.y = pos.y;
+                collisionGrid.insert(packet.x, packet.y, packet);
+            }
+        }
+    }
+
+    /**
+     * پکت‌ها را حرکت می‌دهد، برخوردها را شناسایی و پردازش می‌کند و پکت‌های رسیده را تحویل می‌دهد.
+     */
+    private void moveAndProcessPackets(PvPGameState gameState, double dt) {
+        Set<String> toRemove = new HashSet<>();
+
+        for (SimPacket packet : gameState.activePackets.values()) {
+            if (toRemove.contains(packet.id)) continue;
+
+            // ۱. حرکت پکت
+            double speed = MESSENGER_BASE_SPEED * gameState.globalSpeedMultiplier;
             packet.progress += (speed * dt) / packet.wireLength;
 
-            // Check if packet reached destination
-            if (packet.progress >= 1.0) {
-                // Find destination
-                WireLayout wire = findWire(packet.wireId, packet.playerSide);
-                if (wire != null) {
-                    SystemLayout destBox = findBox(wire.toBoxId, packet.playerSide);
+            // ۲. بررسی برخورد فقط بین بازیکنان مختلف
+            List<SimPacket> neighbors = collisionGrid.retrieve(packet.x, packet.y);
+            for (SimPacket other : neighbors) {
+                if (other == packet || toRemove.contains(other.id) || packet.playerSide == other.playerSide) continue;
 
+                double dx = packet.x - other.x;
+                double dy = packet.y - other.y;
+                if (Math.sqrt(dx * dx + dy * dy) <= COLLISION_RADIUS) {
+                    // برخورد رخ داد! هر دو پکت حذف می‌شوند.
+                    toRemove.add(packet.id);
+                    toRemove.add(other.id);
+
+                    // ثبت امتیاز از دست رفته برای هر بازیکن
+                    if (packet.playerSide == 1) gameState.scoreP1.lost++; else gameState.scoreP2.lost++;
+                    if (other.playerSide == 1) gameState.scoreP1.lost++; else gameState.scoreP2.lost++;
+                    break;
+                }
+            }
+
+            if (toRemove.contains(packet.id)) continue;
+
+            // ۳. بررسی رسیدن به مقصد
+            if (packet.progress >= 1.0) {
+                WireLayout wire = findWire(gameState, packet.wireId, packet.playerSide);
+                if (wire != null) {
+                    SystemLayout destBox = findBox(gameState, wire.toBoxId, packet.playerSide);
                     if (destBox != null && destBox.isSink) {
-                        // Delivered successfully
+                        // تحویل موفق
                         if (packet.playerSide == 1) {
-                            deliveredP1++;
-                            result.deliveredP1++;
+                            gameState.scoreP1.delivered++;
+                            gameState.scoreP1.ammo = Math.min(gameState.scoreP1.ammo + 1, AMMO_CAP);
                         } else {
-                            deliveredP2++;
-                            result.deliveredP2++;
+                            gameState.scoreP2.delivered++;
+                            gameState.scoreP2.ammo = Math.min(gameState.scoreP2.ammo + 1, AMMO_CAP);
                         }
                     }
                 }
-
-                toRemove.add(packet.id);
-            }
-
-            // Simplified collision/loss logic
-            // In real implementation, would check for trojans, incompatible ports, etc.
-            if (packet.noise > 100) {
-                // Lost due to noise
-                if (packet.playerSide == 1) {
-                    lostP1++;
-                    result.lostP1++;
-                } else {
-                    lostP2++;
-                    result.lostP2++;
-                }
                 toRemove.add(packet.id);
             }
         }
 
-        // Remove completed/lost packets
+        // حذف پکت‌های از بین رفته یا تحویل داده شده
         for (String id : toRemove) {
-            activePackets.remove(id);
+            gameState.activePackets.remove(id);
         }
-
-        return result;
     }
 
-    private void handleAutoSpawning(double dt) {
-        // Accumulate spawn time
+    private void handleAutoSpawning(PvPGameState gameState, double dt) {
         spawnAccumulatorP1 += dt;
         spawnAccumulatorP2 += dt;
 
-        // Spawn from P1 sources (on odd turns)
         if (autoSpawnTurn == 1 && spawnAccumulatorP1 >= PACKET_SPAWN_INTERVAL) {
-            spawnFromSources(1);
+            spawnFromSources(gameState, 1);
             spawnAccumulatorP1 = 0;
             autoSpawnTurn = 2;
         }
 
-        // Spawn from P2 sources (on even turns)
         if (autoSpawnTurn == 2 && spawnAccumulatorP2 >= PACKET_SPAWN_INTERVAL) {
-            spawnFromSources(2);
+            spawnFromSources(gameState, 2);
             spawnAccumulatorP2 = 0;
             autoSpawnTurn = 1;
         }
     }
 
-    private void spawnFromSources(int playerSide) {
-        NetworkLayout layout = (playerSide == 1) ? layoutP1 : layoutP2;
+    private void spawnFromSources(PvPGameState gameState, int playerSide) {
+        NetworkLayout layout = (playerSide == 1) ? gameState.layoutP1 : gameState.layoutP2;
         if (layout == null || layout.layout == null || layout.layout.boxes == null) return;
 
         for (SystemLayout box : layout.layout.boxes) {
-            if (box.isSource) {
-                // Spawn from each output port
-                if (box.outShapes != null) {
-                    for (int i = 0; i < box.outShapes.size(); i++) {
-                        String wireId = findWireFromSource(box.id, i, playerSide);
-                        if (wireId != null) {
-                            spawnPacket(wireId, playerSide);
-                        }
+            if (box.isSource && box.outShapes != null) {
+                for (int i = 0; i < box.outShapes.size(); i++) {
+                    String wireId = findWireFromSource(gameState, box.id, i, playerSide);
+                    if (wireId != null) {
+                        spawnPacket(gameState, wireId, playerSide, "MESSENGER");
                     }
                 }
             }
         }
     }
 
+    // ### START OF FIX ###
     /**
-     * Inject packet from controlled system
+     * یک پکت جدید در شبکه حریف از یکی از سیستم‌های Source او ایجاد می‌کند.
+     * @param gameState وضعیت فعلی بازی
+     * @param injectorSide بازیکنی که این عمل را انجام داده (1 یا 2)
      */
-    public void injectPacket(String systemId, int playerSide) {
-        // Find system box
-        SystemLayout box = findBox(systemId, playerSide);
-        if (box == null || box.isSource || box.isSink) return;
+    public void injectPacket(PvPGameState gameState, int injectorSide) {
+        int opponentSide = (injectorSide == 1) ? 2 : 1;
 
-        // Find an output wire (simplified - just use first available)
-        for (int i = 0; i < box.outShapes.size(); i++) {
-            String wireId = findWireFromSource(box.id, i, playerSide);
-            if (wireId != null) {
-                spawnPacket(wireId, playerSide);
-                break; // Only spawn one packet per inject
+        // ۱. تمام سیستم‌های Source حریف را پیدا کن
+        NetworkLayout opponentLayout = (opponentSide == 1) ? gameState.layoutP1 : gameState.layoutP2;
+        if (opponentLayout == null || opponentLayout.layout == null || opponentLayout.layout.boxes == null) return;
+
+        List<SystemLayout> opponentSources = new ArrayList<>();
+        for (SystemLayout box : opponentLayout.layout.boxes) {
+            if (box.isSource) {
+                opponentSources.add(box);
             }
         }
-    }
 
-    /**
-     * Spawn a packet on a wire
-     */
-    private void spawnPacket(String wireId, int playerSide) {
+        if (opponentSources.isEmpty()) return;
+
+        // ۲. یک سیستم Source و یک پورت خروجی تصادفی از آن انتخاب کن
+        SystemLayout sourceBox = opponentSources.get(ThreadLocalRandom.current().nextInt(opponentSources.size()));
+
+        if (sourceBox.outShapes == null || sourceBox.outShapes.isEmpty()) return;
+
+        int outIndex = ThreadLocalRandom.current().nextInt(sourceBox.outShapes.size());
+        String wireId = findWireFromSource(gameState, sourceBox.id, outIndex, opponentSide);
+
+        // ۳. پکت را در شبکه حریف ایجاد کن
+        if (wireId != null) {
+            spawnPacket(gameState, wireId, opponentSide, "MESSENGER");
+        }
+    }
+    // ### END OF FIX ###
+
+    private void spawnPacket(PvPGameState gameState, String wireId, int playerSide, String type) {
         String packetId = "pkt-" + packetIdCounter.incrementAndGet();
 
         SimPacket packet = new SimPacket();
@@ -204,18 +208,15 @@ public class MessengerGameSimulation {
         packet.wireId = wireId;
         packet.playerSide = playerSide;
         packet.progress = 0.0;
-        packet.wireLength = WIRE_LENGTH_PIXELS; // Simplified
+        packet.wireLength = WIRE_LENGTH_PIXELS;
         packet.noise = 0;
-        packet.type = "MESSENGER";
+        packet.type = type;
 
-        activePackets.put(packetId, packet);
+        gameState.activePackets.put(packetId, packet);
     }
 
-    /**
-     * Find wire from source
-     */
-    private String findWireFromSource(String boxId, int outIndex, int playerSide) {
-        NetworkLayout layout = (playerSide == 1) ? layoutP1 : layoutP2;
+    private String findWireFromSource(PvPGameState gameState, String boxId, int outIndex, int playerSide) {
+        NetworkLayout layout = (playerSide == 1) ? gameState.layoutP1 : gameState.layoutP2;
         if (layout == null || layout.layout == null) return null;
 
         for (WireLayout wire : layout.layout.wires) {
@@ -226,11 +227,8 @@ public class MessengerGameSimulation {
         return null;
     }
 
-    /**
-     * Find wire by ID
-     */
-    private WireLayout findWire(String wireId, int playerSide) {
-        NetworkLayout layout = (playerSide == 1) ? layoutP1 : layoutP2;
+    private WireLayout findWire(PvPGameState gameState, String wireId, int playerSide) {
+        NetworkLayout layout = (playerSide == 1) ? gameState.layoutP1 : gameState.layoutP2;
         if (layout == null || layout.layout == null) return null;
 
         for (WireLayout wire : layout.layout.wires) {
@@ -241,11 +239,8 @@ public class MessengerGameSimulation {
         return null;
     }
 
-    /**
-     * Find box by ID
-     */
-    private SystemLayout findBox(String boxId, int playerSide) {
-        NetworkLayout layout = (playerSide == 1) ? layoutP1 : layoutP2;
+    private SystemLayout findBox(PvPGameState gameState, String boxId, int playerSide) {
+        NetworkLayout layout = (playerSide == 1) ? gameState.layoutP1 : gameState.layoutP2;
         if (layout == null || layout.layout == null) return null;
 
         for (SystemLayout box : layout.layout.boxes) {
@@ -256,38 +251,7 @@ public class MessengerGameSimulation {
         return null;
     }
 
-    /**
-     * Get current state for synchronization
-     */
-    public Map<String, Object> getState() {
-        Map<String, Object> state = new HashMap<>();
-
-        // Packet positions
-        Map<String, Map<String, Object>> packets = new HashMap<>();
-        for (SimPacket packet : activePackets.values()) {
-            Map<String, Object> pktState = new HashMap<>();
-            pktState.put("wireId", packet.wireId);
-            pktState.put("progress", packet.progress);
-            pktState.put("playerSide", packet.playerSide);
-            pktState.put("type", packet.type);
-            packets.put(packet.id, pktState);
-        }
-        state.put("packets", packets);
-
-        // Scores
-        state.put("deliveredP1", deliveredP1);
-        state.put("lostP1", lostP1);
-        state.put("deliveredP2", deliveredP2);
-        state.put("lostP2", lostP2);
-
-        return state;
-    }
-
     // Internal classes
-
-    /**
-     * Wrapper for network layout with player side
-     */
     static class NetworkLayout {
         public final SubmitLayout layout;
         public final int playerSide;
@@ -298,30 +262,15 @@ public class MessengerGameSimulation {
         }
     }
 
-    /**
-     * Simplified packet representation
-     */
     static class SimPacket {
         String id;
         String wireId;
         int playerSide;
-        double progress; // 0.0 to 1.0
+        double progress;
         double wireLength;
         double noise;
         String type;
-    }
-
-    /**
-     * Controlled system state
-     */
-    static class ControlledSystem {
-        final String id;
-        int ammoP1 = 0;
-        int ammoP2 = 0;
-        long lastInjectTime = 0;
-
-        ControlledSystem(String id) {
-            this.id = id;
-        }
+        int x;
+        int y;
     }
 }

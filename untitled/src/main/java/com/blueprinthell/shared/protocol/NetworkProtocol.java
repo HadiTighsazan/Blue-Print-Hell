@@ -64,7 +64,7 @@ public class NetworkProtocol {
     public enum GameMode {
         SOLO_OFFLINE,
         SOLO_ONLINE,
-        MULTIPLAYER_PVP  // NEW
+        MULTIPLAYER_PVP
     }
 
     public enum Ruleset {
@@ -117,7 +117,7 @@ public class NetworkProtocol {
     }
 
     // === PvP Matchmaking Messages ===
-
+    // ... (بخش‌های دیگر بدون تغییر باقی می‌مانند) ...
     public static class QueueForMatch extends Message {
         public String userId;
         public String preferredMode; // "MSG_ONLY" for now
@@ -154,9 +154,6 @@ public class NetworkProtocol {
             this.playerSide = side;
         }
     }
-
-    // === PvP Build Phase Messages ===
-
     public static class SubmitLayout extends Message {
         public String matchId;
         public List<WireLayout> wires;
@@ -218,8 +215,10 @@ public class NetworkProtocol {
         }
     }
 
+
     // === PvP Match Phase Messages ===
 
+    // ### START OF FIX ###
     public static class MatchStart extends Message {
         public String matchId;
         public String mapId;
@@ -227,13 +226,19 @@ public class NetworkProtocol {
         public List<SystemLayout> opponentBoxes;
         public List<WireLayout> opponentWires;
         public int countdownSeconds; // 3, 2, 1...
+        public List<WireLayout> ownWires; // فیلد اضافه شده برای سیم‌های خود بازیکن
 
         public MatchStart(String matchId) {
             super(MessageType.MATCH_START);
             this.matchId = matchId;
             this.countdownSeconds = 3;
+            // مقداردهی اولیه برای جلوگیری از NullPointerException
+            this.opponentBoxes = new ArrayList<>();
+            this.opponentWires = new ArrayList<>();
+            this.ownWires = new ArrayList<>();
         }
     }
+    // ### END OF FIX ###
 
     public static class Inject extends Message {
         public String matchId;
@@ -249,16 +254,36 @@ public class NetworkProtocol {
     public static class Tick extends Message {
         public String matchId;
         public int frameId;
-        public PlayerScore scoreP1;
-        public PlayerScore scoreP2;
-        public List<SystemState> systems;
-        public double globalSpeedMultiplier; // for Wrath of Penia (speed)
+        public PvPStateSnapshot state;
 
         public Tick(String matchId, int frame) {
             super(MessageType.TICK);
             this.matchId = matchId;
             this.frameId = frame;
-            this.globalSpeedMultiplier = 1.0;
+        }
+    }
+
+    public static class PvPStateSnapshot {
+        public PlayerScore scoreP1;
+        public PlayerScore scoreP2;
+        public List<PacketState> packets;
+        public List<SystemState> systems;
+        public double globalSpeedMultiplier;
+
+        public PvPStateSnapshot() {
+            packets = new ArrayList<>();
+            systems = new ArrayList<>();
+            scoreP1 = new PlayerScore();
+            scoreP2 = new PlayerScore();
+        }
+
+        public static class PacketState {
+            public String id;
+            public int playerSide;
+            public String type;
+            public int x, y;
+            public double progress;
+            public String wireId;
         }
     }
 
@@ -289,8 +314,8 @@ public class NetworkProtocol {
         }
     }
 
-    // === Extended Game Result for PvP ===
 
+    // ... (بقیه کلاس‌ها بدون تغییر) ...
     public static class GameResult {
         public String resultId;
         public String userId;
@@ -412,4 +437,5 @@ public class NetworkProtocol {
             super(MessageType.PROFILE);
         }
     }
+
 }
