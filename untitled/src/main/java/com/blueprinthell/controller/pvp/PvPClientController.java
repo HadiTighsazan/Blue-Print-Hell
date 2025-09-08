@@ -1,3 +1,4 @@
+// blueprinthell/controller/pvp/PvPClientController.java
 package com.blueprinthell.controller.pvp;
 
 import com.blueprinthell.client.network.ConnectionManager;
@@ -6,6 +7,7 @@ import com.blueprinthell.controller.ui.ScreenController;
 import com.blueprinthell.model.*;
 import com.blueprinthell.shared.protocol.NetworkProtocol.*;
 import com.blueprinthell.view.pvp.*;
+import com.blueprinthell.view.screens.GameScreenView;
 
 import javax.swing.*;
 import javax.swing.Timer;
@@ -13,6 +15,7 @@ import java.awt.*;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * کنترلر PvP در سمت کلاینت
@@ -134,9 +137,7 @@ public class PvPClientController {
         playerSide = found.playerSide;
         currentPhase = PvPPhase.BUILD;
 
-        SwingUtilities.invokeLater(() -> {
-            startBuildPhase();
-        });
+        SwingUtilities.invokeLater(this::startBuildPhase);
     }
 
     private void handleBuildTick(Message msg) {
@@ -177,22 +178,48 @@ public class PvPClientController {
         currentPhase = PvPPhase.COUNTDOWN;
 
         SwingUtilities.invokeLater(() -> {
-            // Create opponent renderer
+            gameController.getGameView().setTopControls(null);
+
             opponentRenderer = new OpponentNetworkRenderer(
                     start.opponentBoxes,
                     start.opponentWires,
                     gameController.getGameView()
             );
 
-            // Show countdown
-            showCountdown(start.countdownSeconds);
+            // --- Create overlay ---
+            JLabel countdownLabel = new JLabel(String.valueOf(start.countdownSeconds));
+            countdownLabel.setFont(new Font("Arial", Font.BOLD, 72));
+            countdownLabel.setForeground(Color.YELLOW);
+            countdownLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-            // Start match after countdown
-            Timer countdownTimer = new Timer(start.countdownSeconds * 1000, e -> {
-                currentPhase = PvPPhase.MATCH;
-                startMatch();
+            JPanel overlay = new JPanel(new BorderLayout());
+            overlay.setOpaque(false);
+            overlay.add(countdownLabel, BorderLayout.CENTER);
+
+            GameScreenView gsv = gameController.getGameView();
+            gsv.add(overlay);
+            overlay.setBounds(0, 0, gsv.getWidth(), gsv.getHeight());
+            gsv.setComponentZOrder(overlay, 0);
+            gsv.revalidate();
+            gsv.repaint();
+
+            // --- Countdown Timer ---
+            AtomicInteger countdown = new AtomicInteger(start.countdownSeconds);
+            Timer countdownTimer = new Timer(1000, null);
+            countdownTimer.addActionListener(e -> {
+                int remaining = countdown.decrementAndGet();
+                if (remaining > 0) {
+                    countdownLabel.setText(String.valueOf(remaining));
+                } else {
+                    ((Timer) e.getSource()).stop();
+                    gsv.remove(overlay);
+                    gsv.revalidate();
+                    gsv.repaint();
+                    currentPhase = PvPPhase.MATCH;
+                    startMatch();
+                }
             });
-            countdownTimer.setRepeats(false);
+            countdownTimer.setRepeats(true);
             countdownTimer.start();
         });
     }
@@ -200,7 +227,6 @@ public class PvPClientController {
     private void handleTick(Message msg) {
         if (!(msg instanceof Tick tick)) return;
 
-        // Update scores
         if (playerSide == 1) {
             playerDelivered = tick.scoreP1.delivered;
             playerLost = tick.scoreP1.lost;
@@ -215,7 +241,6 @@ public class PvPClientController {
             opponentLost = tick.scoreP1.lost;
         }
 
-        // Update system cooldowns
         for (SystemState state : tick.systems) {
             SystemCooldowns cooldowns = systemCooldowns.computeIfAbsent(
                     state.id, k -> new SystemCooldowns());
@@ -228,7 +253,6 @@ public class PvPClientController {
             }
         }
 
-        // Update UI
         SwingUtilities.invokeLater(() -> {
             if (matchView != null) {
                 matchView.updateScores(playerDelivered, playerLost,
@@ -245,45 +269,44 @@ public class PvPClientController {
         currentPhase = PvPPhase.ENDED;
 
         SwingUtilities.invokeLater(() -> {
-            // Show results
             boolean playerWon = (end.winnerSide == playerSide);
 
             PvPResultView resultView = new PvPResultView(
                     playerWon,
-                    end.finalScoreP1,
-                    end.finalScoreP2,
+                    playerSide == 1 ? end.finalScoreP1 : end.finalScoreP2,
+                    playerSide == 1 ? end.finalScoreP2 : end.finalScoreP1,
                     end.xpEarned,
                     opponentUsername
             );
 
             screenController.showCustomView(resultView);
 
-            // Clean up
             cleanup();
         });
     }
 
-    // === Build Phase ===
-
     private void startBuildPhase() {
-        // Create build view
+        gameController.getLevelManager().loadLevel(1);
+        gameController.startLevel(gameController.getLevelManager().getCurrentDefinition());
+
         buildView = new PvPBuildView(
                 gameController,
                 opponentUsername,
                 playerSide
         );
 
-        // Set callbacks
         buildView.setReadyCallback(this::setReady);
         buildView.setExtendCallback(this::requestExtend);
 
-        // Show build view
-        screenController.showCustomView(buildView);
+        gameController.getGameView().setTopControls(buildView);
 
-        // Start sending layout updates
+        screenController.showScreen(ScreenController.GAME_SCREEN);
+
         Timer layoutTimer = new Timer(1000, e -> sendLayoutUpdate());
+        layoutTimer.setRepeats(true);
         layoutTimer.start();
     }
+
 
     private void setReady(boolean ready) {
         isReady.set(ready);
@@ -302,10 +325,8 @@ public class PvPClientController {
     private void sendLayoutUpdate() {
         if (currentPhase != PvPPhase.BUILD) return;
 
-        // Capture current layout
         SubmitLayout layout = new SubmitLayout(currentMatchId);
 
-        // Convert boxes
         for (SystemBoxModel box : gameController.getBoxes()) {
             SystemLayout systemLayout = new SystemLayout();
             systemLayout.id = box.getId();
@@ -316,14 +337,12 @@ public class PvPClientController {
             systemLayout.inShapes = convertShapes(box.getInShapes());
             systemLayout.outShapes = convertShapes(box.getOutShapes());
             systemLayout.kind = box.getPrimaryKind().toString();
-            // Set source/sink based on ports
             systemLayout.isSource = box.getInPorts().isEmpty();
             systemLayout.isSink = box.getOutPorts().isEmpty();
 
             layout.boxes.add(systemLayout);
         }
 
-        // Convert wires
         for (WireModel wire : gameController.getWires()) {
             WireLayout wireLayout = new WireLayout();
             wireLayout.id = wire.getCanonicalId();
@@ -332,7 +351,6 @@ public class PvPClientController {
             wireLayout.toBoxId = findBoxForPort(wire.getDstPort());
             wireLayout.toInIndex = wire.getToInIndex();
 
-            // Convert path
             wireLayout.path = new ArrayList<>();
             for (Point p : wire.getPath().getPoints()) {
                 wireLayout.path.add(new WireLayout.Point2D(p.x, p.y));
@@ -362,23 +380,6 @@ public class PvPClientController {
         return result;
     }
 
-    // === Match Phase ===
-
-    private void showCountdown(int seconds) {
-        // Show countdown overlay
-        JLabel countdownLabel = new JLabel(String.valueOf(seconds));
-        countdownLabel.setFont(new Font("Arial", Font.BOLD, 72));
-        countdownLabel.setForeground(Color.YELLOW);
-        countdownLabel.setHorizontalAlignment(SwingConstants.CENTER);
-
-        JPanel overlay = new JPanel(new BorderLayout());
-        overlay.setOpaque(false);
-        overlay.add(countdownLabel, BorderLayout.CENTER);
-
-        gameController.getGameView().add(overlay);
-        gameController.getGameView().setComponentZOrder(overlay, 0);
-    }
-
     private void startMatch() {
         // Create match view
         matchView = new PvPMatchView(gameController.getGameView());
@@ -386,7 +387,10 @@ public class PvPClientController {
         // Set inject callback
         matchView.setInjectCallback(this::injectPacket);
 
-        // Start game simulation
+        // *** ADD THE MATCH VIEW TO THE UI ***
+        gameController.getGameView().setTopControls(matchView);
+
+        // Start game simulation on the client
         gameController.getSimulation().start();
 
         // Render opponent network
@@ -395,28 +399,22 @@ public class PvPClientController {
         }
     }
 
+
     private void injectPacket(String systemId) {
-        // Check cooldowns
         SystemCooldowns cooldowns = systemCooldowns.get(systemId);
         if (cooldowns != null) {
             if (cooldowns.systemCooldown > 0 || cooldowns.playerCooldown > 0) {
-                // Show cooldown message
                 return;
             }
         }
 
-        // Check ammo
         if (playerAmmo <= 0) {
-            // Show no ammo message
             return;
         }
 
-        // Send inject message
         Inject inject = new Inject(currentMatchId, systemId);
         connectionManager.sendMessage(inject);
     }
-
-    // === Utility ===
 
     private void showQueueingView() {
         JPanel queuePanel = new JPanel();
@@ -444,8 +442,6 @@ public class PvPClientController {
             opponentRenderer = null;
         }
     }
-
-    // Internal classes
 
     static class SystemCooldowns {
         int systemCooldown = 0;

@@ -136,9 +136,6 @@ public class MessengerGameSimulation {
         return result;
     }
 
-    /**
-     * Handle automatic spawning from uncontrolled sources
-     */
     private void handleAutoSpawning(double dt) {
         // Accumulate spawn time
         spawnAccumulatorP1 += dt;
@@ -159,20 +156,19 @@ public class MessengerGameSimulation {
         }
     }
 
-    /**
-     * Spawn packets from all sources of a player
-     */
     private void spawnFromSources(int playerSide) {
         NetworkLayout layout = (playerSide == 1) ? layoutP1 : layoutP2;
-        if (layout == null || layout.layout == null) return;
+        if (layout == null || layout.layout == null || layout.layout.boxes == null) return;
 
         for (SystemLayout box : layout.layout.boxes) {
             if (box.isSource) {
                 // Spawn from each output port
-                for (int i = 0; i < box.outShapes.size(); i++) {
-                    String wireId = findWireFromSource(box.id, i, playerSide);
-                    if (wireId != null) {
-                        spawnPacket(wireId, playerSide);
+                if (box.outShapes != null) {
+                    for (int i = 0; i < box.outShapes.size(); i++) {
+                        String wireId = findWireFromSource(box.id, i, playerSide);
+                        if (wireId != null) {
+                            spawnPacket(wireId, playerSide);
+                        }
                     }
                 }
             }

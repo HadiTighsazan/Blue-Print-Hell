@@ -23,8 +23,7 @@ public class PvPBuildView extends JPanel {
     private final JPanel penaltyPanel;
     private final JLabel penaltyLabel;
 
-    // Build area (reuse game view)
-    private final JPanel buildArea;
+
 
     // State
     private boolean isReady = false;
@@ -41,8 +40,11 @@ public class PvPBuildView extends JPanel {
     public PvPBuildView(GameController gameController, String opponentName, int playerSide) {
         this.gameController = gameController;
 
+        // ### START OF CHANGE ###
+        // Change the main layout to a BorderLayout. It will no longer contain the game area.
         setLayout(new BorderLayout());
         setBackground(new Color(30, 30, 30));
+        // ### END OF CHANGE ###
 
         // === Top Panel - Match Info ===
         JPanel topPanel = new JPanel(new BorderLayout());
@@ -83,19 +85,27 @@ public class PvPBuildView extends JPanel {
         sideLabel.setForeground(playerSide == 1 ? Color.BLUE : Color.RED);
         topPanel.add(sideLabel, BorderLayout.EAST);
 
+        // ### START OF CHANGE ###
+        // Add topPanel to NORTH instead of adding the whole view to NORTH
         add(topPanel, BorderLayout.NORTH);
+        // ### END OF CHANGE ###
 
         // === Center - Build Area ===
-        buildArea = new JPanel(new BorderLayout());
-        buildArea.setBackground(new Color(50, 50, 50));
-        buildArea.setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
+        // ### START OF CHANGE ###
+        // DELETE THE ENTIRE buildArea SECTION. We no longer manage the game screen here.
+    /*
+    buildArea = new JPanel(new BorderLayout());
+    buildArea.setBackground(new Color(50, 50, 50));
+    buildArea.setBorder(BorderFactory.createLineBorder(Color.GRAY, 2));
 
-        // Add game view here
-        if (gameController != null && gameController.getGameView() != null) {
-            buildArea.add(gameController.getGameView(), BorderLayout.CENTER);
-        }
+    // Add game view here
+    if (gameController != null && gameController.getGameView() != null) {
+        buildArea.add(gameController.getGameView(), BorderLayout.CENTER);
+    }
 
-        add(buildArea, BorderLayout.CENTER);
+    add(buildArea, BorderLayout.CENTER);
+    */
+        // ### END OF CHANGE ###
 
         // === Bottom Panel - Controls ===
         JPanel bottomPanel = new JPanel(new BorderLayout());
@@ -130,22 +140,28 @@ public class PvPBuildView extends JPanel {
 
         bottomPanel.add(buttonPanel, BorderLayout.EAST);
 
+        // ### START OF CHANGE ###
+        // Add bottomPanel to SOUTH
         add(bottomPanel, BorderLayout.SOUTH);
+        // ### END OF CHANGE ###
 
         // === Penalty Panel (hidden by default) ===
         penaltyPanel = new JPanel();
         penaltyPanel.setBackground(new Color(100, 50, 50));
         penaltyPanel.setBorder(BorderFactory.createLineBorder(Color.RED, 2));
-        penaltyPanel.setVisible(false);
 
         penaltyLabel = new JLabel();
         penaltyLabel.setFont(new Font("Arial", Font.BOLD, 14));
         penaltyLabel.setForeground(Color.YELLOW);
         penaltyPanel.add(penaltyLabel);
 
-        add(penaltyPanel, BorderLayout.EAST);
+        // ### START OF CHANGE ###
+        // Add the penalty panel to the CENTER of the bottom panel for better layout
+        bottomPanel.add(penaltyPanel, BorderLayout.CENTER);
+        penaltyPanel.setVisible(false); // It's controlled by showPenalty
+        // The old line "add(penaltyPanel, BorderLayout.EAST);" is now part of the bottom panel.
+        // ### END OF CHANGE ###
     }
-
     /**
      * Update timer display
      */

@@ -22,6 +22,7 @@ import java.util.function.BiConsumer;
 public class GameScreenView extends JPanel {
     private final HudView hudView;
     private final JPanel gameArea;
+    private JComponent topControls = null;
 
     private final BiConsumer<Integer, Integer> keyListener = this::applyKeyBindings;
     private AccelerationFreezeController freezeController;
@@ -57,7 +58,21 @@ public class GameScreenView extends JPanel {
             @Override public void actionPerformed(ActionEvent e) { navigateTime(1); }
         });
     }
-
+    public void setTopControls(JComponent controls) {
+        if (topControls != null) {
+            remove(topControls);
+        }
+        this.topControls = controls;
+        if (controls != null) {
+            // Replace the existing HUD view with these controls
+            add(controls, BorderLayout.NORTH);
+        } else {
+            // If controls are null, restore the original HUD
+            add(hudView, BorderLayout.NORTH);
+        }
+        revalidate();
+        repaint();
+    }
     private TemporalNavigationListener temporalListener;
     public void setTemporalNavigationListener(TemporalNavigationListener l) { this.temporalListener = l; }
     private void navigateTime(int dir) { if (temporalListener != null) temporalListener.onNavigate(dir); }
