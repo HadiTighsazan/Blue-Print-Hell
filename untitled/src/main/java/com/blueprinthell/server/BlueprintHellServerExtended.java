@@ -123,6 +123,8 @@ public class BlueprintHellServerExtended {
             }
         }
 
+
+
         private void handleMessage(String jsonLine) {
             try {
                 Message baseMsg = gson.fromJson(jsonLine, Message.class);
@@ -136,24 +138,43 @@ public class BlueprintHellServerExtended {
                     case SUBMIT_RESULT -> handleSubmitResult(jsonLine);
                     case GET_PROFILE -> handleGetProfile(jsonLine);
 
-                    // PvP messages
-                    case QUEUE_FOR_MATCH -> handleQueueForMatch(jsonLine);
-                    case CANCEL_QUEUE -> handleCancelQueue();
-                    case SUBMIT_LAYOUT -> handleSubmitLayout(jsonLine);
-                    case READY_STATE -> handleReadyState(jsonLine);
-                    case EXTEND_REQUEST -> handleExtendRequest(jsonLine);
-                    case INJECT -> handleInject(jsonLine);
+                    // --- CORRECTED PvP Message Routing ---
+
+                    // 1. Pre-Match Messages
+                    case QUEUE_FOR_MATCH -> {
+                        if (sessionId != null) {
+                            pvpManager.queuePlayer(sessionId, userId, username);
+                        }
+                    }
+                    case CANCEL_QUEUE -> {
+                        if (sessionId != null) {
+                            pvpManager.cancelQueue(sessionId);
+                        }
+                    }
+
+                    // 2. In-Match Messages (forwarded to the specific game session)
+                    case SUBMIT_LAYOUT,
+                         READY_STATE,
+                         EXTEND_REQUEST,
+                         INJECT,
+                         PLAYER_ACTION_MOVE_BOX,
+                         PLAYER_ACTION_CREATE_WIRE,
+                         PLAYER_ACTION_REMOVE_WIRE,
+                         PLAYER_ACTION_BUY_ITEM
+                            -> {
+                        if (sessionId != null) {
+                            pvpManager.handlePlayerMessage(sessionId, baseMsg, jsonLine);
+                        }
+                    }
 
                     default -> sendError("UNKNOWN_MSG", "Unknown message type: " + baseMsg.type);
                 }
 
             } catch (Exception e) {
-                System.err.println("Error handling message: " + e.getMessage());
+                System.err.println("Error handling message from user " + userId + ": " + e.getMessage());
                 sendError("PARSE_ERROR", "Failed to parse message");
             }
-        }
-
-        // === Connection Handlers ===
+        }        // === Connection Handlers ===
 
         private void handleHello(String json) {
             Hello hello = gson.fromJson(json, Hello.class);
@@ -221,25 +242,7 @@ public class BlueprintHellServerExtended {
             pvpManager.cancelQueue(sessionId);
         }
 
-        private void handleSubmitLayout(String json) {
-            SubmitLayout layout = gson.fromJson(json, SubmitLayout.class);
-            pvpManager.handlePlayerMessage(sessionId, layout);
-        }
 
-        private void handleReadyState(String json) {
-            ReadyState ready = gson.fromJson(json, ReadyState.class);
-            pvpManager.handlePlayerMessage(sessionId, ready);
-        }
-
-        private void handleExtendRequest(String json) {
-            ExtendRequest extend = gson.fromJson(json, ExtendRequest.class);
-            pvpManager.handlePlayerMessage(sessionId, extend);
-        }
-
-        private void handleInject(String json) {
-            Inject inject = gson.fromJson(json, Inject.class);
-            pvpManager.handlePlayerMessage(sessionId, inject);
-        }
 
         // === Utility Methods ===
 

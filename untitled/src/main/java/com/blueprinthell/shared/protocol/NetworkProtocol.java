@@ -31,7 +31,11 @@ public class NetworkProtocol {
         QUEUE_STATUS,
         MATCH_FOUND,
         CANCEL_QUEUE,
-
+        GAME_STATE_UPDATE,      // Server -> Client: Replaces TICK and STATE_SYNC
+        PLAYER_ACTION_MOVE_BOX,
+        PLAYER_ACTION_CREATE_WIRE,
+        PLAYER_ACTION_REMOVE_WIRE,
+        PLAYER_ACTION_BUY_ITEM,
         // Build Phase
         SUBMIT_LAYOUT,
         READY_STATE,
@@ -113,7 +117,7 @@ public class NetworkProtocol {
         public int delivered;
         public int lost;
         public int totalScore;
-        public int ammo;
+        public int ammo; // <-- فیلد جدید برای مهمات
     }
 
     // === PvP Matchmaking Messages ===
@@ -218,7 +222,6 @@ public class NetworkProtocol {
 
     // === PvP Match Phase Messages ===
 
-    // ### START OF FIX ###
     public static class MatchStart extends Message {
         public String matchId;
         public String mapId;
@@ -226,28 +229,28 @@ public class NetworkProtocol {
         public List<SystemLayout> opponentBoxes;
         public List<WireLayout> opponentWires;
         public int countdownSeconds; // 3, 2, 1...
-        public List<WireLayout> ownWires; // فیلد اضافه شده برای سیم‌های خود بازیکن
+        public List<WireLayout> ownWires;
 
         public MatchStart(String matchId) {
             super(MessageType.MATCH_START);
             this.matchId = matchId;
             this.countdownSeconds = 3;
-            // مقداردهی اولیه برای جلوگیری از NullPointerException
             this.opponentBoxes = new ArrayList<>();
             this.opponentWires = new ArrayList<>();
             this.ownWires = new ArrayList<>();
         }
     }
-    // ### END OF FIX ###
 
     public static class Inject extends Message {
         public String matchId;
         public String systemId;
+        public String packetType; // <-- فیلد جدید
 
-        public Inject(String matchId, String systemId) {
+        public Inject(String matchId, String systemId, String packetType) {
             super(MessageType.INJECT);
             this.matchId = matchId;
             this.systemId = systemId;
+            this.packetType = packetType;
         }
     }
 
@@ -438,4 +441,84 @@ public class NetworkProtocol {
         }
     }
 
+
+
+    public static class GameStateUpdate extends Message {
+        public String matchId;
+        public int frameId;
+
+        // --- CORRECTED ---
+        // Use String fields for transport to avoid deep serialization issues with Gson.
+        public String playerStateJson;
+        public String opponentStateJson;
+
+        // The transient fields are for in-memory use after deserialization.
+        public transient com.blueprinthell.snapshot.NetworkSnapshot playerState;
+        public transient com.blueprinthell.snapshot.NetworkSnapshot opponentState;
+
+        public GameStateUpdate(String matchId, int frameId) {
+            super(MessageType.GAME_STATE_UPDATE);
+            this.matchId = matchId;
+            this.frameId = frameId;
+        }
+    }
+
+
+// === Player Actions (Client -> Server) ===
+
+    public static class PlayerAction_MoveBox extends Message {
+        public String matchId;
+        public String boxId;
+        public int newX;
+        public int newY;
+
+        public PlayerAction_MoveBox(String matchId, String boxId, int newX, int newY) {
+            super(MessageType.PLAYER_ACTION_MOVE_BOX);
+            this.matchId = matchId;
+            this.boxId = boxId;
+            this.newX = newX;
+            this.newY = newY;
+        }
+    }
+
+    public static class PlayerAction_CreateWire extends Message {
+        public String matchId;
+        public String fromBoxId;
+        public int fromPortIndex;
+        public String toBoxId;
+        public int toPortIndex;
+        public List<WireLayout.Point2D> path; // Client can suggest a path
+
+        public PlayerAction_CreateWire(String matchId, String fromBoxId, int fromPortIndex, String toBoxId, int toPortIndex) {
+            super(MessageType.PLAYER_ACTION_CREATE_WIRE);
+            this.matchId = matchId;
+            this.fromBoxId = fromBoxId;
+            this.fromPortIndex = fromPortIndex;
+            this.toBoxId = toBoxId;
+            this.toPortIndex = toPortIndex;
+            this.path = new ArrayList<>();
+        }
+    }
+
+    public static class PlayerAction_RemoveWire extends Message {
+        public String matchId;
+        public String wireId; // Wires need a stable ID, which getCanonicalId() provides
+
+        public PlayerAction_RemoveWire(String matchId, String wireId) {
+            super(MessageType.PLAYER_ACTION_REMOVE_WIRE);
+            this.matchId = matchId;
+            this.wireId = wireId;
+        }
+    }
+
+    public static class PlayerAction_BuyItem extends Message {
+        public String matchId;
+        public String itemId; // e.g., "OATAR", "SISYPHUS_SCROLL"
+
+        public PlayerAction_BuyItem(String matchId, String itemId) {
+            super(MessageType.PLAYER_ACTION_BUY_ITEM);
+            this.matchId = matchId;
+            this.itemId = itemId;
+        }
+    }
 }

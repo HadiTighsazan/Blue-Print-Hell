@@ -1,5 +1,6 @@
 package com.blueprinthell.controller.ui.editor;
 
+import com.blueprinthell.controller.pvp.PvPClientController;
 import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
 import com.blueprinthell.model.WireModel;
@@ -32,6 +33,10 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
 
     private Point offset;
     private final Map<WireModel, Double> oldLengths;
+
+    // Add a reference to PvPClientController
+    private PvPClientController pvpController;
+    private boolean isPvPMode = false;
 
     // در دسترس/غیرفعال بودن عمومی درگ
     private static volatile boolean DRAG_ENABLED = true;
@@ -70,6 +75,11 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     }
 
     public static void setNetworkChanged(Runnable r) { NETWORK_CHANGED = r; }
+
+    public void setPvpController(PvPClientController pvpController) {
+        this.pvpController = pvpController;
+        this.isPvPMode = (pvpController != null);
+    }
 
     @Override
     public void mousePressed(MouseEvent e) {
@@ -170,6 +180,12 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
 
     @Override
     public void mouseReleased(MouseEvent e) {
+        if (isPvPMode && pvpController != null) {
+            // In PvP, send the final position to the server
+            // pvpController.sendMoveBoxAction(model.getId(), model.getX(), model.getY());
+            // NOTE: For now, this is disabled as layout is sent periodically during build phase.
+        }
+
         // پایان حالت یک‌باره و «قفلِ سخت» تا ریست مرحله
         if (SISYPHUS_MODE) {
             SISYPHUS_MODE = false;

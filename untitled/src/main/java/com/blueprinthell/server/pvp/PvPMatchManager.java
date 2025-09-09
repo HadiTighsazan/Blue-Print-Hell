@@ -57,20 +57,31 @@ public class PvPMatchManager {
         matchmakingQueue.removeIf(p -> p.sessionId.equals(sessionId));
     }
 
-    /**
-     * Process matchmaking queue
-     */
-    private void processMatchmaking() {
-        while (matchmakingQueue.size() >= 2) {
-            QueuedPlayer p1 = matchmakingQueue.poll();
-            QueuedPlayer p2 = matchmakingQueue.poll();
+    // In PvPMatchManager.java, replace the entire processMatchmaking method
 
-            if (p1 != null && p2 != null) {
-                createMatch(p1, p2);
+    private void processMatchmaking() {
+        // This new logic avoids using the unreliable .size() method in the condition.
+        // It atomically polls for players, which is safer in a concurrent environment.
+        while (true) {
+            QueuedPlayer p1 = matchmakingQueue.poll();
+            if (p1 == null) {
+                break; // Queue is empty, stop for this tick.
             }
+
+            QueuedPlayer p2 = matchmakingQueue.poll();
+            if (p2 == null) {
+                // Only one player was in the queue. Put them back and stop for this tick.
+                matchmakingQueue.offer(p1);
+                break;
+            }
+
+            // If we successfully polled two players, create the match.
+            createMatch(p1, p2);
+
+            // continue the loop in case there are more pairs in the queue
         }
 
-        // Update queue status for remaining players
+        // Update queue status for any remaining players (should be 0 or 1).
         int position = 1;
         for (QueuedPlayer player : matchmakingQueue) {
             QueueStatus status = new QueueStatus(position++, position * 5);
@@ -108,19 +119,15 @@ public class PvPMatchManager {
     /**
      * Handle player message
      */
-    public void handlePlayerMessage(String sessionId, Message message) {
+    public void handlePlayerMessage(String sessionId, Message baseMessage, String jsonLine) {
         String matchId = playerToMatch.get(sessionId);
-        if (matchId == null) {
-            return; // Player not in a match
-        }
+        if (matchId == null) return; // Player not in a match
 
         PvPGameSession session = activeMatches.get(matchId);
-        if (session == null) {
-            return; // Match not found
-        }
+        if (session == null) return; // Match not found
 
-        // Delegate to session
-        session.handlePlayerMessage(sessionId, message);
+        // Delegate the raw JSON and the base message to the session
+        session.handlePlayerMessage(sessionId, baseMessage, jsonLine);
     }
 
     /**

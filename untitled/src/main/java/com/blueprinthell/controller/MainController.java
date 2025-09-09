@@ -17,6 +17,15 @@ import com.blueprinthell.model.WireModel;
 
 
 public class MainController {
+    private static void startClientGameLoop(SimulationController simController, int fps) {
+        int delay = 1000 / fps;
+        double dt = delay / 1000.0;
+
+        new Timer(delay, e -> {
+            simController.update(dt);
+        }).start();
+    }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             JFrame frame = new JFrame("BlueprintHell");
@@ -29,19 +38,24 @@ public class MainController {
 
             ScreenController screenController = new ScreenController(frame);
 
+            // GameController is created for the client (not headless)
             GameController gameController = new GameController(frame);
             gameController.setScreenController(screenController);
 
-
-
-
             SimulationController simController = gameController.getSimulation();
-            PacketProducerController producerController = gameController.getProducerController();
+            PacketProducerController producerController = gameController.getProducerController(); // This might be null initially
+
+            // Start the client-side game loop using the new method
+            startClientGameLoop(simController, 60);
+
+            // The rest of the main method remains the same...
             WireModel.setSimulationController(simController);
-            simController.setPacketProducerController(producerController);
+
+            // This line might cause a NullPointerException if producer isn't created yet.
+            // It's better to set this when a level starts.
+            // simController.setPacketProducerController(producerController);
 
             screenController.registerGameScreen(gameController.getGameView());
-
             new MenuController(screenController, gameController);
 
             UIController ui = new UIController(
@@ -53,19 +67,17 @@ public class MainController {
                     gameController.getLossModel(),
                     gameController.getWires(),
                     gameController.getHudController(),
-                    gameController.getGameView()  // اضافه کردن این پارامتر
+                    gameController.getGameView()
             );
             screenController.setAudioController(ui.getAudioController());
             ui.getAudioController().playBackgroundLoop();
 
             screenController.showScreen(ScreenController.MAIN_MENU);
 
-            // اضافه کردن Shutdown Hook برای ذخیره در هنگام خروج غیرمنتظره
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                // هیچ‌گاه فایل را پاک نمی‌کنیم در shutdown
+                // No file clearing on shutdown
             }));
 
-            // Window Listener برای خروج از دکمه X پنجره
             frame.addWindowListener(new java.awt.event.WindowAdapter() {
                 @Override
                 public void windowClosing(java.awt.event.WindowEvent e) {
@@ -75,8 +87,7 @@ public class MainController {
 
             frame.setVisible(true);
         });
-    }
-    private static void handleNormalExit(GameController gameController) {
+    }    private static void handleNormalExit(GameController gameController) {
         gameController.stopAutoSave(); // حذف فایل ذخیره
         System.exit(0);
     }

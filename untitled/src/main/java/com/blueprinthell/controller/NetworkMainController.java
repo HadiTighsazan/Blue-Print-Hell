@@ -22,6 +22,8 @@ public class NetworkMainController {
     public static ConnectionManager connectionManager;
     public static PvPClientController pvpController;
 
+// In controller/NetworkMainController.java, replace the entire main method
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             // ایجاد Connection Manager
@@ -43,26 +45,31 @@ public class NetworkMainController {
             // Game Controller
             GameController gameController = new GameController(frame);
             gameController.setScreenController(screenController);
+
             // ایجاد PvP Controller
             pvpController = new PvPClientController(
                     gameController,
                     screenController,
                     connectionManager
             );
+
             // تنظیمات اولیه
             SimulationController simController = gameController.getSimulation();
-            PacketProducerController producerController = gameController.getProducerController();
+
+            // *** CHANGE: START THE CLIENT-SIDE GAME LOOP ***
+            startClientGameLoop(simController, 60);
+
             WireModel.setSimulationController(simController);
-            simController.setPacketProducerController(producerController);
 
             screenController.registerGameScreen(gameController.getGameView());
 
             // Menu Controller با پشتیبانی شبکه
-            NetworkEnabledMenuController menuController = new NetworkEnabledMenuController(
+            new NetworkEnabledMenuController(
                     screenController,
                     gameController,
                     connectionManager
             );
+
             // UI Controller
             UIController ui = new UIController(
                     frame,
@@ -85,13 +92,9 @@ public class NetworkMainController {
             // Shutdown Hook
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("Shutting down...");
-
-                // قطع اتصال شبکه
                 if (connectionManager != null) {
                     connectionManager.disconnect();
                 }
-
-                // ذخیره آفلاین queue (در ConnectionManager انجام می‌شود)
             }));
 
             // Window Listener
@@ -108,7 +111,15 @@ public class NetworkMainController {
             autoConnectToLocalServer();
         });
     }
+    private static void startClientGameLoop(SimulationController simController, int fps) {
+        int delay = 1000 / fps;
+        double dt = delay / 1000.0;
 
+        // Use a Swing Timer to drive the simulation updates on the client
+        new Timer(delay, e -> {
+            simController.update(dt);
+        }).start();
+    }
     private static void handleExit(GameController gameController) {
         // توقف AutoSave
         gameController.stopAutoSave();

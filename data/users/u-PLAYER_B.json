@@ -1,12 +1,61 @@
 {
   "userId": "u-PLAYER_B",
   "username": "Player_u-PLAYER",
-  "xpTotal": 0,
+  "xpTotal": 250,
   "xpByMode": {
-    "MULTIPLAYER_PVP": 0
+    "MULTIPLAYER_PVP": 0,
+    "SOLO_OFFLINE": 250
   },
-  "bestTimes": {},
+  "bestTimes": {
+    "1": 41426
+  },
   "history": [
+    {
+      "resultId": "r-bd12a9a5-c369-44cc-8972-e08b9337af50",
+      "userId": "u-PLAYER_B",
+      "mode": "SOLO_OFFLINE",
+      "ruleset": "SP_V1",
+      "level": 1,
+      "durationMs": 41426,
+      "score": 0,
+      "delivered": 13,
+      "loss": 0,
+      "xp": 150,
+      "ts": 1757405897118,
+      "isWinner": false,
+      "playerSide": 0
+    },
+    {
+      "resultId": "r-a525d8ab-4698-44bb-be8e-081c26569b25",
+      "userId": "u-PLAYER_B",
+      "mode": "MULTIPLAYER_PVP",
+      "ruleset": "MP_MSG_ONLY_V1",
+      "level": 0,
+      "durationMs": 172816,
+      "score": 0,
+      "delivered": 0,
+      "loss": 0,
+      "xp": 0,
+      "ts": 1757401492077,
+      "matchId": "match-a8eb4cf8-ee81-4855-a961-25e8fd364da9",
+      "isWinner": false,
+      "playerSide": 0
+    },
+    {
+      "resultId": "r-61fd63bf-0566-4401-bc6c-1bbbac358c3b",
+      "userId": "u-PLAYER_B",
+      "mode": "SOLO_OFFLINE",
+      "ruleset": "SP_V1",
+      "level": 1,
+      "durationMs": 1757400853709,
+      "score": 0,
+      "delivered": 4,
+      "loss": 2,
+      "xp": 100,
+      "ts": 1757400853709,
+      "isWinner": false,
+      "playerSide": 0
+    },
     {
       "resultId": "r-26a70b7e-5195-40f9-b40a-f10d6aca375d",
       "userId": "u-PLAYER_B",
@@ -27,8 +76,8 @@
   "unlocks": [],
   "activePerk": "none",
   "pvpWins": 0,
-  "pvpLosses": 1,
-  "pvpRating": 980,
+  "pvpLosses": 2,
+  "pvpRating": 960,
   "type": "PROFILE",
   "messageId": "1d869760-8e2d-420b-bc48-74e99c870172",
   "timestamp": 1756275076047
