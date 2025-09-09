@@ -59,7 +59,7 @@ public class SimulationRegistrar {
                                SimulationController simulation,
                                ScreenController screenController,
                                CollisionController collisionController,
-                               PacketRenderController packetRenderer,
+                               PacketRenderController packetRenderer, // This can now be null
                                ScoreModel scoreModel,
                                CoinModel coinModel,
                                PacketLossModel lossModel,
@@ -71,13 +71,23 @@ public class SimulationRegistrar {
         this.simulation = Objects.requireNonNull(simulation, "simulation");
         this.screenController = screenController;
         this.collisionController = Objects.requireNonNull(collisionController, "collisionController");
-        this.packetRenderer = Objects.requireNonNull(packetRenderer, "packetRenderer");
+
+        // REMOVE the requireNonNull check
+        this.packetRenderer = packetRenderer;
+
         this.scoreModel = Objects.requireNonNull(scoreModel, "scoreModel");
         this.coinModel = Objects.requireNonNull(coinModel, "coinModel");
         this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
         this.usageModel = Objects.requireNonNull(usageModel, "usageModel");
         this.snapshotManager = Objects.requireNonNull(snapshotManager, "snapshotManager");
-        this.hudView = Objects.requireNonNull(hudView, "hudView");
+
+        // hudView can be null in headless mode, so check it
+        if (hudView != null) {
+            this.hudView = hudView;
+        } else {
+            this.hudView = null; // explicitly set to null
+        }
+
         this.levelManager = Objects.requireNonNull(levelManager, "levelManager");
     }
 
@@ -154,7 +164,6 @@ public class SimulationRegistrar {
         WireModel.setSourceInputPorts(sources);
         WireModel.setSimulationController(simulation);
 
-
         // 1) خود باکس‌ها
         for (SystemBoxModel b : boxes) {
             if (!already.contains(b)) simulation.register(b);
@@ -165,17 +174,18 @@ public class SimulationRegistrar {
         this.dispatcherRef = dispatcher;
         simulation.register(dispatcher);
         {
-                            Map<WireModel, SystemBoxModel> srcMap = new HashMap<>();
-                    for (WireModel w : wires) {
-                            PortModel sp = w.getSrcPort();
-                            if (sp == null) continue;
-                            SystemBoxModel owner = portToBoxMap.get(sp);
-                            if (owner != null) {
-                                    srcMap.put(w, owner);
-                               }
-                        }
-                    dispatcher.setSourceMap(srcMap);
+            Map<WireModel, SystemBoxModel> srcMap = new HashMap<>();
+            for (WireModel w : wires) {
+                PortModel sp = w.getSrcPort();
+                if (sp == null) continue;
+                SystemBoxModel owner = portToBoxMap.get(sp);
+                if (owner != null) {
+                    srcMap.put(w, owner);
                 }
+            }
+            dispatcher.setSourceMap(srcMap);
+        }
+
         // 3) Behavior ها و Adapterها (از جمله VPN)
         for (SystemBoxModel box : boxes) {
             attachBehaviorsForBox(box, boxes, wires, destMap);
@@ -194,6 +204,7 @@ public class SimulationRegistrar {
             simulation.register(producer);
         }
         lossModel.setLargeGroupRegistry(largeGroupRegistry);
+
         // 6) Consumer (Sink) و رجیستری گروه‌ها
         if (sink != null) {
             PacketConsumerController consumer = new PacketConsumerController(
@@ -205,11 +216,14 @@ public class SimulationRegistrar {
         // 7) سایر کنترلرهای اختیاری (timeout, durability, throttle, ...)
         registerOptionalControllers(wires, boxes, destMap);
 
-        int plannedTotal = (sources != null && producer != null)
-                ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
-                : 0;
+        // *** START OF CHANGES ***
+        // UI-dependent controllers should only be created if a UI exists.
+        // The presence of hudView is a good indicator for non-headless mode.
+        if (hudView != null && screenController != null) {
+            int plannedTotal = (sources != null && producer != null)
+                    ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
+                    : 0;
 
-        if (screenController != null) {
             LossMonitorController lossMonitor = new LossMonitorController(
                     lossModel,
                     plannedTotal,
@@ -222,31 +236,33 @@ public class SimulationRegistrar {
                     }
             );
             simulation.register(lossMonitor);
+
+            HudController hudController = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
+            simulation.register(hudController);
         }
 
         Level currentLevel = levelManager.getCurrentLevel();
         double maxLossRatio = currentLevel != null ? currentLevel.getMaxLossRatio() : 0.5;
 
         if (producer != null) {
+            int plannedTotalUnits = producer.getTotalToProduce(); // Use the correct total
             LevelCompletionDetector detector = new LevelCompletionDetector(
                     wires, boxes, lossModel, producer, levelManager,
                     maxLossRatio,
-                    plannedTotal);
+                    plannedTotalUnits);
             simulation.register(detector);
         }
 
         SnapshotController snapshotCtrl = new SnapshotController(networkController, snapshotManager);
-
         simulation.register(snapshotCtrl);
 
-        HudController hudController = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
-        simulation.register(hudController);
-
-        simulation.register(packetRenderer);
+        // Register renderer only if it exists
+        if (packetRenderer != null) {
+            simulation.register(packetRenderer);
+        }
         simulation.register(collisionController);
+        // *** END OF CHANGES ***
     }
-
-
     private void attachBehaviorsForBox(SystemBoxModel box,
                                        List<SystemBoxModel> allBoxes,
                                        List<WireModel> wires,

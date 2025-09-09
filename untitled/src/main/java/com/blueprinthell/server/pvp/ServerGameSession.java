@@ -1,6 +1,7 @@
 package com.blueprinthell.server.pvp;
 
 import com.blueprinthell.controller.GameController;
+import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.level.LevelRegistry;
 import com.blueprinthell.model.PortModel;
 import com.blueprinthell.model.SystemBoxModel;
@@ -16,12 +17,26 @@ public class ServerGameSession {
     private final GameController gameControllerP1;
     private final GameController gameControllerP2;
 
+
     public ServerGameSession(String matchId) {
         this.matchId = matchId;
+
+        // 1. Create GameControllers in headless mode
         this.gameControllerP1 = new GameController(true);
         this.gameControllerP2 = new GameController(true);
-        gameControllerP1.startLevel(LevelRegistry.getLevel(1).getDefinition());
-        gameControllerP2.startLevel(LevelRegistry.getLevel(1).getDefinition());
+
+        // 2. Create and set a LevelManager for each controller.
+        LevelManager levelManagerP1 = new LevelManager(gameControllerP1, null);
+        gameControllerP1.setLevelManager(levelManagerP1);
+
+        LevelManager levelManagerP2 = new LevelManager(gameControllerP2, null);
+        gameControllerP2.setLevelManager(levelManagerP2);
+
+        // 3. CORRECTED: Use the LevelManager to load the level.
+        // This ensures that 'currentLevel' inside the LevelManager is set correctly
+        // before any other logic tries to access it. For PvP, we'll always use level 1.
+        levelManagerP1.loadLevel(1);
+        levelManagerP2.loadLevel(1);
     }
 
     public void tick(double dt) {

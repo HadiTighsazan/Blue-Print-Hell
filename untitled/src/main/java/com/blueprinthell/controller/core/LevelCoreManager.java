@@ -166,11 +166,30 @@ public class LevelCoreManager {
             gameController.getSimulation().register(eliphas);
         }
 
+
+
         gameController.setRegistrar(new SimulationRegistrar(
-                gameController, gameController.getSimulation(), gameController.getScreenController(),
-                gameController.getCollisionController(), gameController.getPacketRenderer(),
-                gameController.getScoreModel(), gameController.getCoinModel(), gameController.getLossModel(),
-                usageModel, gameController.getSnapshotMgr(), gameController.getHudView(), levelManager));
+                gameController,
+                gameController.getSimulation(),
+                gameController.getScreenController(),
+                gameController.getCollisionController(),
+
+                // This will be null in headless mode, which is now OK
+                gameController.getPacketRenderer(),
+
+                gameController.getScoreModel(),
+                gameController.getCoinModel(),
+                gameController.getLossModel(),
+                usageModel,
+                gameController.getSnapshotMgr(),
+
+                // This will be null in headless mode, which is now OK
+                gameController.getHudView(),
+
+                levelManager
+        ));
+
+
         gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
 
         LargeGroupRegistry largeRegistry = gameController.getRegistrar().getLargeGroupRegistry();

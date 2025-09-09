@@ -33,9 +33,9 @@ public class PvPMatchManager {
         this.eventHandler = handler;
 
         // Start matchmaking thread
-        gameLoopExecutor.scheduleAtFixedRate(this::processMatchmaking, 0, 1, TimeUnit.SECONDS);
+        // FIX: Use scheduleWithFixedDelay to prevent race conditions
+        gameLoopExecutor.scheduleWithFixedDelay(this::processMatchmaking, 0, 1, TimeUnit.SECONDS);
     }
-
     /**
      * Add player to matchmaking queue
      */
@@ -57,38 +57,39 @@ public class PvPMatchManager {
         matchmakingQueue.removeIf(p -> p.sessionId.equals(sessionId));
     }
 
-    // In PvPMatchManager.java, replace the entire processMatchmaking method
+
+
+    // In blueprinthell/server/pvp/PvPMatchManager.java
 
     private void processMatchmaking() {
-        // This new logic avoids using the unreliable .size() method in the condition.
-        // It atomically polls for players, which is safer in a concurrent environment.
-        while (true) {
-            QueuedPlayer p1 = matchmakingQueue.poll();
-            if (p1 == null) {
-                break; // Queue is empty, stop for this tick.
+        try {
+            // تا زمانی که حداقل دو بازیکن در صف هستند، آن‌ها را جفت کن
+            while (matchmakingQueue.size() >= 2) {
+                QueuedPlayer p1 = matchmakingQueue.poll();
+                QueuedPlayer p2 = matchmakingQueue.poll();
+
+                if (p1 != null && p2 != null) {
+                    System.out.println("Found a pair: " + p1.username + " and " + p2.username);
+                    createMatch(p1, p2);
+                } else {
+                    // اگر یکی از بازیکنان null بود، دیگری را به صف برگردان
+                    if (p1 != null) matchmakingQueue.offer(p1);
+                    if (p2 != null) matchmakingQueue.offer(p2);
+                    break; // از حلقه خارج شو
+                }
             }
 
-            QueuedPlayer p2 = matchmakingQueue.poll();
-            if (p2 == null) {
-                // Only one player was in the queue. Put them back and stop for this tick.
-                matchmakingQueue.offer(p1);
-                break;
+            // وضعیت را برای بازیکنان باقی‌مانده ارسال کن
+            int position = 1;
+            for (QueuedPlayer player : matchmakingQueue) {
+                QueueStatus status = new QueueStatus(position++, (position * 5)); // تخمین زمان انتظار
+                eventHandler.sendMessageToPlayer(player.sessionId, status);
             }
-
-            // If we successfully polled two players, create the match.
-            createMatch(p1, p2);
-
-            // continue the loop in case there are more pairs in the queue
-        }
-
-        // Update queue status for any remaining players (should be 0 or 1).
-        int position = 1;
-        for (QueuedPlayer player : matchmakingQueue) {
-            QueueStatus status = new QueueStatus(position++, position * 5);
-            eventHandler.sendMessageToPlayer(player.sessionId, status);
+        } catch (Exception e) {
+            System.err.println("Error in matchmaking process: " + e.getMessage());
+            e.printStackTrace();
         }
     }
-
     /**
      * Create a new match
      */

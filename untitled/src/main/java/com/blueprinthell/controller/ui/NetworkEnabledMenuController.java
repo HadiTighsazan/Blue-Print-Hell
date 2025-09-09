@@ -4,7 +4,7 @@ import com.blueprinthell.client.network.ConnectionManager;
 import com.blueprinthell.controller.GameController;
 import com.blueprinthell.controller.network.GameResultHandler;
 import com.blueprinthell.controller.persistence.AutoSaveController;
-import com.blueprinthell.controller.pvp.PvPClientController;
+import com.blueprinthell.controller.pvp.PvPClientController; // <-- Import اضافه شده
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.level.LevelManager;
 import com.blueprinthell.level.LevelRegistry;
@@ -26,6 +26,7 @@ public class NetworkEnabledMenuController {
     private final GameController gameController;
     private final ConnectionManager connectionManager;
     private final GameResultHandler resultHandler;
+    private final PvPClientController pvpController; // <-- فیلد جدید اضافه شده
     private NetworkMenuView networkMenuView;
 
     private boolean restorationInProgress = false;
@@ -33,10 +34,12 @@ public class NetworkEnabledMenuController {
 
     public NetworkEnabledMenuController(ScreenController screenController,
                                         GameController gameController,
-                                        ConnectionManager connectionManager) {
+                                        ConnectionManager connectionManager,
+                                        PvPClientController pvpController) { // <-- پارامتر جدید اضافه شده
         this.screenController = screenController;
         this.gameController = gameController;
         this.connectionManager = connectionManager;
+        this.pvpController = pvpController; // <-- ذخیره نمونه
         this.levelManager = new LevelManager(gameController, screenController);
         gameController.setLevelManager(levelManager);
 
@@ -101,9 +104,8 @@ public class NetworkEnabledMenuController {
                 return;
             }
 
-            // شروع صف PvP
-            PvPClientController pvp = new PvPClientController(gameController, screenController, connectionManager);
-            pvp.startQueue();
+            // شروع صف PvP - استفاده از نمونه موجود به جای ساخت نمونه جدید
+            this.pvpController.startQueue(); // <-- تغییر: استفاده از نمونه ذخیره شده
         });
         // دکمه Settings
         mainMenu.settingsButton.addActionListener(e ->

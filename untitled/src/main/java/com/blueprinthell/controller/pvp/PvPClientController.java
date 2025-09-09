@@ -60,13 +60,16 @@ public class PvPClientController {
         registerMessageHandlers();
     }
 
+
     private void registerMessageHandlers() {
+        // این دو خط، مشکل اصلی را حل می‌کنند
         connectionManager.registerHandler(MessageType.QUEUE_STATUS, this::handleQueueStatus);
         connectionManager.registerHandler(MessageType.MATCH_FOUND, this::handleMatchFound);
+
+        // سایر handlerها از قبل موجود بودند و صحیح هستند
         connectionManager.registerHandler(MessageType.BUILD_TICK, this::handleBuildTick);
         connectionManager.registerHandler(MessageType.EXTEND_GRANTED, this::handleExtendGranted);
         connectionManager.registerHandler(MessageType.MATCH_START, this::handleMatchStart);
-        // The most important handler: GAME_STATE_UPDATE (replaces TICK)
         connectionManager.registerHandler(MessageType.GAME_STATE_UPDATE, this::handleGameStateUpdate);
         connectionManager.registerHandler(MessageType.MATCH_END, this::handleMatchEnd);
     }

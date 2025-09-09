@@ -67,7 +67,8 @@ public class NetworkMainController {
             new NetworkEnabledMenuController(
                     screenController,
                     gameController,
-                    connectionManager
+                    connectionManager,
+                    pvpController
             );
 
             // UI Controller

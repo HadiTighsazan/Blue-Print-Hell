@@ -143,6 +143,10 @@ public class BlueprintHellServerExtended {
                     // 1. Pre-Match Messages
                     case QUEUE_FOR_MATCH -> {
                         if (sessionId != null) {
+                            // لاگ برای اطمینان از دریافت درخواست
+                            System.out.println("User " + username + " [" + sessionId + "] is queueing for a match.");
+
+                            // استفاده از متغیرهای موجود در ClientHandler برای صف‌بندی
                             pvpManager.queuePlayer(sessionId, userId, username);
                         }
                     }
@@ -367,7 +371,7 @@ public class BlueprintHellServerExtended {
         private Profile createNewProfile(String userId) {
             Profile profile = new Profile();
             profile.userId = userId;
-            profile.username = "Player_" + userId.substring(0, Math.min(8, userId.length()));
+            profile.username = "Player_" + userId;
             profile.xpTotal = 0;
             profile.xpByMode = new HashMap<>();
             profile.bestTimes = new HashMap<>();
