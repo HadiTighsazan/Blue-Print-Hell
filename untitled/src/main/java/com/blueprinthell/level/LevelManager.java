@@ -38,20 +38,23 @@ public class LevelManager {
     }
 
 
+
     public void reportLevelCompleted() {
         if (missionReported) return;
         missionReported = true;
 
         gameController.getSimulation().stop();
 
-        MissionPassedView mv = screenController.getMissionPassedView();
-        mv.setSummary(
-                currentLevelNumber,
-                gameController.getScoreModel().getScore(),
-                gameController.getLossModel().getLostCount()
-        );
+        if (screenController != null) {
+            MissionPassedView mv = screenController.getMissionPassedView();
+            mv.setSummary(
+                    currentLevelNumber,
+                    gameController.getScoreModel().getScore(),
+                    gameController.getLossModel().getLostCount()
+            );
 
-        screenController.showScreen(ScreenController.MISSION_PASSED);
+            screenController.showScreen(ScreenController.MISSION_PASSED);
+        }
     }
 
 

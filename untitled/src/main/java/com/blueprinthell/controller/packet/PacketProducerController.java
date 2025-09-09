@@ -11,6 +11,7 @@ import com.blueprinthell.motion.MotionStrategyFactory;
 import java.awt.*;
 import java.util.*;
 import java.util.List;
+import java.util.Optional;
 
 public class PacketProducerController implements Updatable {
 
@@ -23,6 +24,7 @@ public class PacketProducerController implements Updatable {
     private final double baseSpeed;
     private final int packetsPerPort;
     private final int totalToProduce;
+    private final PacketLossModel lossModel; // <-- ADDED FIELD
 
     private double acc = 0.0;
     private boolean running = false;
@@ -46,12 +48,14 @@ public class PacketProducerController implements Updatable {
                                     List<WireModel> wires,
                                     Map<WireModel, SystemBoxModel> destMap,
                                     double baseSpeed,
-                                    int packetsPerPort) {
+                                    int packetsPerPort,
+                                    PacketLossModel lossModel) {
         this.sourceBoxes = sourceBoxes;
         this.wires = wires;
         this.destMap = destMap;
         this.baseSpeed = baseSpeed;
         this.packetsPerPort = packetsPerPort;
+        this.lossModel = lossModel;
         int outs = sourceBoxes.stream().mapToInt(b -> b.getOutPorts().size()).sum();
         this.totalToProduce = outs * packetsPerPort;
     }
@@ -75,9 +79,6 @@ public class PacketProducerController implements Updatable {
         if (inFlight > 0) inFlight--;
     }
 
-
-
-
     @Override
     public void update(double dt) {
         if (!running || isFinished()) return;
@@ -89,70 +90,88 @@ public class PacketProducerController implements Updatable {
         if (isFinished()) running = false;
     }
 
+    // ========== REPLACED METHOD ==========
     private void emitOnce() {
+        System.out.println("[DEBUG] emitOnce called. running=" + running +
+                ", isFinished=" + isFinished() +
+                ", producedCount=" + producedCount +
+                ", totalToProduce=" + totalToProduce);
         for (SystemBoxModel box : sourceBoxes) {
             if (!box.getInPorts().isEmpty()) {
-                continue;
+                continue; // Skip non-source boxes
             }
             for (PortModel out : box.getOutPorts()) {
                 int producedForThisPort = producedPerPort.getOrDefault(out, 0);
-                if (producedForThisPort >= packetsPerPort) {
+                if (producedForThisPort >= packetsPerPort || producedCount >= totalToProduce) {
                     continue;
                 }
-                if (producedCount >= totalToProduce) {
-                    break;
+
+                // Step 1: Always create the packet.
+                PacketModel packet = createPacketForPort(out);
+
+                // Step 2: Try to find a wire connected to the output port.
+                Optional<WireModel> maybeWire = wires.stream()
+                        .filter(w -> w.getSrcPort() == out)
+                        .findFirst();
+                if (maybeWire.isPresent()) {
+                    System.out.println("[DEBUG] Wire found for port. Attaching packet.");
+                } else {
+                    System.out.println("[DEBUG] No wire found for port. Packet will be lost.");
                 }
 
-                wires.stream()
-                        .filter(w -> w.getSrcPort() == out)
-                        .findFirst()
-                        .ifPresent(wire -> {
-                            PacketModel packet;
+                if (maybeWire.isPresent()) {
+                    WireModel wire = maybeWire.get();
 
-                            // ابتدا پکت پایه را بسازید
-                            if (out.getShape() == PortShape.CIRCLE) {
-                                if (RND.nextInt(10) < 1) {
-                                    packet = createLargePacketForPort(out.getType(), baseSpeed);
-                                } else {
-                                    packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
-                                }
-                            } else {
-                                if (RND.nextInt(10) <1 ) {
-                                    packet = createLargePacketForPort(out.getType(), baseSpeed);
-                                } else {
-                                    packet = new PacketModel(randomType(), baseSpeed);
-                                }
-                            }
+                    packet.setStartSpeedMul(1.0);
+                    boolean compatible = wire.getSrcPort().isCompatible(packet);
+                    MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
+                    packet.setMotionStrategy(ms);
 
-                            // حالا اگر می‌خواهید، آن را به محرمانه تبدیل کنید
-                            // این کار باید بعد از ساخت پکت پایه انجام شود
-                            if (RND.nextInt(10) < 5) { // برای تست، همیشه محرمانه
-                                packet = PacketOps.toConfidential(packet);
-                            }
+                    wire.attachPacket(packet, 0);
+                    inFlight++; // A packet is only "in-flight" if it's on a wire.
+                } else {
+                    lossModel.incrementPacket(packet);
+                }
 
-                            // تنظیم سرعت اولیه و پیکربندی استراتژی حرکت
-                            packet.setStartSpeedMul(1.0);
-                            boolean compatible = wire.getSrcPort().isCompatible(packet);
-                            MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
-                            packet.setMotionStrategy(ms);
+                producedCount++;
+                producedPerPort.put(out, producedForThisPort + 1);
 
-                            // چسباندن پکت به سیم خروجی
-                            wire.attachPacket(packet, 0);
-
-                            // به‌روزرسانی شمارنده‌ها
-                            producedCount++;
-                            inFlight++;
-                            producedPerPort.put(out, producedForThisPort + 1);
-
-                            if (packet instanceof LargePacket lp) {
-                                producedUnits += lp.getOriginalSizeUnits();
-                            } else {
-                                producedUnits++;
-                            }
-                        });
+                if (packet instanceof LargePacket lp) {
+                    producedUnits += lp.getOriginalSizeUnits();
+                } else {
+                    producedUnits++;
+                }
             }
         }
     }
+
+    // ========== NEW HELPER METHOD ==========
+    private PacketModel createPacketForPort(PortModel out) {
+        PacketModel packet;
+        // Create base packet
+        if (out.getShape() == PortShape.CIRCLE) {
+            if (RND.nextInt(10) < 1) { // 10% chance for a large packet
+                packet = createLargePacketForPort(PacketType.CIRCLE, baseSpeed);
+            } else {
+                packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
+            }
+        } else {
+            if (RND.nextInt(10) < 1) { // 10% chance for a large packet
+                packet = createLargePacketForPort(randomType(), baseSpeed);
+            } else {
+                packet = new PacketModel(randomType(), baseSpeed);
+            }
+        }
+
+        // 50% chance to make it confidential
+        if (RND.nextInt(10) < 5) {
+            packet = PacketOps.toConfidential(packet);
+        }
+
+        // The motion strategy is now set in emitOnce after checking for a wire
+        return packet;
+    }
+
     private LargePacket createLargePacketForPort(PacketType portType, double baseSpeed) {
         int units = (RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10);
 
@@ -185,8 +204,6 @@ public class PacketProducerController implements Updatable {
                 : (r == 1) ? PacketType.TRIANGLE
                 : PacketType.CIRCLE;
     }
-    // فایل: untitled/src/main/java/com/blueprinthell/controller/PacketProducerController.java
-// اضافه کردن متدهای جدید:
 
     public void onPacketConsumed() {
         if (inFlight > 0) inFlight--;
@@ -204,50 +221,50 @@ public class PacketProducerController implements Updatable {
         }
         return finished;
     }
+
     public int getPacketsPerPort()      { return packetsPerPort; }
     public int getTotalToProduce()      { return totalToProduce; }
     public int getProducedCount()       { return producedCount; }
     public int getInFlight()            { return inFlight; }
     public boolean isRunning()          { return running; }
 
-
     /** Emission accumulator (seconds) to preserve emission cadence. */
     public double getAccumulatorSec()   { return acc; }
+
     /** Unmodifiable view of per-port produced counters. */
     public Map<PortModel,Integer> getProducedPerPortView() {
         return Collections.unmodifiableMap(new HashMap<>(producedPerPort));
     }
 
-        /** Aggregate list of all out-ports of all source boxes. */
-        public List<PortModel> getOutPorts() {
-                List<PortModel> outs = new ArrayList<>();
-                for (SystemBoxModel b : sourceBoxes) outs.addAll(b.getOutPorts());
-                return outs;
-            }
+    /** Aggregate list of all out-ports of all source boxes. */
+    public List<PortModel> getOutPorts() {
+        List<PortModel> outs = new ArrayList<>();
+        for (SystemBoxModel b : sourceBoxes) outs.addAll(b.getOutPorts());
+        return outs;
+    }
+
     // -------------------- SNAPSHOT RESTORE --------------------
-      public void restoreFrom(int producedCount,
+    public void restoreFrom(int producedCount,
                             int inFlight,
                             double accumulatorSec,
                             boolean running,
                             Map<PortModel,Integer> perPortProduced) {
-                // variable counters
-                        this.producedCount  = Math.min(Math.max(0, producedCount), this.totalToProduce);
-                this.inFlight       = Math.max(0, inFlight);
-                this.acc            = Math.max(0.0, accumulatorSec);
+        // variable counters
+        this.producedCount  = Math.min(Math.max(0, producedCount), this.totalToProduce);
+        this.inFlight       = Math.max(0, inFlight);
+        this.acc            = Math.max(0.0, accumulatorSec);
 
-                        // rebuild per-port counters
-                                this.producedPerPort.clear();
-                if (perPortProduced != null) {
-                        for (Map.Entry<PortModel,Integer> e : perPortProduced.entrySet()) {
-                                int v = (e.getValue() == null) ? 0 : e.getValue();
-                                v = Math.max(0, Math.min(this.packetsPerPort, v)); // clamp by current final packetsPerPort
-                                if (e.getKey() != null) this.producedPerPort.put(e.getKey(), v);
-                            }
-                    }
-
-                        // only allow running if there's still budget left
-                                this.running = running && (this.producedCount < this.totalToProduce);
+        // rebuild per-port counters
+        this.producedPerPort.clear();
+        if (perPortProduced != null) {
+            for (Map.Entry<PortModel,Integer> e : perPortProduced.entrySet()) {
+                int v = (e.getValue() == null) ? 0 : e.getValue();
+                v = Math.max(0, Math.min(this.packetsPerPort, v)); // clamp by current final packetsPerPort
+                if (e.getKey() != null) this.producedPerPort.put(e.getKey(), v);
             }
+        }
 
+        // only allow running if there's still budget left
+        this.running = running && (this.producedCount < this.totalToProduce);
+    }
 }
-

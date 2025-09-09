@@ -66,7 +66,7 @@ public class PvPResultView extends JPanel {
 
         // Player score
         JPanel playerPanel = createScoreCard("YOU", playerScore, Color.BLUE);
-        playerScoreLabel = (JLabel) playerPanel.getComponent(1);
+        playerScoreLabel = (JLabel) playerPanel.getComponent(2);
         scorePanel.add(playerPanel);
 
         // VS separator
@@ -77,7 +77,7 @@ public class PvPResultView extends JPanel {
 
         // Opponent score
         JPanel opponentPanel = createScoreCard("OPPONENT", opponentScore, Color.RED);
-        opponentScoreLabel = (JLabel) opponentPanel.getComponent(1);
+        opponentScoreLabel = (JLabel) opponentPanel.getComponent(2);
         scorePanel.add(opponentPanel);
 
         mainPanel.add(scorePanel);

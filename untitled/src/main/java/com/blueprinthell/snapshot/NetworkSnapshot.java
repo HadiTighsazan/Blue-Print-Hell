@@ -97,6 +97,7 @@ public final class NetworkSnapshot implements Serializable {
         public int producedForThisPort;
     }
 
+
     public static final class BoxState implements Serializable {
         public String id;                 // SystemBoxModel.getId()
         public SystemKind primaryKind;    // kind at capture time
@@ -104,6 +105,8 @@ public final class NetworkSnapshot implements Serializable {
         public double disableTimer;       // remaining cooldown/disable secs
         public int x;
         public int y;
+        public int width;  // <-- ADD THIS LINE
+        public int height; // <-- ADD THIS LINE
         public List<PortShape> inShapes = new ArrayList<>();
         public List<PortShape> outShapes = new ArrayList<>();
 
@@ -129,6 +132,7 @@ public final class NetworkSnapshot implements Serializable {
         }
     }
 
+    // ... rest of the file ...
 
     // ---------------------------------------------------------------------
     // WIRE

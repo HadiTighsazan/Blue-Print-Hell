@@ -119,6 +119,10 @@ public class PvPGameSession {
         if (gameLoopTask != null) gameLoopTask.cancel(false);
         currentPhase = Phase.COUNTDOWN;
 
+        // Initialize the simulation engines with the final layouts BEFORE starting the match.
+        // This is the core fix for the packet production issue.
+        serverGameSession.initializeLayouts(layoutP1, layoutP2);
+
         MatchStart startMsg = new MatchStart(matchId);
         startMsg.opponentBoxes = layoutP2 != null ? layoutP2.boxes : new ArrayList<>();
         startMsg.opponentWires = layoutP2 != null ? layoutP2.wires : new ArrayList<>();
@@ -136,9 +140,11 @@ public class PvPGameSession {
     private void startMatch() {
         currentPhase = Phase.MATCH;
         serverGameSession.startSimulations();
+
+        serverGameSession.startPacketProduction();
+
         gameLoopTask = executor.scheduleAtFixedRate(this::matchTick, 0, 16, TimeUnit.MILLISECONDS); // ~60 FPS
     }
-
     private void matchTick() {
         if (currentPhase != Phase.MATCH) return;
         int frame = frameId.incrementAndGet();
@@ -154,9 +160,29 @@ public class PvPGameSession {
         }
     }
 
+    // in blueprinthell/server/pvp/PvPGameSession.java
+
     private void sendTickUpdate() {
         NetworkSnapshot[] snapshots = serverGameSession.captureSnapshots();
 
+        // *** ADDING DEBUG MESSAGES HERE ***
+        boolean p1HasPackets = snapshots[0].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty());
+        boolean p2HasPackets = snapshots[1].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty());
+
+        if (p1HasPackets || p2HasPackets) {
+            System.out.println("[SERVER DEBUG] Sending tick. P1 has packets: " + p1HasPackets + ", P2 has packets: " + p2HasPackets);
+        } else {
+            System.out.println("[SERVER DEBUG] Sending tick, but NEITHER player snapshot has packets.");
+        }
+        // *** END OF DEBUG MESSAGES ***
+
+
+        if (snapshots[0].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty())) {
+            System.out.println("[DEBUG] Player 1 snapshot HAS packets. Sending to client.");
+        }
+        if (snapshots[1].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty())) {
+            System.out.println("[DEBUG] Player 2 snapshot HAS packets. Sending to client.");
+        }
         GameStateUpdate updateP1 = new GameStateUpdate(matchId, frameId.get());
         updateP1.playerStateJson = gson.toJson(snapshots[0]);
         updateP1.opponentStateJson = gson.toJson(snapshots[1]);

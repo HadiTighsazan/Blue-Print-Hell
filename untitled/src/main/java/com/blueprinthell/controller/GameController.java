@@ -141,6 +141,8 @@ public class GameController implements NetworkController {
         return snapshotCoreController.captureSnapshot();
     }
 
+
+
     @Override
     public void restoreState(NetworkSnapshot snap) {
         if (getRegistrar() != null) getRegistrar().clearTransientState();
@@ -149,6 +151,11 @@ public class GameController implements NetworkController {
             levelCoreManager.ensureSnapshotService(); // This call is now correct
         }
         snapshotCoreController.restoreState(snap);
+
+        // <<< این خط اضافه شده است >>>
+        // After any restore, check if the level is already complete.
+        // This applies to both single-player resume and PvP state updates.
+        checkCompletionAfterRestore();
     }
 
     public void startAutoSave() {
@@ -184,6 +191,8 @@ public class GameController implements NetworkController {
             }
         }
     }
+
+
 
     private boolean producerIsFinishedAndGameIsStable() {
         if (getProducerController() == null || !getProducerController().isFinished()) {

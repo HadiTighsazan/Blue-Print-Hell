@@ -213,12 +213,9 @@ public class SimulationRegistrar {
             consumer.setLargeGroupRegistry(largeGroupRegistry);
         }
 
-        // 7) سایر کنترلرهای اختیاری (timeout, durability, throttle, ...)
         registerOptionalControllers(wires, boxes, destMap);
 
-        // *** START OF CHANGES ***
-        // UI-dependent controllers should only be created if a UI exists.
-        // The presence of hudView is a good indicator for non-headless mode.
+
         if (hudView != null && screenController != null) {
             int plannedTotal = (sources != null && producer != null)
                     ? sources.stream().mapToInt(b -> b.getOutPorts().size() * producer.getPacketsPerPort()).sum()
@@ -256,12 +253,10 @@ public class SimulationRegistrar {
         SnapshotController snapshotCtrl = new SnapshotController(networkController, snapshotManager);
         simulation.register(snapshotCtrl);
 
-        // Register renderer only if it exists
         if (packetRenderer != null) {
-            simulation.register(packetRenderer);
+            simulation.registerRenderer(packetRenderer);
         }
         simulation.register(collisionController);
-        // *** END OF CHANGES ***
     }
     private void attachBehaviorsForBox(SystemBoxModel box,
                                        List<SystemBoxModel> allBoxes,

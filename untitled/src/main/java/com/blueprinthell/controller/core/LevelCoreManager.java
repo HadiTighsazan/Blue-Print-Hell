@@ -102,6 +102,9 @@ public class LevelCoreManager {
         }
 
         if (!isHeadless) {
+            gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires(), gameController.getSimulation()));
+
+            gameController.setHudController(new HudController(usageModel, gameController.getLossModel(), gameController.getCoinModel(), levelManager, gameController.getHudView()));
             SystemBoxDragController.setDragEnabled(true);
             SystemBoxDragController.setNetworkChanged(gameController::updateStartEnabled);
             buildWireControllers();
@@ -123,32 +126,45 @@ public class LevelCoreManager {
         WireModel.setSourceInputPorts(sources);
         WireModel.setSimulationController(gameController.getSimulation());
 
+        // ========== START OF CHANGE ==========
+        // این بلوک کد کاملاً تغییر کرده است
         int stageIndex = levelManager.getLevelIndex() + 1;
-        int perPortCount = Config.PACKETS_PER_PORT * stageIndex;
-        int totalOutPorts = sources.stream().mapToInt(b -> b.getOutPorts().size()).sum();
-        int plannedPackets = perPortCount * totalOutPorts;
+        // تعداد پکت‌ها را بر اساس تعریف مرحله (level definition) تنظیم می‌کنیم
+        int perPortCount = (levelManager.getCurrentLevel() != null)
+                ? levelManager.getCurrentLevel().getPacketsPerPort()
+                : Config.PACKETS_PER_PORT;
 
+        // PacketProducerController را هم برای سرور و هم برای کلاینت می‌سازیم
         gameController.setProducerController(new PacketProducerController(
                 sources, gameController.getWires(), destMap,
                 Config.DEFAULT_PACKET_SPEED,
-                perPortCount));
-
-        if (!isHeadless) {
-            gameController.getHudCoord().wireLevel(gameController.getProducerController());
-        }
+                perPortCount,
+                gameController.getLossModel()
+        ));
 
         gameController.getSimulation().setPacketProducerController(gameController.getProducerController());
 
+        // کدهای مربوط به UI فقط در حالت غیر Headless اجرا می‌شوند
+        if (!isHeadless) {
+            gameController.getHudCoord().wireLevel(gameController.getProducerController());
+        }
+        // ========== END OF CHANGE ==========
+
         double threshold = levelManager.getCurrentLevel().getMaxLossRatio();
-        LossMonitorController lossCtrl = new LossMonitorController(
-                gameController.getLossModel(), plannedPackets, threshold,
-                gameController.getSimulation(), gameController.getScreenController(),
-                gameController::retryStage);
-        gameController.getSimulation().register(lossCtrl);
+
+        // LossMonitorController setup is now conditional on the producer existing
+        PacketProducerController producer = gameController.getProducerController();
+        if (producer != null) {
+            int plannedPackets = producer.getTotalToProduce();
+            LossMonitorController lossCtrl = new LossMonitorController(
+                    gameController.getLossModel(), plannedPackets, threshold,
+                    gameController.getSimulation(), gameController.getScreenController(),
+                    gameController::retryStage);
+            gameController.getSimulation().register(lossCtrl);
+        }
 
         if (!isHeadless) {
-            gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires()));
-
+            gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires(), gameController.getSimulation()));
             // Setup UI-only controllers
             gameController.setHudController(new HudController(usageModel, gameController.getLossModel(), gameController.getCoinModel(), levelManager, gameController.getHudView()));
             gameController.setShopController(new ShopController(
@@ -166,43 +182,25 @@ public class LevelCoreManager {
             gameController.getSimulation().register(eliphas);
         }
 
-
-
         gameController.setRegistrar(new SimulationRegistrar(
                 gameController,
                 gameController.getSimulation(),
                 gameController.getScreenController(),
                 gameController.getCollisionController(),
-
-                // This will be null in headless mode, which is now OK
                 gameController.getPacketRenderer(),
-
                 gameController.getScoreModel(),
                 gameController.getCoinModel(),
                 gameController.getLossModel(),
                 usageModel,
                 gameController.getSnapshotMgr(),
-
-                // This will be null in headless mode, which is now OK
                 gameController.getHudView(),
-
                 levelManager
         ));
 
-
         gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
-
         LargeGroupRegistry largeRegistry = gameController.getRegistrar().getLargeGroupRegistry();
 
-        gameController.setSnapshotSvc(new SnapshotService(
-                gameController.getDestMap(), boxes, gameController.getWires(),
-                gameController.getScoreModel(), gameController.getCoinModel(), gameController.getLossModel(),
-                usageModel, gameController.getSnapshotMgr(), gameController.getHudView(),
-                gameController.getGameView(), gameController.getPacketRenderer(),
-                List.of(gameController.getProducerController()),
-                gameController::updateStartEnabled,
-                () -> levelManager.getLevelIndex() + 1,
-                largeRegistry));
+        ensureSnapshotService(); // This method name is more accurate now.
 
         List<Updatable> systemControllers = new ArrayList<>();
         if (!isHeadless) {
@@ -212,6 +210,8 @@ public class LevelCoreManager {
         if (wireRemovalController != null) {
             gameController.getRegistrar().setWireRemover(wireRemovalController);
         }
+
+        // Pass the potentially null producer to registerAll
         gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
 
         if (!isHeadless) {
@@ -220,7 +220,6 @@ public class LevelCoreManager {
             gameController.startAutoSave();
         }
     }
-
     public void buildWireControllers() {
         if (isHeadless) return;
         WireCreationController creator = new WireCreationController(

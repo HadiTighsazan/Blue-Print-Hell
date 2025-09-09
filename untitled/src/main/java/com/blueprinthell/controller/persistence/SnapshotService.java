@@ -76,6 +76,8 @@ public final class SnapshotService {
         snapshotManager.recordSnapshot(buildSnapshot());
     }
 
+    // ... inside SnapshotService.java ...
+
     public NetworkSnapshot buildSnapshot() {
         Map<PortModel, SystemBoxModel> portToBox = buildPortToBoxMap(this.boxes);
         NetworkSnapshot snap = new NetworkSnapshot(scoreModel.getScore());
@@ -151,6 +153,8 @@ public final class SnapshotService {
             }
             bs.x = b.getX();
             bs.y = b.getY();
+            bs.width = b.getWidth();   // <-- ADD THIS LINE
+            bs.height = b.getHeight(); // <-- ADD THIS LINE
             bs.inShapes.addAll(b.getInShapes());
             bs.outShapes.addAll(b.getOutShapes());
             for (PacketModel p : b.getBitBuffer()) bs.bitBuffer.add(toPacketState(p));
@@ -261,10 +265,12 @@ public final class SnapshotService {
         for (BoxState bs : snap.world.boxes) {
             SystemBoxModel box = idToBox.get(bs.id);
             if (box == null) continue;
-            if (hasBoxXY) {
-                box.setX(bs.x);
-                box.setY(bs.y);
-            }
+            // The schema version check is no longer needed as v3 is the standard
+            box.setX(bs.x);
+            box.setY(bs.y);
+            box.setWidth(bs.width);   // <-- ADD THIS LINE
+            box.setHeight(bs.height); // <-- ADD THIS LINE
+
             box.clearBuffer();
             if (!bs.enabled) {
                 if (bs.disableTimer > 1e-6) box.disableFor(bs.disableTimer);
@@ -333,7 +339,6 @@ public final class SnapshotService {
         if (gameView != null) { // Check if UI components exist
             SwingUtilities.invokeLater(() -> {
                 gameView.reset(boxes, wires);
-                if (packetRenderer != null) packetRenderer.refreshAll();
                 gameView.rebuildControllers(wires, usageModel, coinModel, networkChangedCallback);
                 if (hudView != null) {
                     hudView.setCoins(coinModel.getCoins());
@@ -342,6 +347,8 @@ public final class SnapshotService {
             });
         }
     }
+
+// ... (rest of the class is unchanged) ...
 
     // Static helper methods are unchanged
     private static Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {

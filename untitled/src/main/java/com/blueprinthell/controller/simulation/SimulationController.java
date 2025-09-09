@@ -12,43 +12,49 @@ import java.util.Map;
 
 public class SimulationController {
     private final List<Updatable> updatables = new ArrayList<>();
+    private final List<Updatable> renderUpdatables = new ArrayList<>();
     private TimelineController timelineController;
     private double elapsedSeconds = 0.0;
     private PacketProducerController packetProducer;
     private final Map<PortModel, SystemBoxModel> portToSystem = new HashMap<>();
 
-    // The Swing Timer is removed. A simple running flag is used instead.
     private boolean running = false;
 
     public SimulationController(int fps) {
-        // The constructor no longer creates a javax.swing.Timer.
-        // The 'fps' parameter is kept for potential future use (e.g., fixed-step simulation)
+        // Constructor remains the same
     }
 
-    /**
-     * This method is now public and replaces the old private 'tick'.
-     * It manually advances the simulation by a given delta time.
-     * This is the new core of the simulation loop, callable from any context (client or server).
-     * @param dt Delta time in seconds.
-     */
     public void update(double dt) {
-        if (!running || dt <= 0) return;
+        if (dt <= 0) return;
 
-        List<Updatable> snapshot;
-        synchronized (updatables) {
-            snapshot = new ArrayList<>(updatables);
+        // Step 1: Always update render-related controllers
+        List<Updatable> renderSnapshot;
+        synchronized (renderUpdatables) {
+            renderSnapshot = new ArrayList<>(renderUpdatables);
         }
-        for (Updatable u : snapshot) {
+        for (Updatable u : renderSnapshot) {
             u.update(dt);
         }
-        if (timelineController != null) {
-            elapsedSeconds += dt;
-            if (elapsedSeconds >= 1.0) {
-                elapsedSeconds -= 1.0;
-                timelineController.recordFrame();
+
+        // Step 2: Conditionally update the main simulation logic
+        if (running) {
+            List<Updatable> simulationSnapshot;
+            synchronized (updatables) {
+                simulationSnapshot = new ArrayList<>(updatables);
+            }
+            for (Updatable u : simulationSnapshot) {
+                u.update(dt);
+            }
+            if (timelineController != null) {
+                elapsedSeconds += dt;
+                if (elapsedSeconds >= 1.0) {
+                    elapsedSeconds -= 1.0;
+                    timelineController.recordFrame();
+                }
             }
         }
     }
+
 
     public void register(Updatable u) {
         synchronized (updatables) {
@@ -57,6 +63,20 @@ public class SimulationController {
             }
         }
     }
+
+    /**
+     * <-- پچ ۲: متد جدید برای ثبت کنترلرهای گرافیکی -->
+     * Registers an updatable that should run even when the simulation is paused.
+     * @param u The renderer updatable to register.
+     */
+    public void registerRenderer(Updatable u) {
+        synchronized (renderUpdatables) {
+            if (!renderUpdatables.contains(u)) {
+                renderUpdatables.add(u);
+            }
+        }
+    }
+
 
     public void unregister(Updatable u) {
         synchronized (updatables) {
@@ -68,7 +88,6 @@ public class SimulationController {
         this.timelineController = tc;
     }
 
-    // Start and stop methods now just control the 'running' flag.
     public void start() {
         this.running = true;
     }
@@ -84,6 +103,10 @@ public class SimulationController {
     public void clearUpdatables() {
         synchronized (updatables) {
             updatables.clear();
+        }
+        // Also clear render updatables
+        synchronized (renderUpdatables) {
+            renderUpdatables.clear();
         }
         elapsedSeconds = 0.0;
     }

@@ -170,10 +170,11 @@ public class PvPClientController {
         });
     }
 
-// In PvPClientController.java, ensure this is your handleGameStateUpdate method
+    // in blueprinthell/controller/pvp/PvPClientController.java
 
     private void handleGameStateUpdate(Message msg) {
         if (!(msg instanceof GameStateUpdate update)) return;
+        System.out.println("[DEBUG] Received GameStateUpdate from server. Frame: " + update.frameId);
 
         // A try-catch block is good practice for deserialization
         try {
@@ -186,6 +187,22 @@ public class PvPClientController {
 
         SwingUtilities.invokeLater(() -> {
             if (currentPhase != PvPPhase.MATCH || update.playerState == null) return;
+
+            // *** ADDING DEBUG MESSAGES HERE ***
+            boolean hasPackets = false;
+            if (update.playerState.world != null && update.playerState.world.wires != null) {
+                for (NetworkSnapshot.WireState wireState : update.playerState.world.wires) {
+                    if (wireState.packetsOnWire != null && !wireState.packetsOnWire.isEmpty()) {
+                        hasPackets = true;
+                        System.out.println("[CLIENT DEBUG] Received wire " + wireState.id + " with " + wireState.packetsOnWire.size() + " packets.");
+                    }
+                }
+            }
+            if (!hasPackets) {
+                System.out.println("[CLIENT DEBUG] Received game state, but NO packets were found on any wire.");
+            }
+            // *** END OF DEBUG MESSAGES ***
+
 
             // Restore the local GameController to match the server's authoritative state
             gameController.restoreState(update.playerState);
@@ -206,6 +223,8 @@ public class PvPClientController {
             }
         });
     }
+
+
     private void handleMatchEnd(Message msg) {
         if (!(msg instanceof MatchEnd end)) return;
         currentPhase = PvPPhase.ENDED;

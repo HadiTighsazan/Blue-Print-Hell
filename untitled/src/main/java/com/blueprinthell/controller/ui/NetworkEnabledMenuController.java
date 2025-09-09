@@ -307,8 +307,11 @@ public class NetworkEnabledMenuController {
                 levelManager.getCurrentLevel(),
                 resultHandler.getGameMode()
         );
-    }
 
+        // <<< این خط اضافه شده است >>>
+        // پس از بازیابی کامل، ممکن است مرحله از قبل تمام شده باشد. این را بررسی کن.
+        // checkCompletionAfterRestore(); // This method does not exist in this class
+    }
     public ConnectionManager getConnectionManager() {
         return connectionManager;
     }

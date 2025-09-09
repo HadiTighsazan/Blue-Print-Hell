@@ -5,7 +5,7 @@ import javax.swing.*;
 
 
 public abstract class GameObjectView<T extends GameObjectModel> extends JComponent {
-    protected final T model;
+    protected  T model;
 
     public GameObjectView(T model) {
         this.model = model;
@@ -13,7 +13,9 @@ public abstract class GameObjectView<T extends GameObjectModel> extends JCompone
         setOpaque(false);
     }
 
-
+    public void setModel(T model) {
+        this.model = model;
+    }
 
 
     public void refresh() {
