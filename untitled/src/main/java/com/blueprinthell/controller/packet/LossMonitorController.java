@@ -1,4 +1,3 @@
-// فایل: untitled/src/main/java/com/blueprinthell/controller/LossMonitorController.java
 
 package com.blueprinthell.controller.packet;
 

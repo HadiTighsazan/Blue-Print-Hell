@@ -64,23 +64,29 @@ public class ServerGameSession {
 
             PacketProducerController producerP1 = new PacketProducerController(
                     sourcesP1,
-                    gameControllerP1.getWires(), // حالا این لیست پر است
+                    gameControllerP1.getWires(),
                     gameControllerP1.getDestMap(),
-                    Config.DEFAULT_PACKET_SPEED,
+                    Config.DEFAULT_PACKET_SPEED * 0.8,
                     packetsPerPortP1,
                     gameControllerP1.getLossModel()
-            );
-
+            ) {
+                // Override INTERVAL_SEC برای PvP
+                private static final double INTERVAL_SEC = 0.6;  // به جای 0.4
+            };
             gameControllerP1.setProducerController(producerP1);
             gameControllerP1.getSimulation().setPacketProducerController(producerP1);
         }
-
-        // ... (منطق مشابه برای Player 2) ...
         if (layoutP2 != null) {
+            // 1. ابتدا level را load کن (برای ساختار اولیه)
             gameControllerP2.getLevelManager().loadLevel(1);
+
+            // 2. تبدیل layout به snapshot
             NetworkSnapshot snapshotP2 = LayoutConverter.convertLayoutToSnapshot(layoutP2, 2);
+
+            // 3. بازیابی state (این boxes و wires را پر می‌کند)
             gameControllerP2.restoreState(snapshotP2);
 
+            // 4. ساخت Producer با wires بازیابی شده
             List<SystemBoxModel> sourcesP2 = gameControllerP2.getBoxes().stream()
                     .filter(b -> b.getInPorts().isEmpty() && !b.getOutPorts().isEmpty())
                     .collect(Collectors.toList());
@@ -93,14 +99,18 @@ public class ServerGameSession {
                     sourcesP2,
                     gameControllerP2.getWires(),
                     gameControllerP2.getDestMap(),
-                    Config.DEFAULT_PACKET_SPEED,
+                    Config.DEFAULT_PACKET_SPEED * 0.8, // مثل پلیر 1
                     packetsPerPortP2,
                     gameControllerP2.getLossModel()
-            );
+            ) {
+                // Override INTERVAL_SEC برای PvP (مانند پلیر 1)
+                private static final double INTERVAL_SEC = 0.6;
+            };
 
             gameControllerP2.setProducerController(producerP2);
             gameControllerP2.getSimulation().setPacketProducerController(producerP2);
         }
+
     }
 
 

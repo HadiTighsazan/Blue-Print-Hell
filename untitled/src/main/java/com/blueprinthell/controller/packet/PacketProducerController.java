@@ -29,7 +29,9 @@ public class PacketProducerController implements Updatable {
     private double acc = 0.0;
     private boolean running = false;
     private int producedCount = 0;
-
+    private double productionSpeedMultiplier = 0.2; // شروع با 20% سرعت
+    private double rampUpTime = 0.0;
+    private static final double RAMP_UP_DURATION = 3.0; // 3 ثانیه برای رسیدن به سرعت کامل
     // --- تغییر: از inFlight برای شمارش پکت‌های درحال حرکت استفاده می‌کنیم
     private int inFlight = 0;
     private int producedUnits = 0;
@@ -63,26 +65,20 @@ public class PacketProducerController implements Updatable {
     public void startProduction() { running = true; }
     public void stopProduction()  { running = false; }
 
-    public void reset() {
-        running = false;
-        acc = 0.0;
-
-        // --- تغییر: ریست شمارنده‌ها برای راند جدید
-        producedCount = 0;
-        inFlight = 0;
-        producedPerPort.clear();
-        // returnedCredits را دست‌نخورده می‌گذاریم تا حذف فیلد نداشته باشیم
-    }
-
-    // --- تغییر: این متد حالا وقتی پکتی برمی‌گرده، inFlight را کم می‌کند
-    public void onPacketReturned() {
-        if (inFlight > 0) inFlight--;
-    }
-
     @Override
     public void update(double dt) {
         if (!running || isFinished()) return;
-        acc += dt;
+
+        // Ramp up سرعت تولید
+        if (rampUpTime < RAMP_UP_DURATION) {
+            rampUpTime += dt;
+            productionSpeedMultiplier = 0.2 + (0.8 * (rampUpTime / RAMP_UP_DURATION));
+            productionSpeedMultiplier = Math.min(1.0, productionSpeedMultiplier);
+        }
+
+        // اعمال multiplier به سرعت تولید
+        acc += dt * productionSpeedMultiplier;
+
         while (acc >= INTERVAL_SEC && !isFinished()) {
             acc -= INTERVAL_SEC;
             emitOnce();
@@ -90,9 +86,25 @@ public class PacketProducerController implements Updatable {
         if (isFinished()) running = false;
     }
 
+    public void reset() {
+        running = false;
+        acc = 0.0;
+        producedCount = 0;
+        inFlight = 0;
+        producedPerPort.clear();
+        // ریست ramp-up
+        productionSpeedMultiplier = 0.2;
+        rampUpTime = 0.0;
+    }
+
+    // --- تغییر: این متد حالا وقتی پکتی برمی‌گرده، inFlight را کم می‌کند
+    public void onPacketReturned() {
+        if (inFlight > 0) inFlight--;
+    }
+
+
+
     private void emitOnce() {
-        // اضافه کردن لاگ برای دیباگ
-        System.out.println("[DEBUG] emitOnce - Wires count: " + wires.size());
 
         for (SystemBoxModel box : sourceBoxes) {
             if (!box.getInPorts().isEmpty()) continue; // Skip non-source boxes
@@ -112,7 +124,6 @@ public class PacketProducerController implements Updatable {
                         .findFirst();
 
                 if (maybeWire.isPresent()) {
-                    System.out.println("[DEBUG] Wire found for port, attaching packet");
                     WireModel wire = maybeWire.get();
 
                     packet.setStartSpeedMul(1.0);
@@ -121,9 +132,8 @@ public class PacketProducerController implements Updatable {
                     packet.setMotionStrategy(ms);
 
                     wire.attachPacket(packet, 0);
-                    inFlight++; // A packet is only "in-flight" if it's on a wire.
+                    inFlight++;
                 } else {
-                    System.out.println("[DEBUG] No wire for port " + out + ", packet will be lost");
                     lossModel.incrementPacket(packet);
                 }
 

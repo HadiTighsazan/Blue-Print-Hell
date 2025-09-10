@@ -148,15 +148,15 @@ public class PvPGameSession {
 
         serverGameSession.startPacketProduction();
 
-        gameLoopTask = executor.scheduleAtFixedRate(this::matchTick, 0, 16, TimeUnit.MILLISECONDS); // ~60 FPS
+        gameLoopTask = executor.scheduleAtFixedRate(this::matchTick, 0, 33, TimeUnit.MILLISECONDS);
     }
     private void matchTick() {
         if (currentPhase != Phase.MATCH) return;
         int frame = frameId.incrementAndGet();
 
-        serverGameSession.tick(1.0 / 60.0);
+        serverGameSession.tick(1.0 / 30.0);
 
-        if (frame % 3 == 0) { // Send updates roughly 20 times per second
+        if (frame % 5 == 0) {
             sendTickUpdate();
         }
 
@@ -165,29 +165,17 @@ public class PvPGameSession {
         }
     }
 
-    // in blueprinthell/server/pvp/PvPGameSession.java
 
     private void sendTickUpdate() {
         NetworkSnapshot[] snapshots = serverGameSession.captureSnapshots();
 
-        // *** ADDING DEBUG MESSAGES HERE ***
         boolean p1HasPackets = snapshots[0].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty());
         boolean p2HasPackets = snapshots[1].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty());
 
-        if (p1HasPackets || p2HasPackets) {
-            System.out.println("[SERVER DEBUG] Sending tick. P1 has packets: " + p1HasPackets + ", P2 has packets: " + p2HasPackets);
-        } else {
-            System.out.println("[SERVER DEBUG] Sending tick, but NEITHER player snapshot has packets.");
-        }
-        // *** END OF DEBUG MESSAGES ***
 
 
-        if (snapshots[0].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty())) {
-            System.out.println("[DEBUG] Player 1 snapshot HAS packets. Sending to client.");
-        }
-        if (snapshots[1].world.wires.stream().anyMatch(w -> !w.packetsOnWire.isEmpty())) {
-            System.out.println("[DEBUG] Player 2 snapshot HAS packets. Sending to client.");
-        }
+
+
         GameStateUpdate updateP1 = new GameStateUpdate(matchId, frameId.get());
         updateP1.playerStateJson = gson.toJson(snapshots[0]);
         updateP1.opponentStateJson = gson.toJson(snapshots[1]);
