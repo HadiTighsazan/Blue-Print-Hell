@@ -90,16 +90,13 @@ public class PacketProducerController implements Updatable {
         if (isFinished()) running = false;
     }
 
-    // ========== REPLACED METHOD ==========
     private void emitOnce() {
-        System.out.println("[DEBUG] emitOnce called. running=" + running +
-                ", isFinished=" + isFinished() +
-                ", producedCount=" + producedCount +
-                ", totalToProduce=" + totalToProduce);
+        // اضافه کردن لاگ برای دیباگ
+        System.out.println("[DEBUG] emitOnce - Wires count: " + wires.size());
+
         for (SystemBoxModel box : sourceBoxes) {
-            if (!box.getInPorts().isEmpty()) {
-                continue; // Skip non-source boxes
-            }
+            if (!box.getInPorts().isEmpty()) continue; // Skip non-source boxes
+
             for (PortModel out : box.getOutPorts()) {
                 int producedForThisPort = producedPerPort.getOrDefault(out, 0);
                 if (producedForThisPort >= packetsPerPort || producedCount >= totalToProduce) {
@@ -113,13 +110,9 @@ public class PacketProducerController implements Updatable {
                 Optional<WireModel> maybeWire = wires.stream()
                         .filter(w -> w.getSrcPort() == out)
                         .findFirst();
-                if (maybeWire.isPresent()) {
-                    System.out.println("[DEBUG] Wire found for port. Attaching packet.");
-                } else {
-                    System.out.println("[DEBUG] No wire found for port. Packet will be lost.");
-                }
 
                 if (maybeWire.isPresent()) {
+                    System.out.println("[DEBUG] Wire found for port, attaching packet");
                     WireModel wire = maybeWire.get();
 
                     packet.setStartSpeedMul(1.0);
@@ -130,6 +123,7 @@ public class PacketProducerController implements Updatable {
                     wire.attachPacket(packet, 0);
                     inFlight++; // A packet is only "in-flight" if it's on a wire.
                 } else {
+                    System.out.println("[DEBUG] No wire for port " + out + ", packet will be lost");
                     lossModel.incrementPacket(packet);
                 }
 

@@ -59,7 +59,12 @@ public class PvPClientController {
         this.connectionManager = connectionManager;
         registerMessageHandlers();
     }
-
+    public void sendMoveBoxAction(String boxId, int newX, int newY) {
+        if (currentPhase == PvPPhase.BUILD && currentMatchId != null) {
+            PlayerAction_MoveBox action = new PlayerAction_MoveBox(currentMatchId, boxId, newX, newY);
+            connectionManager.sendMessage(action);
+        }
+    }
 
     private void registerMessageHandlers() {
         // این دو خط، مشکل اصلی را حل می‌کنند

@@ -37,58 +37,57 @@ public class ServerGameSession {
     }
 
 
-
-// In file: blueprinthell/server/pvp/ServerGameSession.java
+// In blueprinthell/server/pvp/ServerGameSession.java
 
     public void initializeLayouts(SubmitLayout layoutP1, SubmitLayout layoutP2) {
-        System.out.println("Initializing layouts for match: " + matchId);
+        System.out.println(">>> Initializing layouts for match: " + matchId);
 
         // Player 1
         if (layoutP1 != null) {
-            // 1. Load the level structure first
+            // 1. ابتدا level را load کن (برای ساختار اولیه)
             gameControllerP1.getLevelManager().loadLevel(1);
 
-            // 2. Convert the player's layout into a snapshot
+            // 2. تبدیل layout به snapshot
             NetworkSnapshot snapshotP1 = LayoutConverter.convertLayoutToSnapshot(layoutP1, 1);
 
-            // 3. Restore the state to apply the player's layout
+            // 3. بازیابی state (این boxes و wires را پر می‌کند)
             gameControllerP1.restoreState(snapshotP1);
 
-            // 4. *** THE FIX: Re-create the PacketProducerController with the now-populated lists ***
+            // 4. ساخت Producer با wires بازیابی شده
             List<SystemBoxModel> sourcesP1 = gameControllerP1.getBoxes().stream()
                     .filter(b -> b.getInPorts().isEmpty() && !b.getOutPorts().isEmpty())
                     .collect(Collectors.toList());
 
-            int packetsPerPortP1 = gameControllerP1.getLevelManager().getCurrentLevel().getPacketsPerPort();
+            int packetsPerPortP1 = gameControllerP1.getLevelManager()
+                    .getCurrentLevel()
+                    .getPacketsPerPort();
 
             PacketProducerController producerP1 = new PacketProducerController(
                     sourcesP1,
-                    gameControllerP1.getWires(),
+                    gameControllerP1.getWires(), // حالا این لیست پر است
                     gameControllerP1.getDestMap(),
                     Config.DEFAULT_PACKET_SPEED,
                     packetsPerPortP1,
                     gameControllerP1.getLossModel()
             );
+
             gameControllerP1.setProducerController(producerP1);
             gameControllerP1.getSimulation().setPacketProducerController(producerP1);
-            System.out.println("Player 1 layout and producer re-configured on server.");
-
-        } else {
-            System.err.println("WARNING: Player 1 layout was null for match " + matchId);
         }
 
-        // Player 2 (Apply the same logic)
+        // ... (منطق مشابه برای Player 2) ...
         if (layoutP2 != null) {
             gameControllerP2.getLevelManager().loadLevel(1);
-            NetworkSnapshot snapshotP2 = LayoutConverter.convertLayoutToSnapshot(layoutP2, 2); // Use a different level number for clarity if needed, though 1 is fine
+            NetworkSnapshot snapshotP2 = LayoutConverter.convertLayoutToSnapshot(layoutP2, 2);
             gameControllerP2.restoreState(snapshotP2);
 
-            // *** THE FIX: Re-create the PacketProducerController for Player 2 ***
             List<SystemBoxModel> sourcesP2 = gameControllerP2.getBoxes().stream()
                     .filter(b -> b.getInPorts().isEmpty() && !b.getOutPorts().isEmpty())
                     .collect(Collectors.toList());
 
-            int packetsPerPortP2 = gameControllerP2.getLevelManager().getCurrentLevel().getPacketsPerPort();
+            int packetsPerPortP2 = gameControllerP2.getLevelManager()
+                    .getCurrentLevel()
+                    .getPacketsPerPort();
 
             PacketProducerController producerP2 = new PacketProducerController(
                     sourcesP2,
@@ -98,40 +97,78 @@ public class ServerGameSession {
                     packetsPerPortP2,
                     gameControllerP2.getLossModel()
             );
+
             gameControllerP2.setProducerController(producerP2);
             gameControllerP2.getSimulation().setPacketProducerController(producerP2);
-            System.out.println("Player 2 layout and producer re-configured on server.");
-        } else {
-            System.err.println("WARNING: Player 2 layout was null for match " + matchId);
         }
     }
 
+
     public void tick(double dt) {
+        // بررسی که simulation در حال اجرا است
+        if (!gameControllerP1.getSimulation().isRunning()) {
+            gameControllerP1.getSimulation().start();
+        }
+        if (!gameControllerP2.getSimulation().isRunning()) {
+            gameControllerP2.getSimulation().start();
+        }
+
+        // آپدیت معمولی
         gameControllerP1.getSimulation().update(dt);
         gameControllerP2.getSimulation().update(dt);
     }
 
-// in blueprinthell/server/pvp/ServerGameSession.java
-
     public void startPacketProduction() {
-        // Start production for player 1
-        if (gameControllerP1 != null && gameControllerP1.getProducerController() != null) {
-            gameControllerP1.getProducerController().startProduction();
-            // *** ADDING DEBUG MESSAGE ***
-            System.out.println(">>> [SERVER] Packet production STARTED for Player 1 in match " + matchId);
-        } else {
-            System.err.println(">>> [SERVER ERROR] PacketProducerController for Player 1 is NULL in match " + matchId + ". CANNOT START PRODUCTION.");
+        // بررسی وضعیت قبل از شروع
+        System.out.println(">>> Starting packet production for match " + matchId);
+
+        // Player 1
+        if (gameControllerP1 != null) {
+            // بررسی simulation state
+            if (!gameControllerP1.getSimulation().isRunning()) {
+                System.out.println(">>> Starting simulation for Player 1");
+                gameControllerP1.getSimulation().start();
+            }
+
+            PacketProducerController producer = gameControllerP1.getProducerController();
+            if (producer != null) {
+                // بررسی که آیا wires موجود هستند
+                List<WireModel> wires = gameControllerP1.getWires();
+                System.out.println(">>> P1 has " + wires.size() + " wires");
+
+                // شروع تولید
+                producer.startProduction();
+                System.out.println(">>> Production started for Player 1");
+            } else {
+                System.err.println(">>> ERROR: No producer for Player 1!");
+            }
         }
 
-        // Start production for player 2
-        if (gameControllerP2 != null && gameControllerP2.getProducerController() != null) {
-            gameControllerP2.getProducerController().startProduction();
-            // *** ADDING DEBUG MESSAGE ***
-            System.out.println(">>> [SERVER] Packet production STARTED for Player 2 in match " + matchId);
-        } else {
-            System.err.println(">>> [SERVER ERROR] PacketProducerController for Player 2 is NULL in match " + matchId + ". CANNOT START PRODUCTION.");
+        // Player 2
+        if (gameControllerP2 != null) {
+            // بررسی simulation state
+            if (!gameControllerP2.getSimulation().isRunning()) {
+                System.out.println(">>> Starting simulation for Player 2");
+                gameControllerP2.getSimulation().start();
+            }
+
+            PacketProducerController producer = gameControllerP2.getProducerController();
+            if (producer != null) {
+                // بررسی که آیا wires موجود هستند
+                List<WireModel> wires = gameControllerP2.getWires();
+                System.out.println(">>> P2 has " + wires.size() + " wires");
+
+                // شروع تولید
+                producer.startProduction();
+                System.out.println(">>> Production started for Player 2");
+            } else {
+                System.err.println(">>> ERROR: No producer for Player 2!");
+            }
         }
     }
+
+
+
     public void applyPlayerAction(int playerSide, Message action) {
         GameController gc = (playerSide == 1) ? gameControllerP1 : gameControllerP2;
 

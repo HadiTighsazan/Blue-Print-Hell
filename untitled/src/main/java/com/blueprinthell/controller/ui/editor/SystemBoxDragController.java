@@ -181,9 +181,7 @@ public class SystemBoxDragController extends MouseAdapter implements MouseMotion
     @Override
     public void mouseReleased(MouseEvent e) {
         if (isPvPMode && pvpController != null) {
-            // In PvP, send the final position to the server
-            // pvpController.sendMoveBoxAction(model.getId(), model.getX(), model.getY());
-            // NOTE: For now, this is disabled as layout is sent periodically during build phase.
+             pvpController.sendMoveBoxAction(model.getId(), model.getX(), model.getY());
         }
 
         // پایان حالت یک‌باره و «قفلِ سخت» تا ریست مرحله

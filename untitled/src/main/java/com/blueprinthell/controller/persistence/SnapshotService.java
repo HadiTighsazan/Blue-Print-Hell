@@ -76,7 +76,6 @@ public final class SnapshotService {
         snapshotManager.recordSnapshot(buildSnapshot());
     }
 
-    // ... inside SnapshotService.java ...
 
     public NetworkSnapshot buildSnapshot() {
         Map<PortModel, SystemBoxModel> portToBox = buildPortToBoxMap(this.boxes);
@@ -170,6 +169,11 @@ public final class SnapshotService {
 
         for (WireModel w : wires) {
             WireState ws = new WireState();
+
+            // VVVV این خط حیاتی را اینجا اضافه کردم VVVV
+            ws.id = w.getCanonicalId();
+            // ^^^^ این خط حیاتی را اینجا اضافه کردم ^^^^
+
             SystemBoxModel from = portToBox.get(w.getSrcPort());
             SystemBoxModel to = portToBox.get(w.getDstPort());
             ws.fromBoxId = (from != null) ? from.getId() : null;
@@ -191,6 +195,7 @@ public final class SnapshotService {
         }
         return snap;
     }
+
 
     public void restore(NetworkSnapshot snap) {
         if (snap == null) return;
@@ -280,6 +285,12 @@ public final class SnapshotService {
             for (PacketState ps : bs.largeBuffer) box.enqueueLargeSilently((LargePacket) fromPacketState(ps));
         }
 
+        // یک نقشه از سیم‌های موجود در کلاینت بر اساس ID آنها بساز
+        Map<String, WireModel> existingWiresMap = new HashMap<>();
+        for (WireModel w : this.wires) {
+            existingWiresMap.put(w.getCanonicalId(), w);
+        }
+
         List<WireModel> rebuilt = new ArrayList<>();
         for (WireState ws : snap.world.wires) {
             SystemBoxModel from = idToBox.get(ws.fromBoxId);
@@ -289,9 +300,13 @@ public final class SnapshotService {
             PortModel src = from.getOutPorts().get(ws.fromOutIndex);
             PortModel dst = to.getInPorts().get(ws.toInIndex);
 
-            WireModel wire = findWireByEndpoints(wires, src, dst);
-            if (wire == null) wire = new WireModel(src, dst);
+            // سیم را بر اساس ID پیدا کن، اگر نبود یکی جدید بساز
+            WireModel wire = existingWiresMap.get(ws.id);
+            if (wire == null) {
+                wire = new WireModel(src, dst);
+            }
 
+            // بقیه منطق مثل قبل است...
             List<Point> pts = new ArrayList<>();
             for (IntPoint ip : ws.path) pts.add(new Point(ip.x, ip.y));
             if (pts.size() >= 2) wire.setPath(new WirePath(pts));
@@ -347,8 +362,6 @@ public final class SnapshotService {
             });
         }
     }
-
-// ... (rest of the class is unchanged) ...
 
     // Static helper methods are unchanged
     private static Map<PortModel, SystemBoxModel> buildPortToBoxMap(List<SystemBoxModel> boxes) {

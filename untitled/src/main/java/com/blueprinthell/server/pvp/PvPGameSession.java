@@ -73,10 +73,7 @@ public class PvPGameSession {
         gameLoopTask = executor.scheduleAtFixedRate(this::buildPhaseTick, 0, 1, TimeUnit.SECONDS);
     }
 
-    /**
-     * Handles incoming messages from players, deserializes them, and delegates them
-     * to the appropriate handler based on the current game phase.
-     */
+
     public void handlePlayerMessage(String sessionId, Message baseMessage, String jsonLine) {
         if (currentPhase == Phase.ENDED) return;
 
@@ -94,6 +91,14 @@ public class PvPGameSession {
                 case SUBMIT_LAYOUT -> handleSubmitLayout(playerSide, (SubmitLayout) fullMessage);
                 case READY_STATE -> handleReadyState(playerSide, (ReadyState) fullMessage);
                 case EXTEND_REQUEST -> handleExtendRequest(sessionId);
+                case PLAYER_ACTION_MOVE_BOX,
+                     PLAYER_ACTION_CREATE_WIRE,
+                     PLAYER_ACTION_REMOVE_WIRE,
+                     PLAYER_ACTION_BUY_ITEM -> {
+                    if (fullMessage != null) {
+                        serverGameSession.applyPlayerAction(playerSide, fullMessage);
+                    }
+                }
             }
         }
     }

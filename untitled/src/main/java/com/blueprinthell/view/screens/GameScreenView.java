@@ -100,7 +100,12 @@ public class GameScreenView extends JPanel {
     }
 
     public void reset(List<SystemBoxModel> boxes, List<WireModel> wires) {
-        gameArea.removeAll();
+        // Remove everything except PacketViews
+        for (Component c : gameArea.getComponents()) {
+            if (!(c instanceof PacketView)) {
+                gameArea.remove(c);
+            }
+        }
         if (freezeController != null) {
             FreezePointRenderer renderer = new FreezePointRenderer(freezeController);
             renderer.setBounds(0, 0, gameArea.getWidth(), gameArea.getHeight());
@@ -128,6 +133,7 @@ public class GameScreenView extends JPanel {
         gameArea.repaint();
         requestFocusInWindow();
     }
+
 
     private PortView findPortView(Container c, PortModel pm) {
         for (Component comp : c.getComponents()) {

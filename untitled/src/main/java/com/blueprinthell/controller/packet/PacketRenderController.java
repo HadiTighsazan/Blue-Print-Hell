@@ -1,5 +1,6 @@
 package com.blueprinthell.controller.packet;
 
+import com.blueprinthell.config.Config;
 import com.blueprinthell.controller.simulation.SimulationController;
 import com.blueprinthell.model.PacketModel;
 import com.blueprinthell.model.PacketType;
@@ -31,39 +32,35 @@ public class PacketRenderController implements Updatable {
 
     @Override
     public void update(double dt) {
-        // --- START OF NEW ROBUST LOGIC ---
-
-        // 1. Collect all current PacketModel instances from the wires.
+        // 1. تمام PacketModel های فعلی را از سیم‌ها جمع‌آوری کن
         List<PacketModel> currentPackets = new ArrayList<>();
         for (WireModel wire : wires) {
             currentPackets.addAll(wire.getPackets());
         }
 
-        // 2. Synchronize the number of views in the pool with the number of current packets.
-        // Add new views if there are more packets than views.
+        // 2. تعداد ویوها را با تعداد پکت‌ها همگام کن
+        // اگر پکت بیشتر از ویو داریم، ویوی جدید اضافه کن
         while (viewPool.size() < currentPackets.size()) {
-            // Create a placeholder view. It will be updated with a real model shortly.
-            PacketView pv = new PacketView(new PacketModel(PacketType.CIRCLE, 0));
+            // از یک سرعت پیش‌فرض مثبت استفاده کنید
+            PacketView pv = new PacketView(new PacketModel(PacketType.CIRCLE, Config.DEFAULT_PACKET_SPEED));
             viewPool.add(pv);
             container.add(pv);
         }
-        // Remove excess views if there are fewer packets than views.
-        while (viewPool.size() > currentPackets.size()) {
-            PacketView pv = viewPool.remove(viewPool.size() - 1);
-            container.remove(pv);
+        // اگر ویو بیشتر از پکت داریم, آنها را مخفی کن
+        for (int i = currentPackets.size(); i < viewPool.size(); i++) {
+            viewPool.get(i).setVisible(false);
         }
 
-        // 3. Update the model for each view in the pool to match the current packets.
+
+        // 3. مدل هر ویو را با پکت متناظر به‌روز کن
         for (int i = 0; i < currentPackets.size(); i++) {
             PacketView viewToUpdate = viewPool.get(i);
             PacketModel modelToShow = currentPackets.get(i);
 
-            // Set the correct model and refresh the view's position and appearance.
             viewToUpdate.setModel(modelToShow);
-            viewToUpdate.refreshView();
+            viewToUpdate.setVisible(true);
+            viewToUpdate.refreshView(); // موقعیت و ظاهر را به‌روز می‌کند
         }
-
-        // --- END OF NEW ROBUST LOGIC ---
 
         container.revalidate();
         container.repaint();

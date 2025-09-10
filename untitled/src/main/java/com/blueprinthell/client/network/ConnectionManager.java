@@ -277,6 +277,7 @@ public class ConnectionManager {
                 case STATE_SYNC -> gson.fromJson(json, StateSync.class);
                 case MATCH_END -> gson.fromJson(json, MatchEnd.class);
                 case EXTEND_GRANTED -> gson.fromJson(json, ExtendGranted.class);
+                case GAME_STATE_UPDATE -> gson.fromJson(json, GameStateUpdate.class);
                 default -> gson.fromJson(json, Message.class);
 
             };
@@ -321,7 +322,7 @@ public class ConnectionManager {
                 }
                 // === اضافه کردن case های PvP ===
                 case QUEUE_STATUS, MATCH_FOUND, BUILD_TICK, MATCH_START,
-                     TICK, STATE_SYNC, MATCH_END, EXTEND_GRANTED -> {
+                     TICK, STATE_SYNC, MATCH_END, EXTEND_GRANTED , GAME_STATE_UPDATE-> {
                     // این پیام‌ها مستقیماً به handler عمومی ارسال می‌شوند
                     Consumer<Message> handler = messageHandlers.get(msg.type);
                     if (handler != null) {
