@@ -114,20 +114,72 @@ public class ServerGameSession {
     }
 
 
+// اضافه کردن debug logging به ServerGameSession.java
+
+// در متد captureSnapshots، برای اطمینان از اینکه packets واقعاً capture می‌شوند:
+
+    public NetworkSnapshot[] captureSnapshots() {
+        NetworkSnapshot[] snapshots = new NetworkSnapshot[]{
+                gameControllerP1.captureSnapshot(),
+                gameControllerP2.captureSnapshot()
+        };
+
+        // ===== Debug logging =====
+        // بررسی تعداد packets در snapshot هر بازیکن
+        for (int i = 0; i < snapshots.length; i++) {
+            if (snapshots[i] != null && snapshots[i].world != null && snapshots[i].world.wires != null) {
+                int totalPackets = 0;
+                for (NetworkSnapshot.WireState wire : snapshots[i].world.wires) {
+                    if (wire.packetsOnWire != null) {
+                        totalPackets += wire.packetsOnWire.size();
+                    }
+                }
+                System.out.println("[SERVER DEBUG] Player " + (i+1) + " snapshot has " +
+                        totalPackets + " packets on wires");
+            }
+        }
+        // ===== End debug logging =====
+
+        return snapshots;
+    }
+
+// همچنین در tick متد، برای اطمینان از اینکه simulation واقعاً update می‌شود:
+
     public void tick(double dt) {
         // بررسی که simulation در حال اجرا است
         if (!gameControllerP1.getSimulation().isRunning()) {
+            System.out.println("[SERVER DEBUG] Starting P1 simulation in tick");
             gameControllerP1.getSimulation().start();
         }
         if (!gameControllerP2.getSimulation().isRunning()) {
+            System.out.println("[SERVER DEBUG] Starting P2 simulation in tick");
             gameControllerP2.getSimulation().start();
         }
 
         // آپدیت معمولی
         gameControllerP1.getSimulation().update(dt);
         gameControllerP2.getSimulation().update(dt);
-    }
 
+        // ===== Debug: بررسی وضعیت producers =====
+        if (gameControllerP1.getProducerController() != null) {
+            PacketProducerController p1Producer = gameControllerP1.getProducerController();
+            if (p1Producer.isRunning() && p1Producer.getProducedCount() > 0) {
+                System.out.println("[SERVER DEBUG] P1 Producer: produced=" +
+                        p1Producer.getProducedCount() +
+                        ", inFlight=" + p1Producer.getInFlight());
+            }
+        }
+
+        if (gameControllerP2.getProducerController() != null) {
+            PacketProducerController p2Producer = gameControllerP2.getProducerController();
+            if (p2Producer.isRunning() && p2Producer.getProducedCount() > 0) {
+                System.out.println("[SERVER DEBUG] P2 Producer: produced=" +
+                        p2Producer.getProducedCount() +
+                        ", inFlight=" + p2Producer.getInFlight());
+            }
+        }
+        // ===== End debug =====
+    }
     public void startPacketProduction() {
         // بررسی وضعیت قبل از شروع
         System.out.println(">>> Starting packet production for match " + matchId);
@@ -219,12 +271,7 @@ public class ServerGameSession {
                 .findFirst();
     }
 
-    public NetworkSnapshot[] captureSnapshots() {
-        return new NetworkSnapshot[]{
-                gameControllerP1.captureSnapshot(),
-                gameControllerP2.captureSnapshot()
-        };
-    }
+
 
     public void startSimulations() {
         gameControllerP1.getSimulation().start();

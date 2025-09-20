@@ -157,77 +157,7 @@ public class PvPClientController {
         });
     }
 
-    private void handleMatchStart(Message msg) {
-        if (!(msg instanceof MatchStart start)) return;
-        currentPhase = PvPPhase.COUNTDOWN;
 
-        SwingUtilities.invokeLater(() -> {
-            if (layoutUpdateTimer != null) {
-                layoutUpdateTimer.stop();
-            }
-            gameController.getGameView().setTopControls(null);
-
-            // Create opponent renderer (can be enhanced later to use opponent snapshot)
-            opponentRenderer = new OpponentNetworkRenderer(start.opponentBoxes, start.opponentWires, gameController.getGameView());
-            opponentRenderer.render();
-
-            showCountdown(start.countdownSeconds, this::startMatch);
-        });
-    }
-
-    // in blueprinthell/controller/pvp/PvPClientController.java
-
-    private void handleGameStateUpdate(Message msg) {
-        if (!(msg instanceof GameStateUpdate update)) return;
-        System.out.println("[DEBUG] Received GameStateUpdate from server. Frame: " + update.frameId);
-
-        // A try-catch block is good practice for deserialization
-        try {
-            update.playerState = gson.fromJson(update.playerStateJson, NetworkSnapshot.class);
-            update.opponentState = gson.fromJson(update.opponentStateJson, NetworkSnapshot.class);
-        } catch (Exception e) {
-            System.err.println("Error deserializing snapshot from server: " + e.getMessage());
-            return;
-        }
-
-        SwingUtilities.invokeLater(() -> {
-            if (currentPhase != PvPPhase.MATCH || update.playerState == null) return;
-
-            // *** ADDING DEBUG MESSAGES HERE ***
-            boolean hasPackets = false;
-            if (update.playerState.world != null && update.playerState.world.wires != null) {
-                for (NetworkSnapshot.WireState wireState : update.playerState.world.wires) {
-                    if (wireState.packetsOnWire != null && !wireState.packetsOnWire.isEmpty()) {
-                        hasPackets = true;
-                        System.out.println("[CLIENT DEBUG] Received wire " + wireState.id + " with " + wireState.packetsOnWire.size() + " packets.");
-                    }
-                }
-            }
-            if (!hasPackets) {
-                System.out.println("[CLIENT DEBUG] Received game state, but NO packets were found on any wire.");
-            }
-            // *** END OF DEBUG MESSAGES ***
-
-
-            // Restore the local GameController to match the server's authoritative state
-            gameController.restoreState(update.playerState);
-
-            // Update the PvP-specific HUD (scores, ammo, etc.)
-            if (matchView != null) {
-                NetworkSnapshot myState = update.playerState;
-                NetworkSnapshot oppState = update.opponentState;
-
-                // Extract real score and loss from the snapshots
-                int myScore = myState.world.score;
-                int myLost = myState.world.packetLoss;
-                int oppScore = (oppState != null) ? oppState.world.score : 0;
-                int oppLost = (oppState != null) ? oppState.world.packetLoss : 0;
-
-                matchView.updateScores(myScore, myLost, oppScore, oppLost);
-                matchView.updateAmmo(myState.world.coins); // Repurpose coins as ammo for PvP
-            }
-        });
-    }
 
 
     private void handleMatchEnd(Message msg) {
@@ -407,6 +337,114 @@ public class PvPClientController {
         countdownTimer.start();
     }
 
+
+    //=======================
+    private void handleGameStateUpdate(Message msg) {
+        if (!(msg instanceof GameStateUpdate update)) return;
+        System.out.println("[DEBUG] Received GameStateUpdate from server. Frame: " + update.frameId);
+
+        // A try-catch block is good practice for deserialization
+        try {
+            update.playerState = gson.fromJson(update.playerStateJson, NetworkSnapshot.class);
+            update.opponentState = gson.fromJson(update.opponentStateJson, NetworkSnapshot.class);
+        } catch (Exception e) {
+            System.err.println("Error deserializing snapshot from server: " + e.getMessage());
+            return;
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            if (currentPhase != PvPPhase.MATCH || update.playerState == null) return;
+
+            // *** Debug messages ***
+            boolean hasPackets = false;
+            if (update.playerState.world != null && update.playerState.world.wires != null) {
+                for (NetworkSnapshot.WireState wireState : update.playerState.world.wires) {
+                    if (wireState.packetsOnWire != null && !wireState.packetsOnWire.isEmpty()) {
+                        hasPackets = true;
+                        System.out.println("[CLIENT DEBUG] Received wire " + wireState.id + " with " + wireState.packetsOnWire.size() + " packets.");
+                    }
+                }
+            }
+            if (!hasPackets) {
+                System.out.println("[CLIENT DEBUG] Received game state, but NO packets were found on any wire.");
+            }
+
+            // Restore the local GameController to match the server's authoritative state
+            gameController.restoreState(update.playerState);
+
+            // ===== اضافه کردن به‌روزرسانی OpponentNetworkRenderer =====
+            if (opponentRenderer != null && update.opponentState != null) {
+                opponentRenderer.updateOpponentState(update.opponentState);
+
+                // Debug: چک کردن packets حریف
+                if (update.opponentState.world != null && update.opponentState.world.wires != null) {
+                    int opponentPacketCount = 0;
+                    for (NetworkSnapshot.WireState wireState : update.opponentState.world.wires) {
+                        if (wireState.packetsOnWire != null) {
+                            opponentPacketCount += wireState.packetsOnWire.size();
+                        }
+                    }
+                    if (opponentPacketCount > 0) {
+                        System.out.println("[CLIENT DEBUG] Opponent has " + opponentPacketCount + " packets on wires");
+                    }
+                }
+            }
+            // ===== پایان تغییرات =====
+
+            // Update the PvP-specific HUD (scores, ammo, etc.)
+            if (matchView != null) {
+                NetworkSnapshot myState = update.playerState;
+                NetworkSnapshot oppState = update.opponentState;
+
+                // Extract real score and loss from the snapshots
+                int myScore = myState.world.score;
+                int myLost = myState.world.packetLoss;
+                int oppScore = (oppState != null) ? oppState.world.score : 0;
+                int oppLost = (oppState != null) ? oppState.world.packetLoss : 0;
+
+                matchView.updateScores(myScore, myLost, oppScore, oppLost);
+                matchView.updateAmmo(myState.world.coins); // Repurpose coins as ammo for PvP
+            }
+        });
+    }
+
+// همچنین در handleMatchStart، مطمئن شوید که opponentRenderer نگه داشته می‌شود:
+
+    private void handleMatchStart(Message msg) {
+        if (!(msg instanceof MatchStart start)) return;
+        currentPhase = PvPPhase.COUNTDOWN;
+
+        SwingUtilities.invokeLater(() -> {
+            if (layoutUpdateTimer != null) {
+                layoutUpdateTimer.stop();
+            }
+            gameController.getGameView().setTopControls(null);
+
+            // ===== مهم: نگه داشتن reference به opponentRenderer =====
+            // اگر قبلاً renderer داریم، cleanup کنیم
+            if (opponentRenderer != null) {
+                opponentRenderer.cleanup();
+            }
+
+            // Create opponent renderer (can be enhanced later to use opponent snapshot)
+            opponentRenderer = new OpponentNetworkRenderer(
+                    start.opponentBoxes,
+                    start.opponentWires,
+                    gameController.getGameView()
+            );
+            opponentRenderer.render();
+
+            // مطمئن شویم که renderer در بالای همه چیز قرار دارد
+            JPanel gameArea = gameController.getGameView().getGameArea();
+            gameArea.setComponentZOrder(opponentRenderer, 0);
+            // ===== پایان تغییرات =====
+
+            showCountdown(start.countdownSeconds, this::startMatch);
+        });
+    }
+
+// در cleanup متد، مطمئن شوید که opponentRenderer کاملاً cleanup می‌شود:
+
     private void cleanup() {
         currentMatchId = null;
         opponentUsername = null;
@@ -423,6 +461,12 @@ public class PvPClientController {
             layoutUpdateTimer.stop();
             layoutUpdateTimer = null;
         }
+
+        // بازگرداندن HUD اصلی
+        if (gameController != null && gameController.getGameView() != null) {
+            gameController.getGameView().setTopControls(null);
+        }
+
         screenController.removeCustomView(ScreenController.PVP_QUEUE);
         screenController.removeCustomView(ScreenController.PVP_RESULT);
     }

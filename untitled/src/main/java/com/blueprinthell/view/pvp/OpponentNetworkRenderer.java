@@ -1,27 +1,53 @@
 package com.blueprinthell.view.pvp;
 
 import com.blueprinthell.shared.protocol.NetworkProtocol.*;
+import com.blueprinthell.snapshot.NetworkSnapshot;
 import com.blueprinthell.view.screens.GameScreenView;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.*;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * رندر کردن شبکه حریف به صورت کم‌رنگ و غیرقابل تعامل
+ * با قابلیت به‌روزرسانی زنده packets
  */
 public class OpponentNetworkRenderer extends JComponent {
 
     private static final float OPACITY = 0.35f;
     private static final Color OPPONENT_COLOR = new Color(255, 100, 100, 90);
+    private static final Color PACKET_COLOR = new Color(255, 150, 150, 120);
     private static final Stroke WIRE_STROKE = new BasicStroke(
             2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
             0, new float[]{5, 5}, 0
     );
 
-    private final List<SystemLayout> opponentBoxes;
-    private final List<WireLayout> opponentWires;
+    private List<SystemLayout> opponentBoxes;
+    private List<WireLayout> opponentWires;
     private final GameScreenView gameView;
+
+    // برای نمایش packets به صورت زنده
+    private final List<PacketDisplay> livePackets = new CopyOnWriteArrayList<>();
+    private NetworkSnapshot currentOpponentState;
+    private Timer updateTimer;
+
+    // کلاس داخلی برای نمایش packet
+    private static class PacketDisplay {
+        String wireId;
+        double progress;
+        String type;
+        int x, y;
+        Color color;
+
+        PacketDisplay(String wireId, double progress, String type) {
+            this.wireId = wireId;
+            this.progress = progress;
+            this.type = type;
+            this.color = PACKET_COLOR;
+        }
+    }
 
     /**
      * Constructor
@@ -35,6 +61,99 @@ public class OpponentNetworkRenderer extends JComponent {
 
         setOpaque(false);
         setLayout(null);
+
+        // شروع تایمر برای به‌روزرسانی مداوم نمای packets
+        startUpdateTimer();
+    }
+
+    /**
+     * به‌روزرسانی state حریف برای نمایش packets
+     */
+    public void updateOpponentState(NetworkSnapshot opponentState) {
+        if (opponentState == null) return;
+
+        this.currentOpponentState = opponentState;
+
+        // به‌روزرسانی لیست packets
+        livePackets.clear();
+
+        if (opponentState.world != null && opponentState.world.wires != null) {
+            for (NetworkSnapshot.WireState wireState : opponentState.world.wires) {
+                if (wireState.packetsOnWire != null) {
+                    for (NetworkSnapshot.PacketOnWire pow : wireState.packetsOnWire) {
+                        PacketDisplay pd = new PacketDisplay(
+                                wireState.id,
+                                pow.progress,
+                                pow.base.type
+                        );
+
+                        // محاسبه موقعیت packet بر روی wire
+                        Point packetPos = calculatePacketPosition(wireState, pow.progress);
+                        if (packetPos != null) {
+                            pd.x = packetPos.x;
+                            pd.y = packetPos.y;
+                            livePackets.add(pd);
+                        }
+                    }
+                }
+            }
+        }
+
+        // درخواست repaint برای نمایش تغییرات
+        repaint();
+    }
+
+    /**
+     * محاسبه موقعیت packet بر روی wire
+     */
+    private Point calculatePacketPosition(NetworkSnapshot.WireState wireState, double progress) {
+        if (wireState.path == null || wireState.path.size() < 2) return null;
+
+        // محاسبه طول کل مسیر
+        double totalLength = 0;
+        List<Double> segmentLengths = new ArrayList<>();
+
+        for (int i = 0; i < wireState.path.size() - 1; i++) {
+            NetworkSnapshot.IntPoint p1 = wireState.path.get(i);
+            NetworkSnapshot.IntPoint p2 = wireState.path.get(i + 1);
+            double len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            segmentLengths.add(len);
+            totalLength += len;
+        }
+
+        // پیدا کردن segment مناسب بر اساس progress
+        double targetDistance = totalLength * progress;
+        double accumulated = 0;
+
+        for (int i = 0; i < segmentLengths.size(); i++) {
+            double segLen = segmentLengths.get(i);
+
+            if (accumulated + segLen >= targetDistance) {
+                // packet در این segment است
+                NetworkSnapshot.IntPoint p1 = wireState.path.get(i);
+                NetworkSnapshot.IntPoint p2 = wireState.path.get(i + 1);
+
+                double segProgress = (targetDistance - accumulated) / segLen;
+                int x = (int)(p1.x + (p2.x - p1.x) * segProgress);
+                int y = (int)(p1.y + (p2.y - p1.y) * segProgress);
+
+                return new Point(x, y);
+            }
+
+            accumulated += segLen;
+        }
+
+        // اگر به اینجا رسیدیم، packet در انتهای wire است
+        NetworkSnapshot.IntPoint last = wireState.path.get(wireState.path.size() - 1);
+        return new Point(last.x, last.y);
+    }
+
+    /**
+     * شروع تایمر برای refresh مداوم
+     */
+    private void startUpdateTimer() {
+        updateTimer = new Timer(50, e -> repaint());
+        updateTimer.start();
     }
 
     /**
@@ -80,7 +199,56 @@ public class OpponentNetworkRenderer extends JComponent {
         // Draw boxes
         drawBoxes(g2);
 
+        // Draw live packets
+        drawPackets(g2);
+
         g2.dispose();
+    }
+
+    /**
+     * رسم packets زنده
+     */
+    private void drawPackets(Graphics2D g2) {
+        if (livePackets.isEmpty()) return;
+
+        // افزایش opacity برای packets تا بهتر دیده شوند
+        g2.setComposite(AlphaComposite.getInstance(
+                AlphaComposite.SRC_OVER, 0.6f));
+
+        for (PacketDisplay packet : livePackets) {
+            // رسم packet به صورت دایره درخشان
+            int size = 12;
+
+            // سایه برای packet
+            g2.setColor(new Color(0, 0, 0, 50));
+            g2.fillOval(packet.x - size/2 + 2, packet.y - size/2 + 2, size, size);
+
+            // خود packet
+            g2.setColor(packet.color);
+            g2.fillOval(packet.x - size/2, packet.y - size/2, size, size);
+
+            // حاشیه درخشان
+            g2.setColor(new Color(255, 200, 200, 180));
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.drawOval(packet.x - size/2, packet.y - size/2, size, size);
+
+            // افکت glow
+            RadialGradientPaint gradient = new RadialGradientPaint(
+                    packet.x, packet.y, size,
+                    new float[]{0f, 0.5f, 1f},
+                    new Color[]{
+                            new Color(255, 255, 255, 100),
+                            new Color(255, 200, 200, 50),
+                            new Color(255, 200, 200, 0)
+                    }
+            );
+            g2.setPaint(gradient);
+            g2.fillOval(packet.x - size, packet.y - size, size * 2, size * 2);
+        }
+
+        // بازگرداندن composite اصلی
+        g2.setComposite(AlphaComposite.getInstance(
+                AlphaComposite.SRC_OVER, OPACITY));
     }
 
     /**
@@ -239,6 +407,10 @@ public class OpponentNetworkRenderer extends JComponent {
      * Clean up
      */
     public void cleanup() {
+        if (updateTimer != null) {
+            updateTimer.stop();
+        }
+
         if (gameView != null && gameView.getGameArea() != null) {
             gameView.getGameArea().remove(this);
             gameView.getGameArea().repaint();
