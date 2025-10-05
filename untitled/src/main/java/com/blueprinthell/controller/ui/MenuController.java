@@ -1,5 +1,6 @@
 package com.blueprinthell.controller.ui;
 
+import com.blueprinthell.controller.packet.PacketProducerController;
 import com.blueprinthell.controller.persistence.AutoSaveController;
 import com.blueprinthell.controller.GameController;
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
@@ -239,27 +240,39 @@ public class MenuController {
 
     // متد شروع تمیز بازی پس از بازیابی
     private void startRestoredGame() {
-        // شروع simulation
+        // شبیه‌سازی و ذخیره خودکار همیشه باید پس از بازیابی ادامه یابند
         gameController.getSimulation().start();
-
-        // اگر Producer هنوز تمام نشده، تولید را ادامه بده
-        if (gameController.getProducerController() != null
-                && !gameController.getProducerController().isFinished()) {
-
-            // قفل‌کردن درگ چون وارد اجرای مرحله می‌شویم
-            SystemBoxDragController.setDragEnabled(false);
-
-            gameController.getProducerController().startProduction();
-        }
-
-        // resume کردن AutoSave
         gameController.resumeAutoSave();
-
-        // resume کردن timeline
         gameController.getTimeline().resume();
 
-        // تنظیم دکمه pause
-        gameController.getHudCoord().setStartEnabled(false);
-        gameController.getHudView().setToggleText("Pause");
+        PacketProducerController producer = gameController.getProducerController();
+
+        // بررسی می‌کنیم که آیا بازی در هنگام ذخیره شدن در حال اجرا بوده است یا خیر
+        if (producer != null && producer.isRunning()) {
+            // ----- حالت ۱: بازی در حال اجرا بوده است -----
+
+            // قفل کردن درگ، چون بازی در فاز اجرایی است
+            SystemBoxDragController.setDragEnabled(false);
+
+            // ادامه تولید پکت‌ها
+            producer.startProduction();
+
+            // تنظیم دکمه‌های HUD برای حالت بازی در حال اجرا
+            gameController.getHudCoord().setStartEnabled(false);
+            gameController.getHudView().setToggleText("Pause");
+
+        } else {
+            // ----- حالت ۲: بازی در مرحله سیم‌کشی (قبل از شروع) بوده است -----
+
+            // قابلیت درگ باید فعال باشد
+            SystemBoxDragController.setDragEnabled(true);
+
+            // تولید پکت‌ها نباید شروع شود
+            // وضعیت دکمه "Start" را بر اساس اتصالات فعلی به‌روز می‌کنیم
+            gameController.updateStartEnabled();
+
+            // دکمه Pause را به حالت اولیه برمی‌گردانیم (مثلاً Start)
+            // (منطق updateStartEnabled این کار را پوشش می‌دهد)
+        }
     }
 }

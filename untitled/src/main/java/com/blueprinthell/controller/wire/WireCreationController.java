@@ -183,6 +183,13 @@ public class WireCreationController {
                     area.revalidate();
                     area.repaint();
                     if(networkChanged!=null) networkChanged.run();
+                    try {
+                        javax.sound.sampled.Clip clip = com.blueprinthell.media.ResourceManager.INSTANCE.getClip("connect_click.wav");
+                        clip.stop();
+                        clip.setFramePosition(0);
+                        clip.start();
+                    } catch (Exception ignore) {
+                    }
                     new WireEditorController(area, wm, wv, gameView.getSystemBoxViews(), coinModel, usageModel, networkChanged);
                 }
                 else {
