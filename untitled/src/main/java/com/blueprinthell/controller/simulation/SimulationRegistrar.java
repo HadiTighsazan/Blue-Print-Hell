@@ -276,7 +276,7 @@ public class SimulationRegistrar {
                 break;
             }
             case MALICIOUS: {
-                MaliciousBehavior mal = new MaliciousBehavior(box, 0.15);
+                MaliciousBehavior mal = new MaliciousBehavior(box, Config.TROJAN_PROBABILITY_NORMAL);
                 behaviorRegistry.register(box, mal);
                 SystemBehaviorAdapter adapter = new SystemBehaviorAdapter(box, mal);
                 simulation.register(adapter);

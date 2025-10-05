@@ -267,8 +267,7 @@ public final class LargeGroupRegistry {
         double product = 1.0;
         for (int a : merges) product *= a;
 
-        // فرمول جدید: recovered = floor( i * sqrt(product) )
-        int recovered = (int) Math.floor(i * Math.sqrt(product));
+        int recovered = (int) Math.floor(i * Math.pow(product, 1.0 / i));
         return Math.max(0, st.originalSizeUnits - recovered);
     }
 

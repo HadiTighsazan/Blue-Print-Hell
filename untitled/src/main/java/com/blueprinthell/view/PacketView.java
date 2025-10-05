@@ -191,6 +191,16 @@ public class PacketView extends GameObjectView<PacketModel> {
             }
 
             if (savedComposite != null) g2.setComposite(savedComposite);
+
+            if (model instanceof com.blueprinthell.model.TrojanPacket) {
+                g2.setColor(Color.RED.darker());
+                g2.setFont(new Font("Arial", Font.BOLD, 16));
+                String label = "T";
+                FontMetrics fm = g2.getFontMetrics();
+                int tx = (getWidth() - fm.stringWidth(label)) / 2;
+                int ty = (getHeight() + fm.getAscent()) / 2 - 2;
+                g2.drawString(label, tx, ty);
+            }
             drawPacketBadges(g2, model, w, h);
 
         } finally {
@@ -199,7 +209,6 @@ public class PacketView extends GameObjectView<PacketModel> {
     }
 
 
-    // رسم Badge "C" یا "P" در گوشه‌ی بالا-راست
     private void drawPacketBadges(Graphics2D g2, PacketModel m, int w, int h) {
         final int x = w - (18 + Config.BADGE_MARGIN_X);
         final int y = Config.BADGE_MARGIN_Y;
@@ -208,6 +217,8 @@ public class PacketView extends GameObjectView<PacketModel> {
             ShapeUtils.drawBadge(g2, "C", x, y);
         } else if (m instanceof ProtectedPacket) {
             ShapeUtils.drawBadge(g2, "P", x, y);
+        } else if (m instanceof com.blueprinthell.model.TrojanPacket) {
+            ShapeUtils.drawBadge(g2, "T", x, y);
         }
     }
 

@@ -10,7 +10,9 @@ import java.nio.file.*;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 /**
  * Real-time progress save controller
  * Periodically saves game state for crash recovery
@@ -20,6 +22,7 @@ public class AutoSaveController {
     private static final Path PROGRESS_SAVE_FILE = SAVE_DIR.resolve("progress.json");
     private static final Path METADATA_FILE = SAVE_DIR.resolve("metadata.json");
 
+    private static final String SECRET_KEY = "a_very_secret_key_for_blueprint_hell_game_!@#$";
 
     private static final Path CLEAN_EXIT_FLAG     = SAVE_DIR.resolve(".clean-exit");
 
@@ -42,6 +45,7 @@ public class AutoSaveController {
         public int coins;
         public double progressPercent;
         public boolean isValid = true;
+        public String checksum;
 
         public SaveMetadata() {}
 
@@ -97,13 +101,14 @@ public class AutoSaveController {
 
         try {
             NetworkSnapshot snapshot = snapshotService.buildSnapshot();
+            String json = gson.toJson(snapshot);
 
-            // ایجاد متادیتا
+            // ایجاد متادیتا و محاسبه هش
             SaveMetadata metadata = createMetadata(snapshot);
+            metadata.checksum = generateChecksum(json); // <--- محاسبه و ذخیره هش
             lastMetadata = metadata;
 
             // ذخیره snapshot
-            String json = gson.toJson(snapshot);
             Files.writeString(PROGRESS_SAVE_FILE, json,
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
@@ -114,11 +119,10 @@ public class AutoSaveController {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
 
-
         } catch (Exception e) {
+            // Log the error if necessary
         }
     }
-
     /**
      * بررسی وجود فایل ذخیره شده
      */
@@ -142,15 +146,37 @@ public class AutoSaveController {
     }
 
     /**
-     * بازیابی snapshot ذخیره شده
+     * بازیابی snapshot ذخیره شده با اعتبارسنجی
      */
     public static NetworkSnapshot loadSavedProgress() {
-        if (!Files.exists(PROGRESS_SAVE_FILE)) return null;
+        if (!Files.exists(PROGRESS_SAVE_FILE) || !Files.exists(METADATA_FILE)) {
+            return null;
+        }
 
         try {
-            String json = Files.readString(PROGRESS_SAVE_FILE);
+            // 1. خواندن متادیتا برای گرفتن هش ذخیره شده
+            String metaJson = Files.readString(METADATA_FILE);
             Gson gson = new Gson();
-            return gson.fromJson(json, NetworkSnapshot.class);
+            SaveMetadata metadata = gson.fromJson(metaJson, SaveMetadata.class);
+            if (metadata == null || metadata.checksum == null) {
+                return null; // فایل متادیتا خراب است
+            }
+            String savedChecksum = metadata.checksum;
+
+            // 2. خواندن فایل اصلی به صورت رشته خام
+            String progressJson = Files.readString(PROGRESS_SAVE_FILE);
+
+            // 3. تولید هش جدید از فایل خوانده شده
+            String newChecksum = generateChecksum(progressJson);
+
+            // 4. مقایسه هش ها
+            if (!savedChecksum.equals(newChecksum)) {
+                return null; // <--- فایل دستکاری شده است!
+            }
+
+            // 5. اگر همه چیز درست بود، فایل را به شیء تبدیل کن
+            return gson.fromJson(progressJson, NetworkSnapshot.class);
+
         } catch (IOException e) {
             e.printStackTrace();
             return null;
@@ -250,4 +276,17 @@ public class AutoSaveController {
         return fallback;
     }
 
+    private static String generateChecksum(String data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            // ترکیب داده با کلید مخفی برای امنیت بیشتر
+            String dataWithSecret = data + SECRET_KEY;
+            byte[] hashBytes = digest.digest(dataWithSecret.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(hashBytes);
+        } catch (Exception e) {
+            e.printStackTrace();
+            // در صورت بروز خطا، یک هش نامعتبر برگردان تا بارگذاری با شکست مواجه شود
+            return "checksum_error";
+        }
+    }
 }

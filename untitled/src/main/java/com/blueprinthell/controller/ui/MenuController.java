@@ -20,8 +20,8 @@ public class MenuController {
     private final GameController gameController;
 
     // --- Patch: guards for restoration & countdown ---
-    private boolean restorationInProgress = false; // جلوگیری از اجرای همزمان بازیابی
-    private boolean countdownShown = false;        // جلوگیری از نمایش دوبارهٔ شمارش معکوس
+    private boolean restorationInProgress = false;
+    private boolean countdownShown = false;
 
     public MenuController(ScreenController screenController,
                           GameController gameController) {
@@ -134,18 +134,19 @@ public class MenuController {
         levelManager.startGame();
         screenController.showScreen(ScreenController.GAME_SCREEN);
     }
-
     // --- Patch: اصلاح روند بازیابی بازی ذخیره‌شده ---
     private void resumeSavedGame() {
         if (restorationInProgress) return; // جلوگیری از اجرای همزمان
         restorationInProgress = true;
 
         NetworkSnapshot snapshot = AutoSaveController.loadSavedProgress();
+
         if (snapshot == null) {
             JOptionPane.showMessageDialog(null,
-                    "Failed to load saved game. Starting new game instead.",
+                    "Cheat Detected!\nStarting a new game.", // <--- پیام جدید
                     "Load Error",
                     JOptionPane.ERROR_MESSAGE);
+            AutoSaveController.clearSavedProgress(); // پاک کردن فایل های نامعتبر
             startNewGame();
             restorationInProgress = false;
             return;
@@ -153,9 +154,6 @@ public class MenuController {
 
         // نمایش صفحه بازی
         screenController.showScreen(ScreenController.GAME_SCREEN);
-
-        // ⭐ حذف فراخوانی مستقیم restoreFromSavedProgress
-        // gameController.restoreFromSavedProgress(); // این خط حذف شد
 
         // ⭐ ابتدا level را load کنیم
         int lvl = 1;

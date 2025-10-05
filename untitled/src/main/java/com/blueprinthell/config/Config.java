@@ -58,7 +58,7 @@ public final class Config {
     public static final double ANTI_TROJAN_COOLDOWN_S  = 2.0;
 
 
-    public static final double TROJAN_PROBABILITY_NORMAL = 0.15;
+    public static final double TROJAN_PROBABILITY_NORMAL = 0.50;
 
 
     public static final int LARGE_PACKET_SIZE_8 = 8;
@@ -110,7 +110,6 @@ public final class Config {
     public static final Color CONF_VPN_COLOR = new Color(0xFF, 0x66, 0xCC);
     public static final int BIT_PACKET_SIZE = 2;
     public static final java.awt.Color COLOR_PACKET_LARGE = new java.awt.Color(0x8E44AD);
-
     public static final java.awt.Color COLOR_BADGE_BG = new java.awt.Color(0x111111);
     public static final java.awt.Color COLOR_BADGE_FG = java.awt.Color.WHITE;
 
@@ -141,8 +140,8 @@ public final class Config {
     public static final int MAX_LARGE_BUFFER_CAPACITY = 8;
     public static final int MAX_LP_SPLIT_PER_FRAME = 1;
 
-    public static final double CONF_VPN_HYSTERESIS_PX  = 5;    // هیسترزیس برای جلوگیری از نوسان
-    public static final double CONF_VPN_MAX_ACCEL      = 600;  // px/s^2
-    public static final double CONF_VPN_MAX_DECEL      = 800;  // px/s^2 (ترمز قوی‌تر)
+    public static final double CONF_VPN_HYSTERESIS_PX  = 5;
+    public static final double CONF_VPN_MAX_ACCEL      = 600;
+    public static final double CONF_VPN_MAX_DECEL      = 800;
 
 }
