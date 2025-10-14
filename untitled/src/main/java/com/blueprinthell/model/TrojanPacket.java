@@ -12,12 +12,15 @@ public class TrojanPacket extends PacketModel {
     private TrojanPacket(PacketModel original) {
         super(original.getType(), original.getBaseSpeed());
         this.original = original;
+
         setProgress(original.getProgress());
         setSpeed(original.getSpeed());
         increaseNoise(original.getNoise());
         if (original.getCurrentWire() != null) {
             attachToWire(original.getCurrentWire(), original.getProgress());
         }
+        setWidth(original.getWidth());
+        setHeight(original.getHeight());
     }
 
     public PacketModel getOriginal() {
@@ -30,3 +33,4 @@ public class TrojanPacket extends PacketModel {
     }
 
 }
+

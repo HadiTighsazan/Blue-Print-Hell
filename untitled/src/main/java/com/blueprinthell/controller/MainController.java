@@ -53,7 +53,8 @@ public class MainController {
                     gameController.getLossModel(),
                     gameController.getWires(),
                     gameController.getHudController(),
-                    gameController.getGameView()  // اضافه کردن این پارامتر
+                    gameController.getShopController(),
+                    gameController.getGameView()
             );
             screenController.setAudioController(ui.getAudioController());
             ui.getAudioController().playBackgroundLoop();

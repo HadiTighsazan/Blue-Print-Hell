@@ -1,4 +1,3 @@
-// فایل: untitled/src/main/java/com/blueprinthell/controller/LossMonitorController.java
 
 package com.blueprinthell.controller.packet;
 
@@ -12,7 +11,7 @@ import javax.swing.*;
 public class LossMonitorController implements Updatable {
 
     private final PacketLossModel lossModel;
-    private final double plannedPackets; // نیازی به این نیست، ولی برای سازگاری نگه می‌داریم
+    private final double plannedPackets;
     private final double thresholdRatio;
     private final SimulationController simulation;
     private final ScreenController screenCtrl;
@@ -49,10 +48,8 @@ public class LossMonitorController implements Updatable {
             return;
         }
 
-        // محاسبه نسبت loss بر اساس واحدهای تولیدی
         double ratio = (double) lossModel.getLostCount() / pc.getProducedUnits();
 
-        // اگر بیش از 50% واحدها از دست رفته‌اند
         if (ratio >= thresholdRatio) {
             triggered = true;
             simulation.stop();

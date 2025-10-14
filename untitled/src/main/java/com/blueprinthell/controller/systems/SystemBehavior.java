@@ -8,7 +8,6 @@ public interface SystemBehavior extends Updatable {
 
 
     default void onPacketEnqueued(PacketModel packet) {
-        // legacy no-op
     }
 
     default void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {

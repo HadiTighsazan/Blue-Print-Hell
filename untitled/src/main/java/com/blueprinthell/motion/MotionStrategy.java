@@ -2,7 +2,6 @@ package com.blueprinthell.motion;
 
 import com.blueprinthell.model.PacketModel;
 
-
 public interface MotionStrategy {
 
 

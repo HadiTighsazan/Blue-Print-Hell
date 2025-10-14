@@ -11,28 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * اعتبارسنجی تداخل سیم‌ها با سیستم‌ها.
- * ایده: «هستهٔ داخلی» هر SystemBox (به‌صورت درصدی از ابعاد) نباید توسط مسیر سیم‌ها قطع شود.
- * برای سگمنت اول/آخر که به پورت‌ها وصل می‌شوند، عبور از «حاشیهٔ مجاز» بیرونی آزاد است،
- * ولی ورود به هستهٔ داخلی همچنان ممنوع می‌ماند.
- */
+
 public final class WireIntersectionValidator {
 
-    /** درصد ناحیهٔ مرکزیِ ممنوعه نسبت به ضلع کوچکتر باکس (مثلاً 0.8 یعنی 80% مرکزی ممنوع). */
     private static final double INNER_REGION_PERCENT = 0.8;
 
-    /** حاشیهٔ مجاز: (1 - INNER_REGION_PERCENT) / 2  (برای هر طرف) */
     private static final double ALLOWED_MARGIN_PERCENT =
             (1.0 - INNER_REGION_PERCENT) / 2.0;
 
     private WireIntersectionValidator() {
-        // Utility — نباید نمونه‌سازی شود
     }
 
-    /**
-     * آیا همهٔ سیم‌ها معتبرند (مسیر هیچ‌کدام از «هستهٔ داخلی» سیستم‌ها عبور نمی‌کند)؟
-     */
+
     public static boolean areAllWiresValid(List<WireModel> wires, List<SystemBoxModel> boxes) {
         if (wires == null || wires.isEmpty() || boxes == null || boxes.isEmpty()) {
             return true;
@@ -45,9 +35,7 @@ public final class WireIntersectionValidator {
         return true;
     }
 
-    /**
-     * اعتبارسنجی یک سیم در برابر همهٔ باکس‌ها.
-     */
+
     public static boolean isWireValid(WireModel wire, List<SystemBoxModel> boxes) {
         if (wire == null) return true;
 
@@ -78,11 +66,7 @@ public final class WireIntersectionValidator {
         return true;
     }
 
-    /**
-     * آیا یک سگمنت از سیم با «هستهٔ داخلی» باکس تداخل دارد؟
-     * برای سگمنت‌های متصل به پورت (اول/آخر)، عبور در حاشیهٔ بیرونی مجاز است،
-     * ولی اگر ورود قابل‌توجهی به هستهٔ داخلی داشته باشند، نامعتبر می‌شوند.
-     */
+
     private static boolean segmentIntersectsBoxInnerRegion(Point p1,
                                                            Point p2,
                                                            SystemBoxModel box,
@@ -91,38 +75,29 @@ public final class WireIntersectionValidator {
         final Rectangle inner = calculateInnerRegion(box);
         final Rectangle outer = new Rectangle(box.getX(), box.getY(), box.getWidth(), box.getHeight());
 
-        // اگر هیچ برشی با کل باکس هم نباشد، قطعاً برشی با هستهٔ داخلی هم نیست
         final Line2D seg = new Line2D.Double(p1, p2);
         if (!seg.intersects(outer)) {
             return false;
         }
 
-        // اگر سگمنت اول/آخر باشد، وضعیت "اتصال به پورت" را در نظر بگیریم:
         if (isFirstSegment || isLastSegment) {
             final boolean p1InMargin = outer.contains(p1) && !inner.contains(p1);
             final boolean p2InMargin = outer.contains(p2) && !inner.contains(p2);
 
-            // اگر یکی از نقاط در حاشیهٔ مجاز باشد، یعنی این سگمنت احتمالاً به پورت وصل است.
-            // در این حالت اجازهٔ عبور از حاشیه را می‌دهیم، اما ورود به هستهٔ داخلی را نه.
             if (p1InMargin || p2InMargin) {
                 return entersInnerRegionMeaningfully(p1, p2, inner);
             }
         }
 
-        // برای سایر حالات، اگر برش با هستهٔ داخلی وجود داشته باشد، نامعتبر است.
         return seg.intersects(inner);
     }
 
-    /**
-     * محاسبهٔ «هستهٔ داخلی» باکس با توجه به درصد تنظیم‌شده.
-     * هستهٔ داخلی، ناحیهٔ مرکزی است که عبور سیم از آن ممنوع است.
-     */
+
     private static Rectangle calculateInnerRegion(SystemBoxModel box) {
         final int bw = Math.max(0, box.getWidth());
         final int bh = Math.max(0, box.getHeight());
         final int minSide = Math.min(bw, bh);
 
-        // حاشیه بر اساس ضلع کوچکتر تا هستهٔ مرکزی یکدست باشد.
         final int margin = (int) Math.floor(minSide * ALLOWED_MARGIN_PERCENT);
 
         final int x = box.getX() + margin;
@@ -133,10 +108,7 @@ public final class WireIntersectionValidator {
         return new Rectangle(x, y, w, h);
     }
 
-    /**
-     * بررسی دقیق‌تر برای سگمنت‌هایی که احتمال اتصال به پورت دارند:
-     * اگر «ورود معنادار» به هستهٔ داخلی رخ دهد (بر اساس نمونه‌برداری)، true برمی‌گرداند.
-     */
+
     private static boolean entersInnerRegionMeaningfully(Point p1, Point p2, Rectangle inner) {
         // اگر مرکز سگمنت داخل است، قطعاً ورود معنادار داریم.
         final int midX = (p1.x + p2.x) >>> 1;
@@ -151,7 +123,7 @@ public final class WireIntersectionValidator {
         }
 
         // نمونه‌برداری یکنواخت روی سگمنت
-        final int samples = 10; // در صورت نیاز قابل تنظیم
+        final int samples = 10;
         int inside = 0;
 
         for (int i = 1; i < samples; i++) {
@@ -167,9 +139,7 @@ public final class WireIntersectionValidator {
         return inside > samples / 2;
     }
 
-    /**
-     * برگرداندن لیست سیم‌های نامعتبر.
-     */
+
     public static List<WireModel> findInvalidWires(List<WireModel> wires, List<SystemBoxModel> boxes) {
         final List<WireModel> out = new ArrayList<>();
         if (wires == null || boxes == null || boxes.isEmpty()) return out;
@@ -183,25 +153,12 @@ public final class WireIntersectionValidator {
         return out;
     }
 
-    /**
-     * ساخت متن خطا برای نمایش به کاربر (یا null اگر خطایی وجود نداشت).
-     */
+
     public static String getValidationMessage(List<WireModel> wires, List<SystemBoxModel> boxes) {
         final List<WireModel> invalid = findInvalidWires(wires, boxes);
         if (invalid.isEmpty()) return null;
         return String.format("تعداد %d سیم از روی سیستم‌ها عبور می‌کنند. لطفاً مسیر سیم‌ها را تغییر دهید.", invalid.size());
     }
 
-    // --- گزینه‌های پیکربندی برنامه‌محور (در صورت نیاز) ---
 
-    /**
-     * درصد «هستهٔ داخلی» (برای تست/تیون‌کردن در زمان اجرا).
-     * پیشنهاد: فقط در ابزارهای دیباگ استفاده شود.
-     */
-    public static void setInnerRegionPercent(double innerPercent) {
-        // هشدار: این مقدار ثابت تعریف شده؛ اگر می‌خواهید زمان اجرا تنظیم‌پذیر باشد،
-        // فیلدها را non-final کنید یا از Config پروژه بخوانید. این متد را نگه داشتیم
-        // تا الگوی استفاده روشن باشد. در نسخهٔ drop-in فعلی تغییری اعمال نمی‌کند.
-        // (برای سازگاری با درخواست «قابل جایگذاری» بدون تغییر ساختار Config پروژه.)
-    }
 }

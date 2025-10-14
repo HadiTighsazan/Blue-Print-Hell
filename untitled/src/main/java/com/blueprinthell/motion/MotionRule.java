@@ -40,7 +40,6 @@ public final class MotionRule {
     public static MotionRule keepDistance(double baseSpeed) {
         return new MotionRule(MotionMode.KEEP_DISTANCE, baseSpeed, 0, 1.0, 1.0);
     }
-
     public static MotionRule drift(double baseSpeed) {
         return new MotionRule(MotionMode.DRIFT, baseSpeed, 0, 1.0, 1.0);
     }

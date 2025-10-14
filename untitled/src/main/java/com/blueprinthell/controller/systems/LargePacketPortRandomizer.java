@@ -21,32 +21,26 @@ public final class LargePacketPortRandomizer implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-        // No periodic updates needed
     }
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
-        // فقط برای LargePacket فعال شود
         if (!(packet instanceof LargePacket)) return;
 
-        // تغییر تصادفی یکی از پورت‌های سیستم
         randomizeOnePort();
     }
 
     @Override
     public void onEnabledChanged(boolean enabled) {
-        // No action needed
     }
 
     private void randomizeOnePort() {
-        // انتخاب تصادفی بین پورت‌های ورودی و خروجی
         List<PortModel> allPorts = new java.util.ArrayList<>();
         allPorts.addAll(box.getInPorts());
         allPorts.addAll(box.getOutPorts());
 
         if (allPorts.isEmpty()) return;
 
-        // انتخاب یک پورت تصادفی
         PortModel target = allPorts.get(rnd.nextInt(allPorts.size()));
         mutateShape(target);
     }
@@ -56,7 +50,6 @@ public final class LargePacketPortRandomizer implements SystemBehavior {
         PortShape[] vals = PortShape.values();
         if (vals.length <= 1) return;
 
-        // تغییر به یک شکل تصادفی متفاوت
         PortShape next;
         do {
             next = vals[rnd.nextInt(vals.length)];

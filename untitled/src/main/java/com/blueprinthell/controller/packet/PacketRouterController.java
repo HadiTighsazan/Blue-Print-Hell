@@ -138,103 +138,7 @@ public class PacketRouterController implements Updatable {
         return false;
     }
 
-    private PortModel selectBestPort(List<PortModel> ports, PacketModel packet) {
-        if (ports.isEmpty()) return null;
 
-        // Score each port
-        Map<PortModel, Integer> scores = new HashMap<>();
-
-        for (PortModel port : ports) {
-            int score = 0;
-
-            // Check wire load
-            WireModel wire = findWire(port);
-            if (wire != null) {
-                score += (10 - wire.getPackets().size()) * 2; // Less packets = higher score
-
-                // Check destination buffer
-                SystemBoxModel dest = destMap.get(wire);
-                if (dest != null) {
-                    int bufferSpace = Config.MAX_BUFFER_CAPACITY - dest.getBuffer().size();
-                    score += bufferSpace * 3; // More space = higher score
-
-                    // Bonus for compatible routing
-                    if (port.isCompatible(packet)) {
-                        score += 5;
-                    }
-
-                    // Consider destination type
-                    score += getDestinationTypeScore(dest, packet);
-                }
-            }
-
-            scores.put(port, score);
-        }
-
-        // Weighted random selection from top ports
-        List<Map.Entry<PortModel, Integer>> sorted = scores.entrySet().stream()
-                .sorted(Map.Entry.<PortModel, Integer>comparingByValue().reversed())
-                .collect(Collectors.toList());
-
-        int topCount = Math.min(3, sorted.size());
-        List<Map.Entry<PortModel, Integer>> topPorts = sorted.subList(0, topCount);
-
-        // Calculate total weight
-        int totalWeight = topPorts.stream().mapToInt(Map.Entry::getValue).sum();
-        if (totalWeight <= 0) return topPorts.get(0).getKey();
-
-        // Weighted random selection
-        int random = rnd.nextInt(totalWeight);
-        int cumulative = 0;
-        for (Map.Entry<PortModel, Integer> entry : topPorts) {
-            cumulative += entry.getValue();
-            if (random < cumulative) {
-                return entry.getKey();
-            }
-        }
-
-        return topPorts.get(0).getKey();
-    }
-
-    private int getDestinationTypeScore(SystemBoxModel dest, PacketModel packet) {
-        SystemKind kind = dest.getPrimaryKind();
-        if (kind == null) return 0;
-
-        switch (kind) {
-            case VPN:
-                // VPN is good for messengers
-                if (PacketOps.isMessenger(packet)) return 10;
-                return 5;
-
-            case ANTI_TROJAN:
-                // Anti-Trojan is good for trojans
-                if (PacketOps.isTrojan(packet)) return 15;
-                return 0;
-
-            case SPY:
-                // Avoid spy systems for confidential packets
-                if (PacketOps.isConfidential(packet)) return -20;
-                return 0;
-
-            case MALICIOUS:
-                // Avoid malicious systems for clean packets
-                if (packet.getNoise() == 0 && !PacketOps.isProtected(packet)) return -10;
-                return 0;
-
-            case MERGER:
-                // Merger is good for BitPackets
-                if (PacketOps.isBit(packet)) return 10;
-                return -5;
-
-            case DISTRIBUTOR:
-                // Distributor is good for LargePackets
-                if (PacketOps.isLarge(packet)) return 10;
-                return -5;
-
-            default:
-                return 0;
-        }
-    }
 
     private void sendPacketToPort(PacketModel packet, PortModel port) {
         WireModel wire = findWire(port);
@@ -280,89 +184,18 @@ public class PacketRouterController implements Updatable {
 
 
 
-    private void processTeleportedPackets() {
-        // Check if this is a spy system
-        if (box.getPrimaryKind() != SystemKind.SPY) {
-            return;
-        }
 
-        // Create a temporary list to avoid concurrent modification
-        List<PacketModel> packetsToRoute = new ArrayList<>();
-        Queue<PacketModel> buffer = box.getBuffer();
-
-        // Check each packet in buffer
-        for (PacketModel packet : buffer) {
-            // CRITICAL: A teleported packet won't have a current wire
-            // AND won't have an entered port tracked
-            boolean noWire = (packet.getCurrentWire() == null);
-            boolean noTrackedPort = (SystemBehaviorAdapter.EnteredPortTracker.peek(packet) == null);
-
-            if (noWire && noTrackedPort) {
-                packetsToRoute.add(packet);
-            }
-        }
-
-        // Route teleported packets immediately
-        for (PacketModel packet : packetsToRoute) {
-            // Remove from buffer
-            if (box.removeFromBuffer(packet)) {
-
-                // Try to route it
-                boolean routed = routePacketDirect(packet);
-
-                if (!routed) {
-                    // Put back in buffer if routing failed
-                    if (!box.enqueue(packet)) {
-                        lossModel.incrementPacket(packet);
-
-                    } else {
-                    }
-                } else {
-                }
-            }
-        }
-    }
-
-    /**
-     * New method: Route packet directly to wire without normal routing logic
-     */
-    private boolean routePacketDirect(PacketModel packet) {
-        // Get available output ports with enabled destinations
-        List<PortModel> availableOuts = box.getOutPorts().stream()
-                .filter(port -> {
-                    WireModel w = findWire(port);
-                    if (w == null) return false;
-                    SystemBoxModel d = destMap.get(w);
-                    // Check destination is enabled and wire is not full
-                    return d != null && d.isEnabled() && w.getPackets().size() < 3;
-                })
-                .collect(Collectors.toList());
-
-        if (availableOuts.isEmpty()) {
-            return false;
-        }
-
-        // Choose random port for teleported packet
-        PortModel chosen = availableOuts.get(rnd.nextInt(availableOuts.size()));
-        sendPacketToPort(packet, chosen);
-        return true;
-    }
 
     @Override
     public void update(double dt) {
-
-               // 0) ابتدا پکت‌های برگشتی (ورود از خروجی) را با اولویت پردازش کن
         while (true) {
                         PacketModel ret = box.pollReturned();
                         if (ret == null) break;
                         boolean routed = routePacket(ret);
                         if (!routed) {
-                                // برگرداندن به ابتدای صف برگشتی‌ها؛ اگر جا نبود، drop
                             if (!box.enqueueReturnedFront(ret)) {
-                                        drop(ret);
-                                    }
-                               // برای جلوگیری از حلقه‌ی بدون پیشرفت، ادامه نمی‌دهیم
-                                       break;
+                                        drop(ret);}
+                            break;
                             }
                    }
 
@@ -377,8 +210,8 @@ public class PacketRouterController implements Updatable {
                          if (lp == null) break;
                        boolean routed = routePacket(lp);
                       if (!routed) {
-                                    box.enqueueFront(lp);
-                                  break;
+                          box.enqueueFront(lp);
+                          break;
                                    }
                        }
                            }
@@ -389,9 +222,8 @@ public class PacketRouterController implements Updatable {
                 PacketModel packet = box.pollPacket();
                 if (packet == null) break;
 
-                // LargePacket ها را نادیده بگیر (DistributorBehavior آنها را مدیریت می‌کند)
                 if (packet instanceof LargePacket) {
-                    box.enqueue(packet); // برگردان به بافر
+                    box.enqueue(packet);
                     break;
                 }
 
@@ -403,15 +235,13 @@ public class PacketRouterController implements Updatable {
                     break;
                 }
             }
-            return; // از پردازش بقیه خارج شو
+            return;
         }
 
-        // سپس پکت‌های معمولی را از bitBuffer پردازش کن
         while (hasAvailableRoute()) {
             PacketModel packet = box.pollPacket();
             if (packet == null) break;
 
-            // بررسی که آیا این پکت تله‌پورت شده است
             boolean noWire = (packet.getCurrentWire() == null);
             boolean noTrackedPort = (SystemBehaviorAdapter.EnteredPortTracker.peek(packet) == null);
 
@@ -437,32 +267,25 @@ public class PacketRouterController implements Updatable {
     }
 
     private void processTeleportedPacketsForThisBox() {
-        // فقط برای سیستم‌های SPY عمل کن
         if (box.getPrimaryKind() != SystemKind.SPY) {
             return;
         }
 
         TRANSFER_LOCK.lock();
         try {
-            // بررسی صف پکت‌های تله‌پورت شده برای این box
             Queue<PacketModel> myTeleportedPackets = TELEPORTED_PACKETS.get(box);
             if (myTeleportedPackets == null || myTeleportedPackets.isEmpty()) {
                 return;
             }
 
-            // کپی از پکت‌ها برای پردازش (برای جلوگیری از concurrent modification)
             List<PacketModel> toProcess = new ArrayList<>(myTeleportedPackets);
-            myTeleportedPackets.clear(); // صف را پاک کن
+            myTeleportedPackets.clear();
 
-            // پردازش هر پکت تله‌پورت شده
             for (PacketModel packet : toProcess) {
-                // تلاش برای route کردن مستقیم
                 if (!routeTeleportedPacket(packet)) {
-                    // اگر نتوانست route کند، در بافر قرار بده
                     if (!box.enqueue(packet)) {
                         lossModel.incrementPacket(packet);
                     } else {
-                        // پکت در بافر قرار گرفت، در چرخه بعدی route خواهد شد
                     }
                 }
             }
@@ -471,7 +294,6 @@ public class PacketRouterController implements Updatable {
         }
     }
     private boolean routeTeleportedPacket(PacketModel packet) {
-        // پیدا کردن پورت‌های خروجی available
         List<PortModel> availableOuts = new ArrayList<>();
 
         for (PortModel port : box.getOutPorts()) {
@@ -488,7 +310,7 @@ public class PacketRouterController implements Updatable {
         }
 
         if (availableOuts.isEmpty()) {
-            return false; // نمی‌تواند route کند
+            return false;
         }
 
         // انتخاب تصادفی یک پورت
@@ -499,19 +321,15 @@ public class PacketRouterController implements Updatable {
             return false;
         }
 
-        // تنظیم motion strategy
         boolean compatible = chosenPort.isCompatible(packet);
         packet.setStartSpeedMul(1.0);
 
         MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
         packet.setMotionStrategy(ms);
 
-        // چسباندن پکت به سیم
         chosenWire.attachPacket(packet, 0.0);
 
-        // پاک کردن علامت teleported
         TeleportTracking.clearTeleported(packet);
-        // به‌روزرسانی آمار
         packetsRouted++;
         if (!compatible) {
             incompatibleRoutes++;
@@ -520,9 +338,7 @@ public class PacketRouterController implements Updatable {
         return true;
     }
 
-    /**
-     * Helper method to find wire connected to a port
-     */
+
     private WireModel findWireForPort(PortModel port) {
         for (WireModel wire : wires) {
             if (wire.getSrcPort() == port) {
@@ -533,17 +349,6 @@ public class PacketRouterController implements Updatable {
     }
 
 
-    public static void addTeleportedPacket(SystemBoxModel targetBox, PacketModel packet) {
-        TRANSFER_LOCK.lock();
-        try {
-            Queue<PacketModel> queue = TELEPORTED_PACKETS.computeIfAbsent(
-                    targetBox,
-                    k -> new LinkedList<>()
-            );
-            queue.offer(packet);
-        } finally {
-            TRANSFER_LOCK.unlock();
-        }
-    }
+
 
 }

@@ -19,3 +19,4 @@ public abstract class GameObjectView<T extends GameObjectModel> extends JCompone
         repaint();
     }
 }
+

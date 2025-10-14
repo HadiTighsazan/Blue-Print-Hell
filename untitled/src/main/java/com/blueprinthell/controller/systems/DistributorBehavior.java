@@ -20,14 +20,11 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
     private final PacketLossModel    lossModel;
     private final Random             rnd = new Random();
 
-    /** پکت‌هایی که قبلاً Split یا در صف Split قرار گرفته‌اند */
     private final Set<PacketModel> processedPackets =
             Collections.newSetFromMap(new WeakHashMap<>());
 
-    /** صف پکت‌های حجیمی که منتظر Split هستند */
     private final Queue<LargePacket> pendingLargePackets = new ArrayDeque<>();
 
-    /* ---- وضعیت هر گروه بیت برای Split تدریجی ---- */
     private final Map<Integer, Integer> remainingBits   = new HashMap<>();
     private final Map<Integer, Integer> parentSizeByGrp = new HashMap<>();
     private final Map<Integer, Integer> colorIdByGrp    = new HashMap<>();
@@ -42,18 +39,14 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
         this.lossModel = Objects.requireNonNull(lossModel, "lossModel");
     }
 
-    /* ============================ Game-loop ============================ */
 
     @Override
     public void update(double dt) {
-        processPendingLargePackets();     // ➊ در هر فریم چند LP را Split می‌کنیم
-        produceBitsRoundRobin();          // ➋ ساخت بیت‌ها تا حد ظرفیت بافر
+        processPendingLargePackets();
+        produceBitsRoundRobin();
     }
 
-    /**
-     * حداکثر Config.MAX_LP_SPLIT_PER_FRAME عدد LargePacket را پردازش می‌کنیم.
-     * هر LP دقیقاً یک‌بار به این متد می‌آید (از طریق onPacketEnqueued).
-     */
+
     private void processPendingLargePackets() {
         int splitsThisFrame = 0;
 
@@ -62,17 +55,16 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
 
             LargePacket lp = pendingLargePackets.peek();
             if (lp == null || processedPackets.contains(lp)) {
-                pendingLargePackets.poll();           // پاک‌سازی موارد نامعتبر
+                pendingLargePackets.poll();
                 continue;
             }
 
-            /* اگر بیت بافر پر است، فعلاً صبر کن تا فریم بعد */
             if (box.getBitBufferFree() == 0) break;
 
 
-            scheduleSplit(lp);                        // زمان‌بندی Split
+            scheduleSplit(lp);
             processedPackets.add(lp);
-            pendingLargePackets.poll();               // از صف خارج شد
+            pendingLargePackets.poll();
             splitsThisFrame++;
         }
     }
@@ -90,17 +82,14 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
         if (enabled) clear();
     }
 
-    /* ===================== تبدیل Large → Bit ===================== */
 
     private void scheduleSplit(LargePacket large) {
         final int parentSize   = large.getOriginalSizeUnits();
-        final int expectedBits = parentSize;          // 1 بیت به ازای هر واحد
+        final int expectedBits = parentSize;
 
-        /* --- اطمینان از وجود/ثبت گروه در رجیستری --- */
         int groupId;
         int colorId;
         if (!large.hasGroup()) {
-            // پکت گروه ندارد - ابتدا تلاش برای الحاق به گروه باز موجود (بر اساس رنگ/سایز)
             colorId = large.getColorId();
             if (colorId <= 0) {
                 Color cc = large.getCustomColor();
@@ -119,11 +108,9 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
             }
             large.setGroupInfo(groupId, expectedBits, colorId);
         } else {
-            // پکت از قبل گروه دارد
             groupId = large.getGroupId();
             colorId = large.getColorId();
 
-            // ⭐ فقط اگر گروه واقعاً وجود ندارد، بازسازی کن
             if (registry.get(groupId) == null) {
                 registry.createGroupWithId(groupId, parentSize, expectedBits, colorId);
             } else if (registry.get(groupId).isClosed()) {
@@ -134,13 +121,11 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
 
         boolean removed = box.removeFromBuffer(large);
         if (!removed) {
-            // اگر نتوانست حذف کند، مشکلی وجود دارد
             return;
         }
 
 
 
-        // از رجیستری بخوان که تا الان چند بیت برای این گروه «دریافت» شده
         int alreadyProduced = 0;
         var gs = registry.get(groupId);
         if (gs != null) {
@@ -151,25 +136,20 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
             alreadyProduced = Math.max(0, gs.getReceivedBits());
         }
 
-// فقط «باقیمانده» را حساب کن
         int toProduce = Math.max(0, expectedBits - alreadyProduced);
 
-// اگر چیزی باقی نمانده، فقط ایندکس را هم‌تراز کن و برگرد
         parentSizeByGrp.putIfAbsent(groupId, parentSize);
-        colorIdByGrp   .putIfAbsent(groupId, colorId);
+        colorIdByGrp.putIfAbsent(groupId, colorId);
         nextIndexByGrp .putIfAbsent(groupId, alreadyProduced);
 
         if (toProduce <= 0) {
-            return; // دیگر نیازی به ورود به صف round-robin نیست
+            return;
         }
 
-// حالا واقعاً همان باقیمانده را برای تولید در نظر بگیر
         remainingBits.merge(groupId, toProduce, Integer::sum);
 
-// در نهایت در صف round-robin قرار بده اگر قبلاً نیست
         if (!rrGroups.contains(groupId)) rrGroups.addLast(groupId);
 
-        if (!rrGroups.contains(groupId)) rrGroups.addLast(groupId);
     }
 
     /* ===================== تولید بیت به روش Round-Robin ===================== */
@@ -209,12 +189,12 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
                 if (left > 0) {
                     remainingBits.put(gid, left);
                     nextIndexByGrp .put(gid, index);
-                    rrGroups.addLast(gid);          // هنوز بیت باقی‌ست
+                    rrGroups.addLast(gid);
                 } else {
-                    cleanupGroup(gid);              // گروه تمام شد
+                    cleanupGroup(gid);
                 }
             } else {
-                rrGroups.addFirst(gid);              // بافر پر – دفعهٔ بعد
+                rrGroups.addFirst(gid);
                 break;
             }
         }
@@ -228,7 +208,6 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
         nextIndexByGrp .remove(gid);
     }
 
-    /* ===================== ابزار کمکی ===================== */
 
     private KinematicsProfile randomMessengerProfile() {
         switch (rnd.nextInt(3)) {
@@ -267,7 +246,6 @@ public final class DistributorBehavior implements SystemBehavior, SnapshottableB
 
         clear(); // پاکسازی state فعلی
 
-        // بازیابی state
         Map<Integer, Integer> rb = (Map<Integer, Integer>) state.get("remainingBits");
         if (rb != null) remainingBits.putAll(rb);
 

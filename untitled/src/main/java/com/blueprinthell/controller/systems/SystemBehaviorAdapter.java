@@ -38,13 +38,11 @@ public final class SystemBehaviorAdapter implements Updatable {
         // ترکیب هر دو بافر
         final List<PacketModel> allPackets = new ArrayList<>();
 
-        // اضافه کردن پکت‌های معمولی از bitBuffer
         final Queue<PacketModel> bitBuf = box.getBitBuffer();
         if (bitBuf != null && !bitBuf.isEmpty()) {
             allPackets.addAll(bitBuf);
         }
 
-        // اضافه کردن پکت‌های حجیم از largeBuffer
         final Queue<LargePacket> largeBuf = box.getLargeBuffer();
         if (largeBuf != null && !largeBuf.isEmpty()) {
             allPackets.addAll(largeBuf);
@@ -62,11 +60,8 @@ public final class SystemBehaviorAdapter implements Updatable {
             if (p0 == null) continue;
             PacketModel p = p0;
 
-
-
             current.add(p);
 
-            // اولین ورود به این باکس → فراخوانی behavior.onPacketEnqueued
             if (!seen.contains(p)) {
                 final PortModel entered = findEnteredPort(p);
                 try {
@@ -77,7 +72,6 @@ public final class SystemBehaviorAdapter implements Updatable {
             }
         }
 
-        // همگام‌سازی مجموعه seen
         seen.retainAll(current);
         seen.addAll(current);
     }
@@ -110,7 +104,6 @@ public final class SystemBehaviorAdapter implements Updatable {
             try {
                 behavior.onEnabledChanged(enabled);
             } catch (Throwable t) {
-                // Log but continue
             }
             lastEnabledState = enabled;
         }

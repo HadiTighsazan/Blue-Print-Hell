@@ -93,19 +93,6 @@ public class LargePacket extends PacketModel implements Serializable {
 
 
 
-    private static void copyRuntimeState(PacketModel src, PacketModel dst) {
-        WireModel w = src.getCurrentWire();
-        if (w != null) {
-            dst.attachToWire(w, src.getProgress());
-        } else {
-            dst.setProgress(src.getProgress());
-        }
-        dst.setSpeed(src.getSpeed());
-        dst.setAcceleration(src.getAcceleration());
-        if (src.getNoise() > 0) {
-            dst.increaseNoise(src.getNoise());
-        }
-    }
     public Color getCustomColor() {
         if (customColor != null) return customColor;
         if (colorId > 0) return Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);

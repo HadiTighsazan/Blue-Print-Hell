@@ -22,7 +22,7 @@ public record LevelDefinition(List<BoxSpec> boxes, double totalWireLength) {
             List<PortShape> outShapes,
             boolean isSource,
             boolean isSink,
-            SystemKind kind // NEW
+            SystemKind kind
     ) {
         public BoxSpec(int x, int y, int w, int h,
                        List<PortShape> inShapes,

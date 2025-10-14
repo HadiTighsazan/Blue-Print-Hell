@@ -10,6 +10,8 @@ import com.blueprinthell.controller.packet.PacketRenderController;
 import com.blueprinthell.controller.persistence.SnapshotService;
 import com.blueprinthell.controller.simulation.SimulationRegistrar;
 import com.blueprinthell.controller.systems.RouteHints;
+import com.blueprinthell.controller.systems.SpyBehavior;
+import com.blueprinthell.controller.systems.TeleportTracking;
 import com.blueprinthell.controller.systems.VpnRevertHints;
 import com.blueprinthell.controller.ui.editor.SystemBoxDragController;
 import com.blueprinthell.controller.ui.hud.HudController;
@@ -25,7 +27,6 @@ import com.blueprinthell.model.Updatable;
 import com.blueprinthell.model.WireModel;
 import com.blueprinthell.model.WireUsageModel;
 import com.blueprinthell.model.large.LargeGroupRegistry;
-import com.blueprinthell.view.EliphasPointRenderer;
 import com.blueprinthell.view.WireView;
 
 import javax.swing.*;
@@ -89,6 +90,7 @@ public class LevelCoreManager {
         Level level = LevelRegistry.getLevel(idx);
         startLevel(level.getDefinition());
     }
+
     public void startLevel(LevelDefinition def) {
         this.currentDef = def;
 
@@ -119,6 +121,15 @@ public class LevelCoreManager {
 
         usageModel.reset(def.totalWireLength());
 
+        // --- FIX: Create controllers BEFORE building/resetting the view ---
+        AccelerationFreezeController freezeController = new AccelerationFreezeController(gameController.getWires());
+        EliphasCenteringController eliphasController = new EliphasCenteringController(gameController.getWires());
+
+        // Pass controllers to the GameView so it can add the renderers
+        gameController.getGameView().setFreezeController(freezeController);
+        gameController.getGameView().setEliphasController(eliphasController);
+
+        // Now, build the level. This will call reset() inside, which will now find the controllers.
         boxes = levelBuilder.build(def, boxes);
 
         for (WireModel w : gameController.getWires()) {
@@ -143,6 +154,8 @@ public class LevelCoreManager {
 
         RouteHints.clear();
         VpnRevertHints.clear();
+        SpyBehavior.clearGlobalState();
+        TeleportTracking.clearAll();
 
         WireModel.setSourceInputPorts(sources);
         WireModel.setSimulationController(gameController.getSimulation());
@@ -175,52 +188,24 @@ public class LevelCoreManager {
 
         gameController.setPacketRenderer(new PacketRenderController(gameController.getGameView().getGameArea(), gameController.getWires()));
 
-        gameController.setHudController(new HudController(usageModel, gameController.getLossModel(), gameController.getCoinModel(), levelManager, gameController.getHudView()));
-        gameController.setShopController(new ShopController(
-                gameController.getMainFrame(),
-                gameController.getSimulation(),
-                gameController.getCoinModel(),
-                gameController.getCollisionCtrl(),
+        HudController hudCtrl = new HudController(
+                usageModel,
                 gameController.getLossModel(),
-                gameController.getWires(),
-                gameController.getHudController(),
-                gameController.getGameView()  // اضافه شدن gameView
-        ));
-        AccelerationFreezeController freezeController = new AccelerationFreezeController(gameController.getWires());
-// --- Eliphas (centering) ---
-        // --- Eliphas (centering) ---
-        EliphasCenteringController eliphas = new EliphasCenteringController(gameController.getWires());
-        gameController.getShopController().setEliphasController(eliphas); // تا خرید، نقطه را فعال کند
+                gameController.getCoinModel(),
+                levelManager, // Pass the levelManager
+                gameController.getHudView()
+        );
+        gameController.setHudController(hudCtrl);
+        gameController.getShopController().setHudController(hudCtrl);
 
-// HUD overlay: یک لایه‌ی سبک روی gameArea (و پاک‌کردن نسخه‌های قبلی)
-        if (gameController.getGameView() != null) {
-            JComponent area = gameController.getGameView().getGameArea();
-            for (Component c : area.getComponents()) {
-                if (c instanceof EliphasPointRenderer) {
-                    area.remove(c);
-                }
-            }
-            EliphasPointRenderer overlay = new EliphasPointRenderer(eliphas);
-            overlay.setOpaque(false);
-            overlay.setBounds(0, 0, area.getWidth(), area.getHeight());
-            area.add(overlay);
-            area.setComponentZOrder(overlay, 0); // روی همه
-            area.addComponentListener(new java.awt.event.ComponentAdapter() {
-                @Override public void componentResized(java.awt.event.ComponentEvent e) {
-                    overlay.setBounds(0, 0, area.getWidth(), area.getHeight());
-                }
-            });
-            area.revalidate();
-            area.repaint();
-        }
-
-
+        // Pass controllers to the shop and simulation
+        gameController.getShopController().setEliphasController(eliphasController);
+        gameController.getShopController().setFreezeController(freezeController);
 
         gameController.getSimulation().register(freezeController);
         gameController.setFreezeController(freezeController);
         gameController.getShopController().setFreezeController(freezeController);
-
-
+        gameController.getSimulation().register(eliphasController); // Register Eliphas controller
 
         gameController.setRegistrar(new SimulationRegistrar(
                 gameController,                                      // NetworkController
@@ -238,10 +223,10 @@ public class LevelCoreManager {
         ));
         gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
 
-// 2) حالا LargeGroupRegistry واقعی را بگیر
+        // 2) حالا LargeGroupRegistry واقعی را بگیر
         LargeGroupRegistry largeRegistry = gameController.getRegistrar().getLargeGroupRegistry();
 
-// 3) SnapshotService را با رجیستری «غیر-null» بساز
+        // 3) SnapshotService را با رجیستری «غیر-null» بساز
         gameController.setSnapshotSvc(new SnapshotService(
                 gameController.getDestMap(),
                 boxes,
@@ -260,9 +245,6 @@ public class LevelCoreManager {
                 largeRegistry
         ));
 
-
-
-
         gameController.getRegistrar().setCurrentBoxSpecs(def.boxes());
 
         List<Updatable> systemControllers = new ArrayList<Updatable>();
@@ -274,11 +256,9 @@ public class LevelCoreManager {
         }
 
         gameController.getRegistrar().registerAll(boxes, gameController.getWires(), destMap, sources, sink, gameController.getProducerController(), systemControllers);
-        gameController.getSimulation().register(eliphas);
 
         updateStartEnabled();
         SystemBoxDragController.setNetworkChanged(this::updateStartEnabled);
-
 
         gameController.startAutoSave();
     }
@@ -291,7 +271,6 @@ public class LevelCoreManager {
         // *** تغییر مهم: ذخیره کردن مرجع WireRemovalController ***
         this.wireRemovalController = new WireRemovalController(
                 gameController.getGameView(), gameController.getWires(), destMap, creator, usageModel, gameController::updateStartEnabled);
-
     }
 
     public void updateStartEnabled() {
@@ -311,8 +290,6 @@ public class LevelCoreManager {
                 : WireIntersectionValidator.getValidationMessage(gameController.getWires(), boxes);
         gameController.getHudCoord().setRightWarningMessage(warn);
     }
-
-
 
     public void purgeCurrentLevelWires() {
         JPanel area = gameController.getGameView().getGameArea();

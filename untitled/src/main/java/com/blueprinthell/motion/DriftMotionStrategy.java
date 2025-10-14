@@ -5,20 +5,15 @@ import com.blueprinthell.model.WireModel;
 
 import java.awt.Point;
 
-/**
- * حرکت با سرعت ثابت + انحراف جانبیِ تناوبی برای پکت‌های حجیم.
- * - هر فریم، پکت روی سنترلاین مسیر جلو می‌رود (با baseSpeed).
- * - سپس به‌میزان driftOffsetPx در راستای نرمال مسیر از سنترلاین منحرف می‌شود.
- * - هرگاه مسافت طی‌شده از آخرین «شیفت» به اندازه‌ی driftStepPx برسد، جهت انحراف عوض می‌شود.
- */
+
 public class DriftMotionStrategy implements MotionStrategy {
 
-    private final double baseSpeed;     // px/sec روی سنترلاین
-    private final double driftStepPx;   // هر چند پیکسل یک‌بار جهتِ drift عوض شود
-    private final double driftOffsetPx; // دامنهٔ انحراف عمود بر سیم (پیکسل)
+    private final double baseSpeed;
+    private final double driftStepPx;
+    private final double driftOffsetPx;
 
-    private double distanceSinceFlipPx = 0.0; // مسافت طی‌شده از آخرین flip
-    private boolean driftDirectionPos = false; // false => -1, true => +1
+    private double distanceSinceFlipPx = 0.0;
+    private boolean driftDirectionPos = false;
 
     // برای مشتق‌گیری عددیِ مماس مسیر
     private static final double EPS_T = 0.01;
@@ -37,15 +32,13 @@ public class DriftMotionStrategy implements MotionStrategy {
         double length = wire.getLength();
         if (length <= 0.0) return;
 
-        // 1) پیشروی روی سنترلاین
         double oldP = packet.getProgress();
         double deltaP = (baseSpeed * dt) / length;
         double nextP  = oldP + deltaP;
         if (nextP > 1.0) nextP = 1.0;
 
-        packet.setProgress(nextP); // این call x/y را روی سنترلاین می‌گذارد
+        packet.setProgress(nextP);
 
-        // 2) بروزرسانی مسافتِ طی‌شده‌ی واقعی (با درنظرگرفتن لب‌مرزها)
         double actualDeltaPx = Math.max(0.0, (nextP - oldP) * length);
         distanceSinceFlipPx += actualDeltaPx;
 
@@ -84,8 +77,7 @@ public class DriftMotionStrategy implements MotionStrategy {
         int sign = driftDirectionPos ? 1 : -1;
         double off = sign * driftOffsetPx;
 
-        // 4) قرار دادن پکت در «سنترلاین + آفست عمود»
-        Point pc = wire.pointAt(t); // مرکز سنترلاین در progress فعلی
+        Point pc = wire.pointAt(t);
         int drawX = (int) Math.round(pc.x + nx * off - packet.getWidth()  / 2.0);
         int drawY = (int) Math.round(pc.y + ny * off - packet.getHeight() / 2.0);
 

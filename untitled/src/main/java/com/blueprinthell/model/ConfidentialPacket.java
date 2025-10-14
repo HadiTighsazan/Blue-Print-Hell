@@ -17,10 +17,8 @@ public class ConfidentialPacket extends PacketModel implements Serializable {
         Objects.requireNonNull(original, "packet");
         ConfidentialPacket out = new ConfidentialPacket(original.getType(), original.getBaseSpeed());
 
-        // کپی state ران‌تایم (سیم/پیشرفت/سرعت/شتاب/نویز)
         copyRuntimeState(original, out);
 
-        // --- اندازه: 4 واحد مطلق نسبت به واحدِ نوع اولیه ---
         int suOrig = Math.max(1, original.getType().sizeUnits);
         int w = original.getWidth();
         int h = original.getHeight();

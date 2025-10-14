@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 
+
 public class CoinModel implements Serializable {
 
     private static final long serialVersionUID = 7L;

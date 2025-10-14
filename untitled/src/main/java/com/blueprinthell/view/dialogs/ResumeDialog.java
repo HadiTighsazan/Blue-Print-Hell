@@ -17,7 +17,6 @@ public class ResumeDialog extends JDialog {
         mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         mainPanel.setBackground(new Color(30, 30, 40));
 
-        // عنوان
         JLabel titleLabel = new JLabel("Unsaved Progress Detected", SwingConstants.CENTER);
         titleLabel.setFont(new Font("Arial", Font.BOLD, 18));
         titleLabel.setForeground(Color.WHITE);
@@ -85,7 +84,6 @@ public class ResumeDialog extends JDialog {
         button.setPreferredSize(new Dimension(150, 40));
         button.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-        // hover effect
         button.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseEntered(java.awt.event.MouseEvent evt) {
                 button.setBackground(bgColor.brighter());
@@ -99,11 +97,10 @@ public class ResumeDialog extends JDialog {
     }
 
     private String formatTimestamp(String timestamp) {
-        // ساده‌سازی timestamp
         if (timestamp != null && timestamp.contains("T")) {
             String[] parts = timestamp.split("T");
             if (parts.length == 2) {
-                String time = parts[1].split("\\.")[0]; // حذف میلی‌ثانیه
+                String time = parts[1].split("\\.")[0];
                 return parts[0] + " " + time;
             }
         }

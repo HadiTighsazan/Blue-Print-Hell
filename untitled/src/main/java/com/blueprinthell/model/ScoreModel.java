@@ -23,3 +23,4 @@ public class ScoreModel implements Serializable {
         score = 0;
     }
 }
+

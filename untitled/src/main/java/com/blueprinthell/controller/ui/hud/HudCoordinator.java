@@ -21,7 +21,7 @@ public final class HudCoordinator {
     private  PacketLossModel lossModel;
     private SimulationController simulation;
     private TimelineController timeline;
-    private PacketProducerController producer; // set per‑level
+    private PacketProducerController producer;
 
     public HudCoordinator(HudView hud,
                           ScoreModel scoreModel,
@@ -48,7 +48,6 @@ public final class HudCoordinator {
     }
 
     private final ActionListener startListener = e -> {
-        // قفل کردن درگ از لحظه‌ی استارت
         SystemBoxDragController.setDragEnabled(false);
 
         if (producer != null) producer.startProduction();

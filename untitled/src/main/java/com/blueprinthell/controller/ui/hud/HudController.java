@@ -36,13 +36,16 @@ public class HudController implements Updatable {
         refreshOnce();
     }
 
+
     @Override
     public void update(double dt) {
         refreshOnce();
     }
 
     public void refreshOnce() {
-        hudView.setLevel(levelManager.getLevelIndex() + 1);
+        if (levelManager != null) {
+            hudView.setLevel(levelManager.getLevelIndex() + 1);
+        }
         hudView.setWireLength(usageModel.getRemainingWireLength());
         hudView.setPacketLoss(lossModel.getLostCount());
         hudView.setCoins(coinModel.getCoins());

@@ -6,10 +6,8 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class LargeGroupRegistry {
-    private static final boolean DBG = true;
 
 
-    /** Lightweight DTO for snapshotting group state. */
     public static final class GroupSnapshot {
         public final int id;
         public final int originalSizeUnits;
@@ -19,7 +17,7 @@ public final class LargeGroupRegistry {
         public final int mergedBits;
         public final int lostBits;
         public final boolean closed;
-        public final List<Integer> partialMerges; // store mergedPacketSize values
+        public final List<Integer> partialMerges;
 
         public GroupSnapshot(int id,
                              int originalSizeUnits,
@@ -48,11 +46,11 @@ public final class LargeGroupRegistry {
         public final int  expectedBits;
         public final int  colorId;
         private int       receivedBits = 0;
-        private int       mergedBits = 0;  // تعداد بیت‌هایی که ادغام شده‌اند
-        private int       lostBits = 0;
+        private int       mergedBits = 0;
+        private int       lostBits = 0; // <-- فیلد جدید
         private boolean   closed   = false;
         private final List<PacketModel> collectedPackets = new ArrayList<>();
-        private final List<Integer> partialMerges = new ArrayList<>(); // سایز پکت‌های ادغام شده
+        private final List<Integer> partialMerges = new ArrayList<>();
 
         GroupState(int id, int originalSize, int expectedBits, int colorId) {
             this.groupId = id;
@@ -67,16 +65,22 @@ public final class LargeGroupRegistry {
 
         public int  getReceivedBits() { return receivedBits; }
         public int  getMergedBits()   { return mergedBits; }
-        public int  getMissingBits()  { return Math.max(0, expectedBits - receivedBits); }
-        public int  getLostBits()     { return lostBits; }
+        public int  getLostBits()     { return lostBits; } // <-- متد جدید
         public boolean isComplete()   { return receivedBits >= expectedBits; }
         public boolean isClosed()     { return closed; }
         public List<PacketModel> getCollectedPackets() {return Collections.unmodifiableList(collectedPackets);}
         public List<Integer> getPartialMerges() { return Collections.unmodifiableList(partialMerges); }
-        // Added getters for snapshotting
+
         public int getOriginalSize() { return originalSizeUnits; }
         public int getExpectedBits() { return expectedBits; }
         public int getColorId() { return colorId; }
+
+        /**
+         * بررسی می‌کند که آیا تمام بیت‌ها تعیین تکلیف شده‌اند (یا رسیده‌اند یا گم شده‌اند)
+         */
+        public boolean allBitsAccountedFor() {
+            return (receivedBits + lostBits) >= expectedBits;
+        }
 
         void addPacket(PacketModel p) {
             collectedPackets.add(p);
@@ -110,7 +114,6 @@ public final class LargeGroupRegistry {
 
     public void createGroupWithId(int groupId, int originalSizeUnits, int expectedBits, int colorId) {
         groups.computeIfAbsent(groupId, gid -> {
-            // ensure idSeq ahead of manual ids
             idSeq.updateAndGet(v -> Math.max(v, gid + 1));
             return new GroupState(gid, originalSizeUnits, expectedBits, colorId);
         });
@@ -124,8 +127,17 @@ public final class LargeGroupRegistry {
     }
 
     /**
-     * ثبت ادغام partial (برای پکت‌های سایز 4)
+     * متد جدید برای ثبت از دست رفتن یک بیت‌پکت
      */
+    public void registerLostBit(int groupId) {
+        GroupState st = groups.get(groupId);
+        if (st != null && !st.isClosed()) {
+            st.markLost(1);
+            totalBitsLost++;
+        }
+    }
+
+
     public void registerPartialMerge(int groupId, int bitCount, int mergedPacketSize) {
         GroupState st = groups.get(groupId);
         if (st == null || st.closed) return;
@@ -135,15 +147,7 @@ public final class LargeGroupRegistry {
         totalBitsMerged += bitCount;
     }
 
-    /**
-     * Directly mark merged bits (used by restore when we only know counts).
-     */
-    public void markMerged(int groupId, int bitCount) {
-        GroupState st = groups.get(groupId);
-        if (st == null || st.closed) return;
-        st.markMerged(bitCount);
-        totalBitsMerged += Math.max(0, bitCount);
-    }
+
 
     public void registerSplit(int groupId, PacketModel bit) {
         if (groups.containsKey(groupId)) {
@@ -151,24 +155,17 @@ public final class LargeGroupRegistry {
         }
     }
 
-    public void markBitLost(int groupId, int count) {
-        GroupState st = groups.get(groupId);
-        if (st == null || st.closed) return;
-        st.markLost(count);
-        totalBitsLost += count;
-    }
+
 
     public GroupState get(int groupId) { return groups.get(groupId); }
 
     public void closeGroup(int groupId) {
         GroupState st = groups.get(groupId);
         if (st != null) {
-            boolean wasClosed = st.isClosed();
             st.close();
         }
     }
 
-    public void removeGroup(int groupId) { groups.remove(groupId); }
 
     public void clear() {
         groups.clear();
@@ -179,9 +176,7 @@ public final class LargeGroupRegistry {
 
     public Map<Integer, GroupState> view() { return Collections.unmodifiableMap(groups); }
 
-    /**
-     * Create a serializable view of all groups.
-     */
+
     public List<GroupSnapshot> snapshot() {
         List<GroupSnapshot> out = new ArrayList<>();
         for (Map.Entry<Integer, GroupState> e : view().entrySet()) {
@@ -210,8 +205,7 @@ public final class LargeGroupRegistry {
         for (GroupSnapshot s : data) {
             GroupState newState = new GroupState(s.id, s.originalSizeUnits, s.expectedBits, s.colorId);
 
-            // بازیابی کامل state
-            newState.receivedBits = s.receivedBits;  // اضافه شد
+            newState.receivedBits = s.receivedBits;
             newState.mergedBits = s.mergedBits;
             newState.lostBits = s.lostBits;
             newState.closed = s.closed;
@@ -225,50 +219,21 @@ public final class LargeGroupRegistry {
         }
 
     }
-    /**
-     * محاسبه loss براساس تعداد بیت‌های ادغام شده
-     */
-    public int computeLossForGroup(int groupId) {
-        GroupState st = groups.get(groupId);
-        if (st == null) return 0;
 
-        // محاسبه loss = تعداد بیت‌های اصلی - تعداد بیت‌های ادغام شده
-        return Math.max(0, st.originalSizeUnits - st.getMergedBits());
-    }
 
-    /**
-     * محاسبه loss با در نظر گرفتن partial merges
-     */
-    public int computePartialLoss(int groupId) {
-        GroupState st = groups.get(groupId);
-        if (st == null) return 0;
-
-        List<Integer> merges = st.getPartialMerges();
-        if (merges.isEmpty()) {
-            return st.originalSizeUnits;
-        }
-
-        // محاسبه بر اساس فرمول پیچیده‌تر (اگر نیاز است)
-        int totalRecovered = merges.stream().mapToInt(Integer::intValue).sum();
-        return Math.max(0, st.originalSizeUnits - totalRecovered);
-    }
 
     public int calculateActualLoss(int groupId) {
         GroupState st = groups.get(groupId);
         if (st == null) return 0;
-        if (!st.isClosed()) return 0;
+        if (!st.isClosed()) return 0; // فقط برای گروه‌های بسته شده محاسبه کن
 
-        var merges = st.getPartialMerges();
-        if (merges.isEmpty()) {
-            return st.originalSizeUnits; // هیچ مرجی به مقصد نرسیده
-        }
+        // بیت‌هایی که در مسیر گم شده‌اند
+        int inTransitLoss = st.getLostBits();
 
-        int i = merges.size();
-        double product = 1.0;
-        for (int a : merges) product *= a;
+        // بیت‌هایی که به مرجر رسیده‌اند ولی هرگز ترکیب نشده‌اند
+        int strandedInMerger = st.getReceivedBits() - st.getMergedBits();
 
-        int recovered = (int) Math.floor(i * Math.pow(product, 1.0 / i));
-        return Math.max(0, st.originalSizeUnits - recovered);
+        return inTransitLoss + strandedInMerger;
     }
 
     public void closeAllOpenGroups() {
@@ -279,12 +244,12 @@ public final class LargeGroupRegistry {
             }
         }
     }
-        public Integer findOpenGroupByColorAndSize(int colorId, int originalSizeUnits) {
-                for (GroupState st : groups.values()) {
-                        if (!st.isClosed() && st.colorId == colorId && st.originalSizeUnits == originalSizeUnits) {
-                                return st.groupId;
-                           }
-                   }
-               return null;
+    public Integer findOpenGroupByColorAndSize(int colorId, int originalSizeUnits) {
+        for (GroupState st : groups.values()) {
+            if (!st.isClosed() && st.colorId == colorId && st.originalSizeUnits == originalSizeUnits) {
+                return st.groupId;
             }
+        }
+        return null;
+    }
 }

@@ -28,9 +28,7 @@ public final class MaliciousBehavior implements SystemBehavior {
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
 
-        // Check if packet is protected - if so, try to revert it first
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
-            // Try to consume global VPN protection
             PacketModel orig = VpnRevertHints.consumeGlobal(packet);
 
             if (orig != null) {
@@ -38,7 +36,6 @@ public final class MaliciousBehavior implements SystemBehavior {
                 replaceInBuffer(packet, orig);
                 packet = orig;
             } else {
-                // Cannot affect protected packets that we can't revert
                 return;
             }
         }
@@ -53,14 +50,12 @@ public final class MaliciousBehavior implements SystemBehavior {
     private void applyMaliciousEffects(PacketModel packet) {
         boolean modified = false;
 
-        // 1. Add noise if packet has none
         if (packet.getNoise() == 0.0) {
             packet.increaseNoise(1.0);
             noisedPackets++;
             modified = true;
         }
 
-        // 2. Possibly convert to Trojan
         if (rnd.nextDouble() < trojanProbability) {
             PacketModel trojan = PacketOps.toTrojan(packet);
             if (trojan != packet) {
@@ -71,14 +66,10 @@ public final class MaliciousBehavior implements SystemBehavior {
             }
         }
 
-        // 3. Mark for incompatible routing
         RouteHints.setForceIncompatible(packet, true);
         forcedIncompatibleRoutes++;
 
-        // Log the malicious action for debugging
-        if (modified) {
-            logMaliciousAction(packet);
-        }
+
     }
 
     @Override
@@ -110,18 +101,7 @@ public final class MaliciousBehavior implements SystemBehavior {
         }
     }
 
-    private void logMaliciousAction(PacketModel packet) {
-        // For debugging - can be expanded with proper logging
-        String action = String.format(
-                "Malicious action on %s: noise=%.1f, trojan=%b",
-                packet.getType(),
-                packet.getNoise(),
-                packet instanceof TrojanPacket
-        );
-    }
 
-    // Telemetry getters
-    public long getNoisedPackets() { return noisedPackets; }
-    public long getTrojanizedPackets() { return trojanizedPackets; }
-    public long getForcedIncompatibleRoutes() { return forcedIncompatibleRoutes; }
+
+
 }

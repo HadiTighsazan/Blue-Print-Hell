@@ -25,7 +25,7 @@ public class ShopController {
     private final CollisionController collisionController;
     private final PacketLossModel lossModel;
     private final List<WireModel> wires;
-    private final HudController hudController;
+    private HudController hudController;
 
     private final ShopView shopView;
     private final JDialog dialog;
@@ -279,4 +279,7 @@ public class ShopController {
     }
     public void setEliphasController(EliphasCenteringController c) { this.eliphasController = c; }
 
+    public void setHudController(HudController hudController) {
+        this.hudController = hudController;
+    }
 }

@@ -19,6 +19,7 @@ public final class WirePhysics {
     }
 
 
+
     public static Point pointAt(WirePath path, double t) {
         List<Point> pts = path.controlPoints();
         if (t <= 0) return pts.get(0);

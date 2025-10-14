@@ -12,6 +12,7 @@ public class HudView extends JPanel {
     private final JLabel packetLossLabel;
     private final JLabel coinsLabel;
 
+
     private final JPanel activeFeaturesPanel;
 
     private final JButton startButton;

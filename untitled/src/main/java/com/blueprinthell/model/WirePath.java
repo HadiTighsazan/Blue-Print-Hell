@@ -42,31 +42,7 @@ public final class WirePath implements Serializable {
     }
 
 
-    public WirePath withPoint(int index, Point p) {
-        if (index <= 0 || index >= controlPoints.size() - 1)
-            throw new IllegalArgumentException("Only intermediate points are mutable");
-        java.util.ArrayList<Point> copy = new java.util.ArrayList<>(controlPoints);
-        copy.set(index, p);
-        return new WirePath(copy);
-    }
 
-    public WirePath insertPoint(int index, Point p) {
-        if (segmentCount() >= MAX_BENDS + 1)
-            throw new IllegalStateException("Max bends reached");
-        if (index < 0 || index >= controlPoints.size() - 1)
-            throw new IndexOutOfBoundsException();
-        java.util.ArrayList<Point> copy = new java.util.ArrayList<>(controlPoints);
-        copy.add(index + 1, p);
-        return new WirePath(copy);
-    }
-
-    public WirePath removePoint(int index) {
-        if (index <= 0 || index >= controlPoints.size() - 1)
-            throw new IllegalArgumentException("Cannot remove src/dst points");
-        java.util.ArrayList<Point> copy = new java.util.ArrayList<>(controlPoints);
-        copy.remove(index);
-        return new WirePath(copy);
-    }
 
 
     public List<Point> getPoints() {

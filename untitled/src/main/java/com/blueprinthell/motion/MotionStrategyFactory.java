@@ -29,7 +29,6 @@ public final class MotionStrategyFactory {
             );
         }
 
-        // برای پکت‌های محرمانه عادی
         if (packet instanceof ConfidentialPacket && !PacketOps.isConfidentialVpn(packet)) {
             KinematicsRegistry.setProfile(packet, KinematicsProfile.CONFIDENTIAL);
             return new ConstantSpeedStrategy(Config.CONF_SPEED);
@@ -48,12 +47,10 @@ public final class MotionStrategyFactory {
 
         if (packet instanceof LargePacket lp) {
             if (lp.getOriginalSizeUnits() == 10) {
-                // حرکت drift برای پکت 10
                 return new DriftMotionStrategy(Config.L10_BASE_SPEED,
                         Config.L10_DRIFT_STEP_PX,
                         Config.L10_DRIFT_OFFSET_PX);
             } else if (lp.getOriginalSizeUnits() == 8) {
-                // حرکت با شتاب در انحنا برای پکت 8
                 return new AccelOnCurveStrategy(Config.L8_CURVE_ACCEL, Config.L8_MAX_MUL);
             }
         }
@@ -98,7 +95,6 @@ public final class MotionStrategyFactory {
         if (packet instanceof BitPacket) {
             return base;
         }
-        // Type-aware: for blue (SQUARE => MSG2) use gentler accel/ceiling
         KinematicsProfile prof = ensureProfile(packet);
         double accel = Config.LONG_WIRE_ACCEL;
         double maxMul = Config.LONG_WIRE_MAX_MUL;
@@ -192,7 +188,6 @@ public final class MotionStrategyFactory {
                 effective   = Math.max(speed, v1);
                 packet.setSpeed(effective);
             } else {
-                // *** نکته‌ی مهم: برای پکت محرمانه سرعت از بیرون قابل تحمیل باشد (throttle) ***
                 if (packet instanceof com.blueprinthell.model.ConfidentialPacket) {
                     // اگر قبلاً throttled شده بود همان را نگه دار، وگرنه روی سرعت قاعده بیفت
                     double ext = packet.getSpeed();
@@ -208,7 +203,6 @@ public final class MotionStrategyFactory {
             if (next > 1.0) next = 1.0;
             packet.setProgress(next);
 
-            // همخوانی state داخلی مدل با سرعتی که واقعاً استفاده شد
             packet.setSpeed(effective);
         }
 
@@ -266,21 +260,21 @@ public final class MotionStrategyFactory {
 
 
     private static final class KeepDistanceStrategy implements MotionStrategy {
-        private final double baseSpeed;   // px/s
-        private final double minGapPx;    // فاصله هدف روی سیم (px)
+        private final double baseSpeed;
+        private final double minGapPx;
         private double v ;
-        // از Config خوانده می‌شود تا بیرونی و قابل‌تنظیم باشد
-        private static final double HYST    = Config.CONF_VPN_HYSTERESIS_PX; // مثلا 5
-        private static final double A_MAX   = Config.CONF_VPN_MAX_ACCEL;     // px/s^2
-        private static final double D_MAX   = Config.CONF_VPN_MAX_DECEL;     // px/s^2
-        private static final double VMAX_MUL = 2.0;                           // سقف |v| نسبت به base
+
+        private static final double HYST    = Config.CONF_VPN_HYSTERESIS_PX;
+        private static final double A_MAX   = Config.CONF_VPN_MAX_ACCEL;
+        private static final double D_MAX   = Config.CONF_VPN_MAX_DECEL;
+        private static final double VMAX_MUL = 2.0;
 
         // ضرایب کنترلی سبک
         private static final double K_FWD  = 2.0;   // پشتی نزدیک → جلو رفتن
         private static final double K_BACK = 2.0;   // جلویی نزدیک → عقب رفتن
 
         KeepDistanceStrategy(MotionRule rule, double gap) {
-            this.baseSpeed = rule.speedStart;    // معمولاً = Config.CONF_VPN_SPEED
+            this.baseSpeed = rule.speedStart;
             this.minGapPx  = gap;
             this.v = baseSpeed;
         }
@@ -311,7 +305,7 @@ public final class MotionStrategyFactory {
             }
 
             // محاسبهٔ سرعت هدف
-            double targetV = baseSpeed; // px/s رو به جلو
+            double targetV = baseSpeed;
             if (!packet.isReturning()) {
                 boolean tooCloseFront = nearestFrontPx < (minGapPx - HYST);
                 boolean tooCloseBack  = nearestBackPx  < (minGapPx - HYST);
@@ -328,7 +322,6 @@ public final class MotionStrategyFactory {
             }
 
             // محدود کردن شتاب/کاهش شتاب
-            // vPrev را در یک فیلد نگه دارید؛ اگر ندارید می‌توانید از packet.getSpeed() شروع کنید:
             if (Double.isNaN(v)) v = baseSpeed;
             double dv   = targetV - v;
             double aReq = dv / Math.max(1e-6, dt);
@@ -342,31 +335,25 @@ public final class MotionStrategyFactory {
             if (v < -vCap) v = -vCap;
 
             // اعمال به progress (اجازه به عقب‌گرد با v منفی)
-            packet.setSpeed(Math.abs(v)); // برای سازگاری با سایر کنترلرها
-            double dp   = (v * dt) / len; // توجه: v (نه baseSpeed)
+            packet.setSpeed(Math.abs(v));
+            double dp   = (v * dt) / len;
             double next = myProg + dp;
             if (next < 0.0) next = 0.0;
             if (next > 1.0) next = 1.0;
             packet.setProgress(next);
 
-            // هیچ offset بصریِ اضافی اینجا اعمال نکنید؛ این استراتژی صرفاً فاصلهٔ طولی را تنظیم می‌کند.
         }
 
 
-        private static double stepTowardSigned(double currentAbs, double targetSigned, double dvMax) {
-            double currentSigned = currentAbs; // فرض رو به جلو؛ هدف علامت را تعیین می‌کند
-            double diff = targetSigned - currentSigned;
-            if (Math.abs(diff) <= dvMax) return targetSigned;
-            return currentSigned + Math.copySign(dvMax, diff);
-        }
+
     }
 
     private static final class DriftStrategy implements MotionStrategy {
         private final double baseSpeed;
-        private final double stepDist;
-        private final double offsetPx;
-        private double traveledPx = 0;
-        private boolean offsetSide = false;
+        private final double stepDist; // هر چند پیکسل یک‌بار جهت عوض شود
+        private final double offsetPx; // مقدار انحراف
+        private double traveledPx = 0; // مسافت طی شده از آخرین تغییر جهت
+        private boolean offsetSide = false; // جهت انحراف (مثبت یا منفی)
 
         DriftStrategy(MotionRule rule, double stepDist, double offsetPx) {
             this.baseSpeed = rule.speedStart;
@@ -412,8 +399,8 @@ public final class MotionStrategyFactory {
                 boolean isLong = (w != null) && (w.getLength() >= Config.LONG_WIRE_THRESHOLD_PX);
 
                 double base  = packet.getBaseSpeed();
-                double capMul = isLong ? Config.LONG_WIRE_MAX_SPEED_MUL   // مثلاً 3.5
-                        : Config.APPROACH_MAX_MUL;         // مثلاً 1.5
+                double capMul = isLong ? Config.LONG_WIRE_MAX_SPEED_MUL
+                        : Config.APPROACH_MAX_MUL;
                 double cap = base * capMul;
 
                 if (packet.getSpeed() > cap) {

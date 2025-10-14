@@ -39,7 +39,7 @@ public class SimulationRegistrar {
     private final HudView hudView;
     private final LevelManager levelManager;
     private final NetworkController networkController;
-    // اضافه کردن فیلدهای WireRemovalController و WireDurabilityController
+
     private WireRemovalController wireRemover;
     private WireDurabilityController durability;
     private WireTimeoutController timeout;
@@ -85,11 +85,9 @@ public class SimulationRegistrar {
         this.currentBoxSpecs = (specs != null) ? specs : Collections.emptyList();
     }
 
-    // *** متد جدید برای تنظیم WireRemovalController ***
     public void setWireRemover(WireRemovalController r) {
         this.wireRemover = r;
 
-        // اگر durability قبلاً ایجاد شده، آن را هم به‌روزرسانی کن
         if (durability != null) {
             durability.setWireRemover(r);
         }
@@ -98,7 +96,6 @@ public class SimulationRegistrar {
     public LevelDefinition.BoxSpec findBoxSpec(SystemBoxModel box) {
         if (box == null || currentBoxSpecs == null) return null;
 
-        // 1) بهترین و پایدارترین: بر اساس ID
         for (var spec : currentBoxSpecs) {
             if (spec.id().equals(box.getId())) {
                 return spec;
@@ -155,9 +152,9 @@ public class SimulationRegistrar {
         WireModel.setSimulationController(simulation);
 
 
-        // 1) خود باکس‌ها
         for (SystemBoxModel b : boxes) {
-            if (!already.contains(b)) simulation.register(b);
+            if (!already.contains(b))
+                simulation.register(b);
         }
 
         // 2) *** Dispatcher قبل از Behavior-Adapter ها ***
@@ -165,17 +162,17 @@ public class SimulationRegistrar {
         this.dispatcherRef = dispatcher;
         simulation.register(dispatcher);
         {
-                            Map<WireModel, SystemBoxModel> srcMap = new HashMap<>();
-                    for (WireModel w : wires) {
-                            PortModel sp = w.getSrcPort();
-                            if (sp == null) continue;
-                            SystemBoxModel owner = portToBoxMap.get(sp);
-                            if (owner != null) {
-                                    srcMap.put(w, owner);
-                               }
-                        }
-                    dispatcher.setSourceMap(srcMap);
+            Map<WireModel, SystemBoxModel> srcMap = new HashMap<>();
+            for (WireModel w : wires) {
+                PortModel sp = w.getSrcPort();
+                if (sp == null) continue;
+                SystemBoxModel owner = portToBoxMap.get(sp);
+                if (owner != null) {
+                    srcMap.put(w, owner);
                 }
+            }
+            dispatcher.setSourceMap(srcMap);
+        }
         // 3) Behavior ها و Adapterها (از جمله VPN)
         for (SystemBoxModel box : boxes) {
             attachBehaviorsForBox(box, boxes, wires, destMap);
@@ -239,8 +236,6 @@ public class SimulationRegistrar {
 
         simulation.register(snapshotCtrl);
 
-        HudController hudController = new HudController(usageModel, lossModel, coinModel, levelManager, hudView);
-        simulation.register(hudController);
 
         simulation.register(packetRenderer);
         simulation.register(collisionController);
@@ -257,7 +252,8 @@ public class SimulationRegistrar {
             if (spec != null) {
                 kind = spec.kind();
             }
-        } catch (Throwable ignore) {
+        }
+        catch (Throwable ignore) {
         }
         if (kind == null) kind = SystemKind.NORMAL;
 
@@ -367,17 +363,7 @@ public class SimulationRegistrar {
         }
     }
 
-    private double estimatePlannedTotal(PacketProducerController producer, List<SystemBoxModel> sources) {
-        if (producer == null || sources == null) return 0.0;
-        try {
-            int ppp = producer.getPacketsPerPort();
-            return (double) ppp * Math.max(1, sources.size());
-        } catch (Throwable ignore) {
-            return 0.0;
-        }
-    }
 
-    /** Clear per-frame transient states before restoring from a snapshot. */
     public void clearTransientState() {
         if (timeout != null)    timeout.clear();     // elapsed/lastWire ریست
         if (durability != null) durability.clear();  // شمارنده‌های عبور و صف حذف

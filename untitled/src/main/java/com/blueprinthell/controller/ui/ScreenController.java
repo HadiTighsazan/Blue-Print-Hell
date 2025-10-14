@@ -20,6 +20,7 @@ public class ScreenController {
     private final CardLayout cardLayout;
     private final JPanel mainPanel;
 
+
     private final MainMenuView      mainMenuView;
     private final SettingsMenuView  settingsMenuView;
     private final GameOverView      gameOverView;

@@ -34,11 +34,7 @@ public final class KinematicsRegistry {
     }
 
 
-    public static KinematicsProfile ensure(PacketModel packet, KinematicsProfile deflt) {
-        Objects.requireNonNull(packet, "packet");
-        Objects.requireNonNull(deflt, "default profile");
-        return MAP.computeIfAbsent(packet, k -> deflt);
-    }
+
 
     public static boolean has(PacketModel packet) {
         return MAP.containsKey(packet);
@@ -63,19 +59,5 @@ public final class KinematicsRegistry {
 
     }
 
-    /**
-     * Returns enum name for snapshotting; may be null if no explicit profile set yet.
-     */
-    public static String getProfileId(PacketModel packet) {
-        KinematicsProfile k = getProfile(packet);
-        return (k != null) ? k.name() : null;
-    }
 
-    /**
-     * Restores profile from its enum name; if id is null, leaves current/default profile.
-     */
-    public static void setProfileById(PacketModel packet, String id) {
-        if (id == null) return;
-        setProfile(packet, KinematicsProfile.valueOf(id));
-    }
 }

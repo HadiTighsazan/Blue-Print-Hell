@@ -29,7 +29,6 @@ public class PacketModel extends GameObjectModel implements Serializable {
     private boolean returning = false;
 
 
-    // field جدید:
     private double collisionCooldown = 0.0;
 
     private boolean holdWhileCooldown = false;
@@ -121,7 +120,6 @@ public class PacketModel extends GameObjectModel implements Serializable {
 
     public boolean isReturning() { return returning; }
     public void setReturning(boolean v) { this.returning = v; }
-    // getter/setter
     public double getCollisionCooldown() { return collisionCooldown; }
     public void   setCollisionCooldown(double t) { collisionCooldown = Math.max(0.0, t); }
 

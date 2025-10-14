@@ -29,13 +29,12 @@ public class BitPacket extends PacketModel implements Serializable {
                      int parentSizeUnits,
                      int indexInGroup,
                      int colorId) {
-        super(type, baseSpeed);  // استفاده از type ورودی
+        super(type, baseSpeed);
         this.groupId = groupId;
         this.parentSizeUnits = parentSizeUnits;
         this.indexInGroup = indexInGroup;
         this.colorId = colorId;
 
-        // تنظیم سایز مثل پیام‌رسان معمولی سایز 1
         int visualSize = Config.BIT_PACKET_SIZE * Config.PACKET_SIZE_MULTIPLIER;
         this.setWidth(visualSize);
         this.setHeight(visualSize);

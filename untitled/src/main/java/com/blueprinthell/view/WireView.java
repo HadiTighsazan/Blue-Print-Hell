@@ -92,6 +92,7 @@ public class WireView extends JComponent {
         return isNearSegment(x, y, prev, p2);
     }
 
+
     private static boolean isNearSegment(int x, int y, Point a, Point b) {
         double dx = b.x - a.x;
         double dy = b.y - a.y;

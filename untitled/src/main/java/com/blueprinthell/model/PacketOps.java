@@ -38,18 +38,35 @@ public final class PacketOps {
         }
         return packet;
     }
-
     public static PacketModel clonePlain(PacketModel src) {
         Objects.requireNonNull(src, "src");
-        PacketModel dst = new PacketModel(src.getType(), src.getBaseSpeed());
-        if (src.getCurrentWire() != null) {
-            dst.attachToWire(src.getCurrentWire(), src.getProgress());
-        } else {
-            dst.setProgress(src.getProgress());
+
+        PacketModel dst;
+
+        if (src instanceof LargePacket lp) {
+            LargePacket newLp = new LargePacket(lp.getType(), lp.getBaseSpeed(), lp.getOriginalSizeUnits());
+            newLp.setGroupInfo(lp.getGroupId(), lp.getExpectedBits(), lp.getColorId());
+            if (lp.getCustomColor() != null) {
+                newLp.setCustomColor(lp.getCustomColor());
+            }
+            if(lp.isRebuiltFromBits()){
+                newLp.markRebuilt();
+            }
+            dst = newLp;
+        } else if (src instanceof BitPacket bp) {
+            dst = new BitPacket(bp.getType(), bp.getBaseSpeed(), bp.getGroupId(), bp.getParentSizeUnits(), bp.getIndexInGroup(), bp.getColorId());
+        } else if (src instanceof ConfidentialPacket) {
+
+            dst = new PacketModel(src.getType(), src.getBaseSpeed());
         }
-        dst.setSpeed(src.getSpeed());
-        dst.setAcceleration(src.getAcceleration());
-        dst.setNoise(src.getNoise());
+        else {
+            dst = new PacketModel(src.getType(), src.getBaseSpeed());
+        }
+
+        copyRuntimeState(src, dst);
+        dst.setWidth(src.getWidth());
+        dst.setHeight(src.getHeight());
+
         KinematicsRegistry.copyProfile(src, dst);
         return dst;
     }
@@ -86,10 +103,8 @@ public final class PacketOps {
     public static PacketModel toConfidentialVpn(PacketModel original) {
         Objects.requireNonNull(original, "packet");
 
-        // اگر از قبل Confidential + VPN-tag بود، همان را برگردان
         if (isConfidentialVpn(original)) return original;
 
-        // اگر از قبل محرمانه (۴ واحدی) است: حتماً یک ConfidentialPacket بساز و 1.5× کن
         if (isConfidential(original)) {
             ConfidentialPacket conf6 = ConfidentialPacket.wrap(original); // حفظ کلاسِ Confidential
             conf6.setWidth( (int)Math.round(conf6.getWidth()  * (6.0/4.0)) );
@@ -99,7 +114,6 @@ public final class PacketOps {
             return conf6;
         }
 
-        // در غیر این صورت، از روی پکت ورودی، محرمانه ۶ واحدی بساز
         ConfidentialPacket conf = ConfidentialPacket.wrap(original);
         int suOrig = Math.max(1, original.getType().sizeUnits);
         int w = original.getWidth();
@@ -136,61 +150,24 @@ public final class PacketOps {
 
     private static final Map<PacketModel, EnumSet<PacketTag>> TAGS = new WeakHashMap<>();
 
-    /** Attach a logical tag to a packet (kept weakly; no lifecycle coupling). */
     public static void tag(PacketModel p, PacketTag tag) {
         if (p == null || tag == null) return;
         TAGS.computeIfAbsent(p, k -> EnumSet.noneOf(PacketTag.class)).add(tag);
     }
 
-    /** Check if a packet carries a tag. */
     public static boolean hasTag(PacketModel p, PacketTag tag) {
         EnumSet<PacketTag> set = TAGS.get(p);
         return set != null && set.contains(tag);
     }
 
-    /** Convenience checks for other packet categories used in logic. */
     public static boolean isBit(PacketModel p)   { return p instanceof BitPacket; }
     public static boolean isLarge(PacketModel p) { return p instanceof LargePacket; }
 
-    /** Is a confidential packet specifically tagged as VPN-variant. */
     public static boolean isConfidentialVpn(PacketModel p) {
         return isConfidential(p) && hasTag(p, PacketTag.CONFIDENTIAL_VPN);
     }
 
 
-    public static int coinValue(PacketModel p) {
-        if (p == null) return 0;
-
-        if (isProtected(p)) {
-            return 5;
-        }
-
-        if (isConfidential(p)) {
-            if (isConfidentialVpn(p)) {
-                return 4;
-            }
-            return 3;
-        }
-
-        if (isLarge(p)) {
-            int size = Math.max(0, ((LargePacket) p).getOriginalSizeUnits());
-            return size; // e.g., 8 or 10
-        }
-
-        PacketType t = p.getType();
-        KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
-        if (prof != null) {
-            switch (prof) {
-                case MSG1: return 1;
-                case MSG2: return 2;
-                case MSG3: return 3;
-                default:   return 0;
-            }
-        }
-
-
-        return 0;
-    }
 
 
     public static int coinValueOnEntry(PacketModel p) {
@@ -199,14 +176,13 @@ public final class PacketOps {
         if (isConfidential(p)) return 3;
 
         KinematicsProfile prof = KinematicsRegistry.getOrDefault(p, null);
-        if (prof == KinematicsProfile.MSG1) return 1;  // دایره - تصحیح شد
-        if (prof == KinematicsProfile.MSG2) return 2;  // مربع - تصحیح شد
-        if (prof == KinematicsProfile.MSG3) return 3;  // مثلث - تصحیح شد
+        if (prof == KinematicsProfile.MSG1) return 1;
+        if (prof == KinematicsProfile.MSG2) return 2;
+        if (prof == KinematicsProfile.MSG3) return 3;
 
-        // برای پکت‌های حجیم هنگام ورود سکه‌ای اضافه نمی‌شود
         if (isLarge(p)) {
             LargePacket lp = (LargePacket) p;
-            return lp.getOriginalSizeUnits(); // 8 یا 10 سکه
+            return lp.getOriginalSizeUnits();
         }
 
         return 0;
@@ -214,7 +190,6 @@ public final class PacketOps {
 
 
     public static int coinValueOnConsume(PacketModel p) {
-        // فقط پکت‌های حجیم هنگام مصرف نهایی سکه می‌دهند
         if (isLarge(p)) {
             return Math.max(0, ((LargePacket) p).getOriginalSizeUnits());
         }

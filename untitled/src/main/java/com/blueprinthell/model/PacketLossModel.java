@@ -1,30 +1,53 @@
 package com.blueprinthell.model;
 
+import com.blueprinthell.media.ResourceManager;
 import com.blueprinthell.model.large.BitPacket;
 import com.blueprinthell.model.large.LargePacket;
 import com.blueprinthell.model.large.LargeGroupRegistry;
+import javax.sound.sampled.Clip;
 
 public class PacketLossModel {
     private int immediateLoss = 0;
-    private LargeGroupRegistry registry; // تزریق از SimulationRegistrar
-    private static final boolean DBG_LOSS = true;
+    private LargeGroupRegistry registry;
+
     public void setLargeGroupRegistry(LargeGroupRegistry reg) {
         this.registry = reg;
     }
+    // این متد برای دسترسی LevelCompletionDetector لازم است
+    public LargeGroupRegistry getRegistryForInternalUse() {
+        return registry;
+    }
 
-    // فقط برای پکت‌های غیر بیت/غیر حجیم
+
+    private void playLossSound() {
+        try {
+            Clip clip = ResourceManager.INSTANCE.getClip("impact_thud.wav");
+            if (clip != null) {
+                clip.stop();
+                clip.setFramePosition(0);
+                clip.start();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     public void increment() {
-
         immediateLoss++;
-
+        playLossSound();
     }
 
     public void incrementBy(int n) {
-        if (n > 0) immediateLoss += n;
+        if (n > 0) {
+            immediateLoss += n;
+            playLossSound();
+        }
     }
 
     public void reset() {
         immediateLoss = 0;
+        if (registry != null) {
+            registry.clear();
+        }
     }
 
     public int getImmediateLoss() {
@@ -32,82 +55,55 @@ public class PacketLossModel {
     }
 
     public void incrementPacket(PacketModel p) {
-            if (p instanceof BitPacket) {
-                       return;          // مؤخره
-                    }
-               if (p instanceof LargePacket lp) {
-                        if (DBG_LOSS) {
+        if (p == null) {
+            return;
+        }
 
-                            }
-                        return;        // مؤخره (اولیه یا مرج‌شده)
-                    }
-                immediateLoss++;
-                if (DBG_LOSS) {
-                   }
-          }
+        PacketModel originalPacket = PacketOps.unwrapTrojan(p);
 
-           /** اگر دارید در SnapshotService مقدار فوری را ست می‌کنید، یک لاگ بزنید: */
-           public void restoreImmediateLoss(int value) {
-               this.immediateLoss = Math.max(0, value);
-
+        // *** تغییر کلیدی ***
+        // اگر بیت‌پکت بود، به رجیستری اطلاع بده
+        if (originalPacket instanceof BitPacket bp) {
+            if (registry != null) {
+                registry.registerLostBit(bp.getGroupId());
             }
-    /**
-     * محاسبه کل loss (immediate + deferred)
-     */
+            // بیت‌پکت‌ها به immediateLoss اضافه نمی‌شوند
+            playLossSound(); // ولی صدایش را پخش می‌کنیم
+            return;
+        }
+
+        if (originalPacket instanceof LargePacket lp) {
+            // اگر یک بسته بزرگ کامل از بین رفت، معادل تمام بیت‌هایش loss ثبت می‌شود
+            incrementBy(lp.getOriginalSizeUnits());
+            return;
+        }
+
+        increment();
+    }
+
+    public void restoreImmediateLoss(int value) {
+        this.immediateLoss = Math.max(0, value);
+    }
+
     public int getLostCount() {
         return immediateLoss + computeDeferredLoss();
     }
 
-    /**
-     * محاسبه deferred loss از registry
-     */
     private int computeDeferredLoss() {
         if (registry == null) return 0;
         int total = 0;
         for (var e : registry.view().entrySet()) {
             var st = e.getValue();
-            if (!st.isClosed()) continue;            // فقط گروه‌های بسته‌شده
-            total += registry.calculateActualLoss(e.getKey());
+            // فقط برای گروه‌هایی که بسته‌ شده‌اند، loss را محاسبه کن
+            if (st.isClosed()) {
+                total += registry.calculateActualLoss(e.getKey());
+            }
         }
         return total;
     }
 
-    /**
-     * متد جدید برای دیباگ - برگرداندن deferred loss جداگانه
-     */
     public int getDeferredLoss() {
         return computeDeferredLoss();
-    }
-
-    /**
-     * متد جدید برای دیباگ - اطلاعات کامل loss
-     */
-    public String getLossDetails() {
-        int immediate = getImmediateLoss();
-        int deferred = getDeferredLoss();
-        int total = immediate + deferred;
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("Loss Details:\n");
-        sb.append("  Immediate Loss: ").append(immediate).append("\n");
-        sb.append("  Deferred Loss: ").append(deferred).append("\n");
-        sb.append("  Total Loss: ").append(total).append("\n");
-
-        if (registry != null && deferred > 0) {
-            sb.append("  Group Details:\n");
-            for (var e : registry.view().entrySet()) {
-                var st = e.getValue();
-                if (st.isClosed()) {
-                    int groupLoss = registry.calculateActualLoss(e.getKey());
-                    sb.append("    Group ").append(e.getKey())
-                            .append(": ").append(groupLoss)
-                            .append(" (size=").append(st.getOriginalSize())
-                            .append(", merges=").append(st.getPartialMerges()).append(")\n");
-                }
-            }
-        }
-
-        return sb.toString();
     }
 
     public void finalizeDeferredLossNow() {
@@ -115,7 +111,4 @@ public class PacketLossModel {
             registry.closeAllOpenGroups();
         }
     }
-
-    public LargeGroupRegistry getRegistryView() { return this.registry; }
-
 }

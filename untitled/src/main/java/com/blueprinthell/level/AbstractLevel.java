@@ -1,4 +1,3 @@
-// فایل جدید: untitled/src/main/java/com/blueprinthell/level/AbstractLevel.java
 package com.blueprinthell.level;
 
 import com.blueprinthell.config.Config;
@@ -12,7 +11,6 @@ public abstract class AbstractLevel implements Level {
     protected final String name;
     protected final double wireBudget;
 
-    // Common level parameters
     protected int packetsPerPort = 3;
     protected double maxLossRatio = 0.5;
 

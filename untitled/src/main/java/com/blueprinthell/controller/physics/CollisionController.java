@@ -112,8 +112,11 @@ public class CollisionController implements Updatable {
                     if (other == p || processed.contains(other)) continue;
                     if (isShielded(other)) continue;
 
-                    if (p instanceof BitPacket || p instanceof LargePacket
-                            || other instanceof BitPacket || other instanceof LargePacket) {
+                    PacketModel originalP = PacketOps.unwrapTrojan(p);
+                    PacketModel originalOther = PacketOps.unwrapTrojan(other);
+
+                    if (originalP instanceof BitPacket || originalP instanceof LargePacket
+                            || originalOther instanceof BitPacket || originalOther instanceof LargePacket) {
                         continue;
                     }
 

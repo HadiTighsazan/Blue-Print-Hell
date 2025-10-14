@@ -58,7 +58,7 @@ public final class Config {
     public static final double ANTI_TROJAN_COOLDOWN_S  = 2.0;
 
 
-    public static final double TROJAN_PROBABILITY_NORMAL = 0.50;
+    public static final double TROJAN_PROBABILITY_NORMAL = 0.5;
 
 
     public static final int LARGE_PACKET_SIZE_8 = 8;
@@ -137,7 +137,7 @@ public final class Config {
 
     public static final double CIRCLE_YIELD_WAIT = 0.30;
 
-    public static final int MAX_LARGE_BUFFER_CAPACITY = 8;
+    public static final int MAX_LARGE_BUFFER_CAPACITY = 6;
     public static final int MAX_LP_SPLIT_PER_FRAME = 1;
 
     public static final double CONF_VPN_HYSTERESIS_PX  = 5;

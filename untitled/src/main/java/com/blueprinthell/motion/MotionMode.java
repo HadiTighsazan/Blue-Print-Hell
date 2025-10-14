@@ -10,6 +10,7 @@ public enum MotionMode {
     DRIFT,
     RANDOM_OF_MESSENGER;
 
+
     public boolean usesLinearAccel() {
         return this == ACCEL || this == DECEL;
     }

@@ -39,10 +39,7 @@ public class WireUsageModel {
         notifyListeners();
     }
 
-    /**
-     * Restores the model from given total and used lengths,
-     * ensuring listeners are notified in correct order.
-     */
+
     public void restoreState(double total, double used) {
         reset(total);
         if (used > 0) {
@@ -54,14 +51,5 @@ public class WireUsageModel {
     public double getUsedWireLength()      { return usedWireLength;  }
     public double getRemainingWireLength() { return totalWireLength - usedWireLength; }
 
-    /**
-     * Restore state using the correct listener-notifying sequence.
-     * This avoids direct setters and ensures HUD/listeners sync.
-     */
-    public void restore(double total, double used) {
-        reset(total);
-        if (used > 0) {
-            useWire(used);
-        }
-    }
+
 }

@@ -49,31 +49,25 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
         try {
             ShapeUtils.enableQuality(g2);
 
-            // Get system kind for special rendering
             SystemKind kind = model.getPrimaryKind();
 
-            // --- Draw box background with special colors ---
             Color fillColor = getSystemFillColor(kind);
             Color borderColor = getSystemBorderColor(kind);
 
             g2.setColor(fillColor);
             g2.fillRect(0, 0, getWidth(), getHeight());
 
-            // Draw special effects for certain systems
             drawSpecialEffects(g2, kind);
 
-            // Draw border
             g2.setColor(borderColor);
             g2.setStroke(new BasicStroke(2f));
             g2.drawRect(1, 1, getWidth() - 2, getHeight() - 2);
 
-            // Draw disabled overlay if needed
             if (!model.isEnabled()) {
                 g2.setColor(new Color(50, 50, 50, 128));
                 g2.fillRect(0, 0, getWidth(), getHeight());
             }
 
-            // --- Draw system label ---
             final String label = toDisplayName(kind);
 
             g2.setFont(Config.FONT_SYSTEM_LABEL);
@@ -110,9 +104,7 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
         }
     }
 
-    /**
-     * Get fill color based on system kind
-     */
+
     private Color getSystemFillColor(SystemKind kind) {
         if (kind == null) kind = SystemKind.NORMAL;
 
@@ -164,9 +156,7 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
         }
     }
 
-    /**
-     * Get label color based on system kind
-     */
+
     private Color getLabelColor(SystemKind kind) {
         if (kind == null || kind == SystemKind.NORMAL) {
             return Config.COLOR_BADGE_FG;
@@ -184,7 +174,6 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
 
         switch (kind) {
             case ANTI_TROJAN:
-                // Draw range indicator
                 if (model.isEnabled()) {
                     g2.setColor(new Color(50, 200, 100, 30));
                     int radius = (int) Config.ANTI_TROJAN_RADIUS_PX;
@@ -211,21 +200,15 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
                 // Draw teleport effect corners
                 g2.setColor(new Color(200, 100, 200, 80));
                 int corner = 15;
-                // Top-left
                 g2.fillArc(0, 0, corner*2, corner*2, 90, 90);
-                // Top-right
                 g2.fillArc(getWidth()-corner*2, 0, corner*2, corner*2, 0, 90);
-                // Bottom-left
                 g2.fillArc(0, getHeight()-corner*2, corner*2, corner*2, 180, 90);
-                // Bottom-right
                 g2.fillArc(getWidth()-corner*2, getHeight()-corner*2, corner*2, corner*2, 270, 90);
                 break;
         }
     }
 
-    /**
-     * Draw special indicators (icons/symbols)
-     */
+
     private void drawSpecialIndicators(Graphics2D g2, SystemKind kind) {
         if (kind == null || kind == SystemKind.NORMAL) return;
 
@@ -243,9 +226,7 @@ public class SystemBoxView extends GameObjectView<SystemBoxModel> {
         }
     }
 
-    /**
-     * Get icon/symbol for system kind
-     */
+
     private String getSystemIcon(SystemKind kind) {
         switch (kind) {
             case SPY: return "◉";

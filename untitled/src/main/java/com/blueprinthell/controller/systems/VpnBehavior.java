@@ -12,7 +12,6 @@ public final class VpnBehavior implements SystemBehavior {
     private final SystemBoxModel box;
     private final double shieldCapacity;
 
-    // Track all packets protected by this VPN instance
     private final Set<PacketModel> myProtectedPackets = Collections.newSetFromMap(new WeakHashMap<>());
 
     public VpnBehavior(SystemBoxModel box) {
@@ -29,18 +28,14 @@ public final class VpnBehavior implements SystemBehavior {
         // No periodic updates needed
     }
 
-    // در VpnBehavior.java - متد onPacketEnqueued را جایگزین کنید:
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
-
-        // اگر قبلاً محافظت شده، نادیده بگیر
         if (packet instanceof ProtectedPacket || PacketOps.isProtected(packet)) {
             return;
         }
 
-        // پیام‌رسان‌ها → Protected
         if (PacketOps.isMessenger(packet)) {
             PacketModel prot = PacketOps.toProtected(packet, shieldCapacity);
             VpnRevertHints.markGlobal(prot, packet);
@@ -50,43 +45,31 @@ public final class VpnBehavior implements SystemBehavior {
             return;
         }
 
-        // پکت محرمانه عادی → پکت محرمانه VPN (سایز 4 به 6)
         if (packet instanceof ConfidentialPacket && !PacketOps.isConfidentialVpn(packet)) {
             PacketModel conf6 = PacketOps.toConfidentialVpn(packet);
 
-            // مهم: تنظیم پروفایل حرکتی برای keep-distance
             KinematicsRegistry.setProfile(conf6, KinematicsProfile.CONFIDENTIAL_VPN);
 
             VpnRevertHints.markGlobal(conf6, packet);
             myProtectedPackets.add(conf6);
             replaceInBuffer(packet, conf6);
-            return;
+
         }
     }
     @Override
     public void onEnabledChanged(boolean enabled) {
         if (!enabled) {
-            // VPN disabled - revert all protected packets
             revertAllProtectedPackets();
         }
     }
 
-    /**
-     * Revert all packets protected by this VPN instance
-     * This affects packets in:
-     * 1. This system's buffer
-     * 2. Other systems' buffers
-     * 3. On wires
-     */
+
     private void revertAllProtectedPackets() {
-        // 1. Revert packets in our own buffer
         revertBufferPackets();
 
-        // 2. Clear our tracking (weak references will handle cleanup)
         myProtectedPackets.clear();
 
-        // Note: Packets on wires or in other systems will be reverted
-        // when they're processed by those systems (via global hints)
+
     }
 
     private void revertBufferPackets() {
@@ -124,10 +107,8 @@ public final class VpnBehavior implements SystemBehavior {
 
     public void clear() {
         myProtectedPackets.clear();
-        // Note: Don't clear global hints here as other VPNs might be using them
     }
 
-    // For debugging/telemetry
     public int getProtectedPacketCount() {
         return myProtectedPackets.size();
     }

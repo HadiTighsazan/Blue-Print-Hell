@@ -4,7 +4,7 @@ import com.blueprinthell.config.Config;
 import com.blueprinthell.model.*;
 import java.util.*;
 
-public final class AntiTrojanBehavior implements SystemBehavior {
+public final class AntiTrojanBehavior implements SystemBehavior, SnapshottableBehavior  {
 
     private final SystemBoxModel box;
     private final List<WireModel> wires;
@@ -52,7 +52,6 @@ public final class AntiTrojanBehavior implements SystemBehavior {
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (cooldownLeft > 0) return;
 
-        // Check if the incoming packet is a trojan
         if (packet instanceof TrojanPacket) {
             PacketModel clean = unTrojan(packet);
             if (replaceInBuffer(packet, clean)) {
@@ -65,29 +64,22 @@ public final class AntiTrojanBehavior implements SystemBehavior {
     @Override
     public void onEnabledChanged(boolean enabled) {
         if (enabled) {
-            // Reset cooldown when re-enabled
             cooldownLeft = 0;
         }
     }
 
-    /**
-     * Scan all wires for trojans within range and clean them
-     * @return true if any trojans were cleaned
-     */
+
     private boolean scanAndCleanTrojans() {
         scanCycles++;
         boolean cleanedAny = false;
         double r2 = radiusPx * radiusPx;
 
-        // Create a list to store trojans to clean (to avoid concurrent modification)
         List<TrojanCleanupTask> cleanupTasks = new ArrayList<>();
 
-        // Scan all wires
         for (WireModel w : wires) {
             for (PacketModel pkt : w.getPackets()) {
                 if (!(pkt instanceof TrojanPacket)) continue;
 
-                // Calculate distance
                 if (isWithinRange(pkt, r2)) {
                     trojansDetected++;
                     cleanupTasks.add(new TrojanCleanupTask(w, pkt));
@@ -95,7 +87,6 @@ public final class AntiTrojanBehavior implements SystemBehavior {
             }
         }
 
-        // Clean detected trojans
         for (TrojanCleanupTask task : cleanupTasks) {
             PacketModel clean = unTrojan(task.trojan);
             double progress = task.trojan.getProgress();
@@ -107,7 +98,6 @@ public final class AntiTrojanBehavior implements SystemBehavior {
             }
         }
 
-        // Also check buffer for trojans
         if (cleanFirstTrojanInBuffer()) {
             cleanedAny = true;
         }
@@ -115,9 +105,7 @@ public final class AntiTrojanBehavior implements SystemBehavior {
         return cleanedAny;
     }
 
-    /**
-     * Check if a packet is within the anti-trojan range
-     */
+
     private boolean isWithinRange(PacketModel pkt, double radiusSquared) {
         int dx = pkt.getCenterX() - box.getCenterX();
         int dy = pkt.getCenterY() - box.getCenterY();
@@ -125,20 +113,17 @@ public final class AntiTrojanBehavior implements SystemBehavior {
         return distSquared <= radiusSquared;
     }
 
-    /**
-     * Clean a trojan packet back to its original form
-     */
+
     private PacketModel unTrojan(PacketModel pkt) {
         if (pkt instanceof TrojanPacket tp) {
             PacketModel orig = tp.getOriginal();
             if (orig != null) {
-                // Create a clean copy with current state
                 PacketModel clean = clonePlain(orig);
-                // Preserve motion properties
+
                 clean.setProgress(pkt.getProgress());
                 clean.setSpeed(pkt.getSpeed());
                 clean.setAcceleration(pkt.getAcceleration());
-                // Reset noise as a bonus of cleaning
+
                 clean.resetNoise();
                 return clean;
             }
@@ -146,21 +131,17 @@ public final class AntiTrojanBehavior implements SystemBehavior {
         return clonePlain(pkt);
     }
 
-    /**
-     * Create a plain copy of a packet
-     */
+
     private PacketModel clonePlain(PacketModel src) {
         PacketModel c = new PacketModel(src.getType(), src.getBaseSpeed());
         c.setProgress(src.getProgress());
         c.setSpeed(src.getSpeed());
         c.setAcceleration(src.getAcceleration());
-        c.resetNoise(); // Clean packets have no noise
+        c.resetNoise();
         return c;
     }
 
-    /**
-     * Replace a packet in the buffer
-     */
+
     private boolean replaceInBuffer(PacketModel oldPkt, PacketModel newPkt) {
         Deque<PacketModel> temp = new ArrayDeque<>();
         boolean replaced = false;
@@ -182,9 +163,7 @@ public final class AntiTrojanBehavior implements SystemBehavior {
         return replaced;
     }
 
-    /**
-     * Clean the first trojan found in buffer
-     */
+
     private boolean cleanFirstTrojanInBuffer() {
         Deque<PacketModel> temp = new ArrayDeque<>();
         boolean cleaned = false;
@@ -219,7 +198,6 @@ public final class AntiTrojanBehavior implements SystemBehavior {
         scanCycles = 0;
     }
 
-    // Helper class for cleanup tasks
     private static class TrojanCleanupTask {
         final WireModel wire;
         final PacketModel trojan;
@@ -229,11 +207,18 @@ public final class AntiTrojanBehavior implements SystemBehavior {
             this.trojan = trojan;
         }
     }
+    @Override
+    public Map<String, Object> captureState() {
+        Map<String, Object> state = new HashMap<>();
+        state.put("cooldownLeft", cooldownLeft);
+        return state;
+    }
 
-    // Telemetry getters
-    public long getTrojansDetected() { return trojansDetected; }
-    public long getTrojansCleaned() { return trojansCleaned; }
-    public int getScanCycles() { return scanCycles; }
-    public boolean isOnCooldown() { return cooldownLeft > 0; }
-    public double getCooldownRemaining() { return cooldownLeft; }
+    @Override
+    public void restoreState(Map<String, Object> state) {
+        if (state != null && state.containsKey("cooldownLeft")) {
+            this.cooldownLeft = ((Number) state.get("cooldownLeft")).doubleValue();
+        }
+    }
+
 }

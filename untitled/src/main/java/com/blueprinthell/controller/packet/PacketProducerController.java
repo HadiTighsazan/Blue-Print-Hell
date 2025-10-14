@@ -28,18 +28,16 @@ public class PacketProducerController implements Updatable {
     private boolean running = false;
     private int producedCount = 0;
 
-    // --- تغییر: از inFlight برای شمارش پکت‌های درحال حرکت استفاده می‌کنیم
     private int inFlight = 0;
     private int producedUnits = 0;
 
     public int getProducedUnits() {
         return producedUnits;
     }
-    // --- توجه: فیلد قبلی returnedCredits حذف نشده، اما دیگر استفاده نمی‌شود
+
     @SuppressWarnings("unused")
     private int returnedCredits = 0;
 
-    // --- تغییر: شمارش تولید به‌ازای هر پورت برای enforce کردن packetsPerPort
     private final Map<PortModel, Integer> producedPerPort = new HashMap<>();
 
     public PacketProducerController(List<SystemBoxModel> sourceBoxes,
@@ -63,14 +61,11 @@ public class PacketProducerController implements Updatable {
         running = false;
         acc = 0.0;
 
-        // --- تغییر: ریست شمارنده‌ها برای راند جدید
         producedCount = 0;
         inFlight = 0;
         producedPerPort.clear();
-        // returnedCredits را دست‌نخورده می‌گذاریم تا حذف فیلد نداشته باشیم
     }
 
-    // --- تغییر: این متد حالا وقتی پکتی برمی‌گرده، inFlight را کم می‌کند
     public void onPacketReturned() {
         if (inFlight > 0) inFlight--;
     }
@@ -109,37 +104,33 @@ public class PacketProducerController implements Updatable {
                         .ifPresent(wire -> {
                             PacketModel packet;
 
-                            // ابتدا پکت پایه را بسازید
                             if (out.getShape() == PortShape.CIRCLE) {
-                                if (RND.nextInt(10) < 1) {
+                                if (RND.nextInt(10) < 3) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(PacketType.CIRCLE, baseSpeed);
                                 }
-                            } else {
-                                if (RND.nextInt(10) <1 ) {
+                            }
+                            else {
+                                if (RND.nextInt(10) <3 ) {
                                     packet = createLargePacketForPort(out.getType(), baseSpeed);
                                 } else {
                                     packet = new PacketModel(randomType(), baseSpeed);
                                 }
                             }
 
-                            // حالا اگر می‌خواهید، آن را به محرمانه تبدیل کنید
-                            // این کار باید بعد از ساخت پکت پایه انجام شود
-                            if (RND.nextInt(10) < 5) { // برای تست، همیشه محرمانه
+
+                            if (RND.nextInt(10) < 3) {
                                 packet = PacketOps.toConfidential(packet);
                             }
 
-                            // تنظیم سرعت اولیه و پیکربندی استراتژی حرکت
                             packet.setStartSpeedMul(1.0);
                             boolean compatible = wire.getSrcPort().isCompatible(packet);
                             MotionStrategy ms = MotionStrategyFactory.create(packet, compatible);
                             packet.setMotionStrategy(ms);
 
-                            // چسباندن پکت به سیم خروجی
                             wire.attachPacket(packet, 0);
 
-                            // به‌روزرسانی شمارنده‌ها
                             producedCount++;
                             inFlight++;
                             producedPerPort.put(out, producedForThisPort + 1);
@@ -153,23 +144,21 @@ public class PacketProducerController implements Updatable {
             }
         }
     }
+
     private LargePacket createLargePacketForPort(PacketType portType, double baseSpeed) {
         int units = (RND.nextBoolean() ? Config.LARGE_PACKET_SIZE_8 : Config.LARGE_PACKET_SIZE_10);
 
-        // تولید colorId تصادفی
         int colorId = RND.nextInt(360);
         Color color = Color.getHSBColor(colorId / 360.0f, 0.8f, 0.9f);
 
         LargePacket lp = new LargePacket(portType, baseSpeed, units);
 
-        // تنظیم سایز ویژوال
         int visualSize = units * Config.PACKET_SIZE_MULTIPLIER;
         lp.setWidth(visualSize);
         lp.setHeight(visualSize);
 
-        // تنظیم رنگ و colorId
         lp.setCustomColor(color);
-        lp.setGroupInfo(-1, units, colorId);  // اضافه کردن این خط مهم است
+        lp.setGroupInfo(-1, units, colorId);
 
         KinematicsRegistry.setProfile(
                 lp,
@@ -185,8 +174,6 @@ public class PacketProducerController implements Updatable {
                 : (r == 1) ? PacketType.TRIANGLE
                 : PacketType.CIRCLE;
     }
-    // فایل: untitled/src/main/java/com/blueprinthell/controller/PacketProducerController.java
-// اضافه کردن متدهای جدید:
 
     public void onPacketConsumed() {
         if (inFlight > 0) inFlight--;
@@ -196,12 +183,9 @@ public class PacketProducerController implements Updatable {
         if (inFlight > 0) inFlight--;
     }
 
-    // همچنین در متد isFinished() اضافه کنید یک لاگ برای دیباگ:
     public boolean isFinished() {
         boolean finished = producedCount >= totalToProduce && inFlight == 0;
-        // برای دیباگ:
-        if (!finished && producedCount >= totalToProduce) {
-        }
+
         return finished;
     }
     public int getPacketsPerPort()      { return packetsPerPort; }
@@ -211,20 +195,17 @@ public class PacketProducerController implements Updatable {
     public boolean isRunning()          { return running; }
 
 
-    /** Emission accumulator (seconds) to preserve emission cadence. */
     public double getAccumulatorSec()   { return acc; }
-    /** Unmodifiable view of per-port produced counters. */
+
     public Map<PortModel,Integer> getProducedPerPortView() {
         return Collections.unmodifiableMap(new HashMap<>(producedPerPort));
     }
 
-        /** Aggregate list of all out-ports of all source boxes. */
-        public List<PortModel> getOutPorts() {
+    public List<PortModel> getOutPorts() {
                 List<PortModel> outs = new ArrayList<>();
                 for (SystemBoxModel b : sourceBoxes) outs.addAll(b.getOutPorts());
                 return outs;
             }
-    // -------------------- SNAPSHOT RESTORE --------------------
       public void restoreFrom(int producedCount,
                             int inFlight,
                             double accumulatorSec,

@@ -1,4 +1,3 @@
-
 package com.blueprinthell.controller.packet;
 
 import com.blueprinthell.controller.simulation.SimulationController;
@@ -15,6 +14,7 @@ public class PacketConsumerController implements Updatable {
     private SimulationController simulation;
 
     private LargeGroupRegistry largeGroupRegistry;
+
     public PacketConsumerController(SystemBoxModel box,
                                     ScoreModel scoreModel,
                                     CoinModel coinModel,
@@ -27,7 +27,6 @@ public class PacketConsumerController implements Updatable {
         this.simulation = simulation;
     }
 
-    // سازنده‌های قبلی را نگه می‌داریم برای سازگاری
     public PacketConsumerController(SystemBoxModel box,
                                     ScoreModel scoreModel,
                                     CoinModel coinModel) {
@@ -56,7 +55,6 @@ public class PacketConsumerController implements Updatable {
             packet.resetNoise();
             applyConsumeLogic(packet, scoreModel, coinModel, lossModel);
 
-            // اطلاع به producer که پکت مصرف شد - استفاده از static method
             SimulationController sim = WireModel.getSimulationController();
             if (sim != null && sim.getPacketProducerController() != null) {
                 sim.getPacketProducerController().onPacketConsumed();
@@ -70,17 +68,21 @@ public class PacketConsumerController implements Updatable {
                                          PacketLossModel lossModel) {
         if (packet == null) return;
 
-        // بیت پکت: Loss آنی ندارد
-        if (packet instanceof com.blueprinthell.model.large.BitPacket) {
+
+        PacketModel originalPacket = PacketOps.unwrapTrojan(packet);
+
+        if (originalPacket instanceof com.blueprinthell.model.large.BitPacket) {
+            if (lossModel != null) {
+                lossModel.incrementPacket(originalPacket);
+            }
             return;
         }
 
-        if (packet instanceof LargePacket lp) {
+        if (originalPacket instanceof LargePacket lp) {
             if (lp.isRebuiltFromBits() && lp.getGroupId() >= 0) {
 
                 SimulationController sim = WireModel.getSimulationController();
                 if (sim != null) {
-                    // رجیستری را از PacketLossModel برداریم تا وابستگی کم شود
                     LargeGroupRegistry reg = null;
                     if (lossModel instanceof com.blueprinthell.model.PacketLossModel plm) {
                         try {
@@ -94,8 +96,7 @@ public class PacketConsumerController implements Updatable {
             return;
         }
 
-        // سایر پکت‌ها: اقتصاد سکه + ممکن است خارج از این متد Loss آنی ثبت شود
-        int coins = PacketOps.coinValueOnConsume(packet);
+        int coins = PacketOps.coinValueOnConsume(originalPacket);
         if (coins > 0 && coinModel != null) coinModel.add(coins);
     }
 

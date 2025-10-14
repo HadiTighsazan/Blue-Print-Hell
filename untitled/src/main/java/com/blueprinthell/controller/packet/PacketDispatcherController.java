@@ -52,17 +52,15 @@ public class PacketDispatcherController implements Updatable {
 
             for (PacketModel packet : arrived) {
 
-                // [PATCH] تحویل پکتِ برگشتی به باکسِ منبع (نه مقصد)
                 if (packet.isReturning()) {
                     SystemBoxModel srcBox = (sourceMap != null) ? sourceMap.get(wire) : null;
                     PortModel srcPort = wire.getSrcPort();
                     if (srcBox != null && srcPort != null) {
-                        boolean ok = srcBox.enqueue(packet, srcPort); // ورود از خروجی ⇒ می‌رود داخل returnBuffer
+                        boolean ok = srcBox.enqueue(packet, srcPort);
                         if (ok) {
                             packet.setReturning(false);
-                            continue; // به منطق مقصد نرو
+                            continue;
                         } else {
-                            // بافر منبع پر بود ⇒ Loss طبق قانون نوع‌محور
                             lossModel.incrementPacket(packet);
                             SimulationController sim = WireModel.getSimulationController();
                             if (sim != null && sim.getPacketProducerController() != null) {
@@ -71,7 +69,6 @@ public class PacketDispatcherController implements Updatable {
                             continue;
                         }
                     }
-                    // اگر srcBox/srcPort نبود، اجازه بده منطق مقصد ادامه یابد (fallback)
                 }
 
                 if (packet instanceof LargePacket lp && !lp.isRebuiltFromBits() && !(packet instanceof MergedPacket)) {
@@ -89,24 +86,20 @@ public class PacketDispatcherController implements Updatable {
                     durability.onPacketArrived(packet, wire);
                 }
 
-                // اگر مقصدی برای این سیم ثبت نشده، ادامه نده (از NPE هم جلوگیری می‌کند)
                 if (dest == null) {
                     continue;
                 }
 
-                // --- خاموشی مقصد بر اثر سرعت بالای ورود (برای همهٔ انواع پکت) ---
-                // این چک باید قبل از هر منطق دیگری (سازگاری پورت/بوست/صف) انجام شود.
+
                 double entrySpeed = packet.getSpeed();
-                double maxAllowed = getMaxAllowedSpeed(packet); // فعلاً مقدار ثابت از Config
+                double maxAllowed = getMaxAllowedSpeed(packet);
                 if (entrySpeed > maxAllowed + 1e-6 && dest.isEnabled()) {
-                    dest.disable();                 // یا dest.disableFor(Config.DEST_DISABLE_MS) اگر دارید
-                    packet.setReturning(true);      // پکت برگردد از سمت مقصد
+                    dest.disable();
+                    packet.setReturning(true);
                     wire.attachPacket(packet, 1.0); // progress=1.0 یعنی از انتهای سیم برگردد
                     continue;
                 }
-                // -------------------------------------------------------------------
 
-                // ناسازگاری پورت → فقط بوست خروجی برای مسنجرها (رفتار قبلی حفظ می‌شود)
                 if (dstPort != null && PacketOps.isMessenger(packet)) {
                     boolean enteredIncompat =
                             dstPort.isInput() &&
@@ -121,23 +114,19 @@ public class PacketDispatcherController implements Updatable {
                 if (accepted) {
                     int coins = 0;
 
-                    // برای پکت‌های حجیم
                     if (packet instanceof LargePacket lp2) {
                         coins = lp2.getOriginalSizeUnits();
                     }
-                    // برای پکت‌های محرمانه
                     else if (PacketOps.isConfidential(packet)) {
                         if (PacketOps.isConfidentialVpn(packet)) {
-                            coins = 4; // پکت محرمانه VPN
+                            coins = 4;
                         } else {
                             coins = 3; // پکت محرمانه عادی
                         }
                     }
-                    // برای پکت‌های پیام‌رسان
                     else if (PacketOps.isMessenger(packet)) {
                         coins = PacketOps.coinValueOnEntry(packet);
                     }
-                    // برای سیستم VPN با پکت‌های خاص
                     else if (dest.getPrimaryKind() == SystemKind.VPN) {
                         if (PacketOps.isMessenger(packet)) {
                             coins = 5;
@@ -169,14 +158,12 @@ public class PacketDispatcherController implements Updatable {
         for (WireModel wire : wiresForRemoval) {
             wires.remove(wire);
             destinationMap.remove(wire);
-            // اطلاع رسانی به UI برای حذف نمای سیم
-            // این کار باید در WireRemovalController انجام شود
+
         }
         wiresForRemoval.clear();
     }
 
-    // در صورت نیاز به آستانه‌های متفاوت برای انواع پکت،
-    // این متد را به خواندن از یک Map در Config گسترش دهید.
+
     private double getMaxAllowedSpeed(PacketModel p) {
         return Config.MAX_ALLOWED_SPEED;
     }

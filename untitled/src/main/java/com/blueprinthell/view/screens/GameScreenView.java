@@ -25,7 +25,7 @@ public class GameScreenView extends JPanel {
 
     private final BiConsumer<Integer, Integer> keyListener = this::applyKeyBindings;
     private AccelerationFreezeController freezeController;
-
+    private EliphasCenteringController eliphasController;
     public GameScreenView(HudView hudView) {
         super(new BorderLayout());
         this.hudView = hudView;
@@ -43,6 +43,10 @@ public class GameScreenView extends JPanel {
         applyKeyBindings(KeyBindings.INSTANCE.getBackKey(), KeyBindings.INSTANCE.getForwardKey());
         KeyBindings.INSTANCE.addListener(keyListener);
     }
+    public void setEliphasController(EliphasCenteringController ec) {
+        this.eliphasController = ec;
+    }
+
 
     private void applyKeyBindings(int backKey, int forwardKey) {
         InputMap im = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -61,6 +65,7 @@ public class GameScreenView extends JPanel {
     private TemporalNavigationListener temporalListener;
     public void setTemporalNavigationListener(TemporalNavigationListener l) { this.temporalListener = l; }
     private void navigateTime(int dir) { if (temporalListener != null) temporalListener.onNavigate(dir); }
+
 
     public interface TemporalNavigationListener { void onNavigate(int direction); }
 
@@ -85,19 +90,23 @@ public class GameScreenView extends JPanel {
     }
 
     public void reset(List<SystemBoxModel> boxes, List<WireModel> wires) {
-        gameArea.removeAll();
+        gameArea.removeAll(); // Clear everything first
+
+        // Add Eliphas renderer if controller exists
+        if (eliphasController != null) {
+            EliphasPointRenderer renderer = new EliphasPointRenderer(eliphasController);
+            renderer.setBounds(0, 0, gameArea.getWidth(), gameArea.getHeight());
+            gameArea.add(renderer, 0);
+        }
+
+        // Add Freeze renderer if controller exists
         if (freezeController != null) {
             FreezePointRenderer renderer = new FreezePointRenderer(freezeController);
             renderer.setBounds(0, 0, gameArea.getWidth(), gameArea.getHeight());
             gameArea.add(renderer, 0);
-
-            // تایمر برای به‌روزرسانی افکت
-            Timer updateTimer = new Timer(100, e -> renderer.repaint());
-            updateTimer.start();
         }
 
-
-
+        // Add all the other game objects
         for (SystemBoxModel b : boxes) {
             gameArea.add(new SystemBoxView(b));
         }
@@ -113,7 +122,6 @@ public class GameScreenView extends JPanel {
         gameArea.repaint();
         requestFocusInWindow();
     }
-
     private PortView findPortView(Container c, PortModel pm) {
         for (Component comp : c.getComponents()) {
             if (comp instanceof PortView pv && pv.getModel() == pm) {
@@ -145,14 +153,11 @@ public class GameScreenView extends JPanel {
                                    WireUsageModel usageModel,
                                    CoinModel coinModel,
                                    Runnable networkChanged) {
-        // بازسازی SystemBoxDragController برای هر SystemBoxView
         for (Component c : gameArea.getComponents()) {
             if (c instanceof SystemBoxView sbv) {
-                // حذف listener های قبلی برای جلوگیری از duplicate
                 var listeners = sbv.getMouseListeners();
                 var motionListeners = sbv.getMouseMotionListeners();
 
-                // بررسی که آیا قبلاً controller دارد
                 boolean hasController = false;
                 for (var listener : listeners) {
                     if (listener instanceof SystemBoxDragController) {
@@ -167,14 +172,11 @@ public class GameScreenView extends JPanel {
             }
         }
 
-        // بازسازی WireEditorController برای هر WireView
         for (Component c : gameArea.getComponents()) {
             if (c instanceof WireView wv) {
-                // حذف listener های قبلی
                 var listeners = wv.getMouseListeners();
                 var motionListeners = wv.getMouseMotionListeners();
 
-                // بررسی که آیا قبلاً controller دارد
                 boolean hasController = false;
                 for (var listener : listeners) {
                     if (listener.getClass().getName().contains("WireEditorController")) {

@@ -7,9 +7,7 @@ import com.blueprinthell.motion.MotionStrategyFactory;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * SpyBehavior V3 - Enhanced with proper teleport processing
- */
+
 public final class SpyBehavior implements SystemBehavior {
 
     private final SystemBoxModel box;
@@ -46,7 +44,6 @@ public final class SpyBehavior implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-        // CRITICAL: Process any teleported packets that arrived at this spy
         processTeleportedPacketsForThisBox();
     }
 
@@ -125,15 +122,12 @@ public final class SpyBehavior implements SystemBehavior {
         return true;
     }
 
-    // در SpyBehavior.java - تغییرات نهایی:
 
     @Override
     public void onPacketEnqueued(PacketModel packet, PortModel enteredPort) {
         if (packet == null) return;
 
 
-
-        // Handle VPN revert if needed
         if (PacketOps.isProtected(packet)) {
             PacketModel origGlobal = VpnRevertHints.consumeGlobal(packet);
             if (origGlobal != null) {
@@ -142,7 +136,6 @@ public final class SpyBehavior implements SystemBehavior {
             }
         }
 
-        // Destroy confidential packets
         if (PacketOps.isConfidential(packet)) {
             if (box.removeFromBuffer(packet)) {
                 destroyedConfidentialCount++;
@@ -161,7 +154,6 @@ public final class SpyBehavior implements SystemBehavior {
             return;
         }
 
-        // Attempt teleport
         teleportAttempts++;
         performTeleport(packet);
     }
@@ -284,53 +276,7 @@ public final class SpyBehavior implements SystemBehavior {
         return Math.max(1, score);
     }
 
-    private boolean hasUsableOutbound(SystemBoxModel system) {
-        if (system.getOutPorts() == null || system.getOutPorts().isEmpty()) {
-            return false;
-        }
 
-        for (WireModel w : wires) {
-            if (w == null) continue;
-            PortModel src = w.getSrcPort();
-            if (src != null && system.getOutPorts().contains(src)) {
-                SystemBoxModel dest = destMap.get(w);
-                if (dest != null && dest.isEnabled()) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Transfer packet to another spy system's queue
-     */
-    private boolean transferToAnotherSpy(PacketModel packet, SystemBoxModel target) {
-        if (packet == null || target == null) {
-            return false;
-        }
-
-        TRANSFER_LOCK.lock();
-        try {
-            // Remove from current buffer
-            boolean removed = box.removeFromBuffer(packet);
-            if (!removed) {
-                return false;
-            }
-
-            // Add to target's teleported queue
-            Queue<PacketModel> targetQueue = TELEPORTED_PACKETS.computeIfAbsent(
-                    target, k -> new LinkedList<>()
-            );
-            targetQueue.offer(packet);
-
-            return true;
-
-        } finally {
-            TRANSFER_LOCK.unlock();
-        }
-    }
 
     private WireModel findWireForPort(PortModel port) {
         for (WireModel wire : wires) {
@@ -376,7 +322,15 @@ public final class SpyBehavior implements SystemBehavior {
             }
         }
     }
-
+    public static void clearGlobalState() {
+        TRANSFER_LOCK.lock();
+        try {
+            PACKETS_IN_TRANSFER.clear();
+            TELEPORTED_PACKETS.clear();
+        } finally {
+            TRANSFER_LOCK.unlock();
+        }
+    }
     public void clear() {
         TRANSFER_LOCK.lock();
         try {
@@ -387,7 +341,6 @@ public final class SpyBehavior implements SystemBehavior {
         }
     }
 
-    // Helper class for spy candidate scoring
     private static class SpyCandidate {
         final SystemBoxModel box;
         final int score;
@@ -397,12 +350,6 @@ public final class SpyBehavior implements SystemBehavior {
             this.score = score;
         }
     }
-
-    // Telemetry getters
-    public long getTeleportCount() { return teleportCount; }
-    public long getDestroyedConfidentialCount() { return destroyedConfidentialCount; }
-    public long getTeleportAttempts() { return teleportAttempts; }
-    public long getTeleportFailures() { return teleportFailures; }
 
 
 }

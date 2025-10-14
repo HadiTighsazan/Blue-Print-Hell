@@ -6,10 +6,8 @@ import java.util.WeakHashMap;
 
 public final class VpnRevertHints {
 
-    // نمونهٔ سراسری
     private static final VpnRevertHints GLOBAL = new VpnRevertHints();
 
-    // ===== API سراسری (ایمن و بدون تداخل با متدهای نمونه‌ای) =====
     public static void markGlobal(PacketModel protectedPkt, PacketModel original) {
         GLOBAL.mark(protectedPkt, original);
     }
@@ -21,12 +19,9 @@ public final class VpnRevertHints {
     public static void clearAllGlobal() {
         GLOBAL.clear();
     }
-    // ===========================================================
 
-    // نگاشت Protected → Original
     private static final Map<PacketModel, PacketModel> map = new WeakHashMap<>();
 
-    // API نمونه‌ای (اگر جایی نمونهٔ محلی دارید)
     public void mark(PacketModel protectedPkt, PacketModel original) {
         if (protectedPkt != null && original != null) {
             map.put(protectedPkt, original);

@@ -9,7 +9,7 @@ public class SnapshotController implements Updatable {
    private final NetworkController networkController;
     private double elapsedTime = 0;
 
-            public SnapshotController(NetworkController controller, SnapshotManager snapshotManager) {
+    public SnapshotController(NetworkController controller, SnapshotManager snapshotManager) {
                 this.networkController = controller;
                 this.snapshotManager = snapshotManager;
             }
@@ -17,8 +17,7 @@ public class SnapshotController implements Updatable {
             @Override
     public void update(double dt) {
                 elapsedTime = dt;
-                // ضبط فریم با اسنپ‌شات «جدید» از خود NetworkController
-                        NetworkSnapshot snap = networkController.captureSnapshot();
+                NetworkSnapshot snap = networkController.captureSnapshot();
                 snapshotManager.recordSnapshot(snap);
             }
 }

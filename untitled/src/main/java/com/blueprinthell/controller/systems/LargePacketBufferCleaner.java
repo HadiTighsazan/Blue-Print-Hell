@@ -20,7 +20,6 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
 
     @Override
     public void update(double dt) {
-        // no-op
     }
 
     @Override
@@ -29,9 +28,8 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             return;
         }
 
-        // *** تغییر اصلی: فقط برای سیستم‌های بدون پورت خروجی (Sink) فعال باشد ***
         if (!box.getOutPorts().isEmpty()) {
-            return;  // اگر پورت خروجی دارد، هیچ کاری نکن
+            return;  // اگر پورت خروجی دارد، هیچ کاری نکن*****
         }
 
         clearBufferExceptLarge((LargePacket) packet);
@@ -39,7 +37,6 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
 
     @Override
     public void onEnabledChanged(boolean enabled) {
-        // no-op
     }
 
     private void clearBufferExceptLarge(LargePacket newLarge) {
@@ -48,7 +45,6 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             return;
         }
 
-        // Drain all packets
         List<PacketModel> allPackets = new ArrayList<>();
         PacketModel p;
         while ((p = box.pollPacket()) != null) {
@@ -60,10 +56,8 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             if (packet == newLarge) {
                 box.enqueue(packet);
             } else {
-                // مهم: فقط پکت‌های غیر بیت/غیر حجیم فوراً Loss می‌دهند.
-                // BitPacket و هر نوع LargePacket (اولیه/مرج‌شده) اینجا Loss آنی ندارند.
+
                 lossModel.incrementPacket(packet);
-                // عمداً آن را به بافر برنمی‌گردانیم → حذف می‌شود.
             }
         }
     }

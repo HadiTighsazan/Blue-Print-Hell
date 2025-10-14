@@ -20,7 +20,6 @@ public class MenuController {
     private final LevelManager     levelManager;
     private final GameController gameController;
 
-    // --- Patch: guards for restoration & countdown ---
     private boolean restorationInProgress = false;
     private boolean countdownShown = false;
 
@@ -36,13 +35,13 @@ public class MenuController {
     private void attachListeners() {
         MainMenuView mainMenu = screenController.getMainMenuView();
         mainMenu.startButton.addActionListener(
-                e -> handleStartGame()  // قبلاً ممکن است مستقیم levelManager.startGame() بوده
+                e -> handleStartGame()
         );
         mainMenu.settingsButton.addActionListener(e ->
                 screenController.showScreen(ScreenController.SETTINGS));
-        // فقط دکمه Exit فایل را پاک می‌کند (خروج عادی)
+
         mainMenu.exitButton.addActionListener(e -> {
-            gameController.stopAutoSaveAndClear(); // explicit clear on Exit
+            gameController.stopAutoSaveAndClear();
             System.exit(0);
         });
         SettingsMenuView settings = screenController.getSettingsMenuView();
@@ -60,17 +59,11 @@ public class MenuController {
         MissionPassedView missionPassed = screenController.getMissionPassedView();
 
         missionPassed.nextMissionButton.addActionListener(e -> {
-            // AutoSave را stop نکنید، فقط restart کنید
             levelManager.startNextLevel();
         });
 
         missionPassed.mainMenuButton.addActionListener(e -> {
-            // به منوی اصلی برگشتن AutoSave را پاک نمی‌کند
-            // فقط متوقف می‌کند
-            if (gameController.isAutoSaveRunning()) {
-                // فقط timer را متوقف کن، فایل را پاک نکن
-                // نیاز به متد جدید در AutoSaveController
-            }
+
             screenController.showScreen(ScreenController.MAIN_MENU);
         });
         GameOverView gameOver = screenController.getGameOverView();
@@ -81,7 +74,7 @@ public class MenuController {
         });
 
         gameOver.mainMenuButton.addActionListener(e -> {
-            gameController.pauseAutoSave(); // فقط pause، نه stop
+            gameController.pauseAutoSave();
             screenController.showScreen(ScreenController.MAIN_MENU);
         });
         LevelSelectView levelSelect = screenController.getLevelSelectView();
@@ -130,12 +123,10 @@ public class MenuController {
         }
     }
 
-    // شروع بازی جدید
     private void startNewGame() {
         levelManager.startGame();
         screenController.showScreen(ScreenController.GAME_SCREEN);
     }
-    // --- Patch: اصلاح روند بازیابی بازی ذخیره‌شده ---
     private void resumeSavedGame() {
         if (restorationInProgress) return; // جلوگیری از اجرای همزمان
         restorationInProgress = true;
@@ -144,19 +135,17 @@ public class MenuController {
 
         if (snapshot == null) {
             JOptionPane.showMessageDialog(null,
-                    "Cheat Detected!\nStarting a new game.", // <--- پیام جدید
+                    "Cheat Detected!\nStarting a new game.",
                     "Load Error",
                     JOptionPane.ERROR_MESSAGE);
-            AutoSaveController.clearSavedProgress(); // پاک کردن فایل های نامعتبر
+            AutoSaveController.clearSavedProgress();
             startNewGame();
             restorationInProgress = false;
             return;
         }
 
-        // نمایش صفحه بازی
         screenController.showScreen(ScreenController.GAME_SCREEN);
 
-        // ⭐ ابتدا level را load کنیم
         int lvl = 1;
         try {
             if (snapshot.meta != null && snapshot.meta.levelNumber > 0) {
@@ -167,34 +156,28 @@ public class MenuController {
         // Load level بدون restore (فقط ساختار)
         gameController.getLevelManager().loadLevel(lvl);
 
-        // سپس بازیابی state و نمایش شمارش معکوس در چرخهٔ بعدی EDT
         SwingUtilities.invokeLater(() -> {
-            // Restore state
             gameController.restoreState(snapshot);
 
-            // نمایش countdown (یک‌بار)
             showRestoredGameCountdownOnce();
 
             restorationInProgress = false;
         });
     }
 
-    // شمارش معکوس شروع پس از بازیابی — فقط یک‌بار نمایش داده می‌شود
     private void showRestoredGameCountdownOnce() {
-        if (countdownShown) return; // جلوگیری از نمایش دوباره
+        if (countdownShown) return;
         countdownShown = true;
 
         SwingUtilities.invokeLater(() -> {
             GameScreenView gameView = gameController.getGameView();
 
-            // اگر صفحه هنوز نمایش داده نشده، مستقیم شروع کن
             if (!gameView.isShowing()) {
                 startRestoredGame();
-                countdownShown = false; // reset flag
+                countdownShown = false;
                 return;
             }
 
-            // ایجاد overlay برای نمایش پیام
             JPanel overlay = new JPanel(new BorderLayout());
             overlay.setOpaque(true);
             overlay.setBackground(new Color(0, 0, 0, 180));
@@ -206,13 +189,11 @@ public class MenuController {
             messageLabel.setHorizontalAlignment(SwingConstants.CENTER);
             overlay.add(messageLabel, BorderLayout.CENTER);
 
-            // ابتدا اضافه کن، سپس Z-order را تنظیم کن
             gameView.add(overlay);
             gameView.setComponentZOrder(overlay, 0);
             gameView.revalidate();
             gameView.repaint();
 
-            // تایمر شمارش معکوس
             Timer countdown = new Timer(1000, null);
             final int[] seconds = {3};
 
@@ -226,7 +207,6 @@ public class MenuController {
                     gameView.revalidate();
                     gameView.repaint();
 
-                    // شروع بازی و AutoSave
                     startRestoredGame();
 
                     countdown.stop();
@@ -238,41 +218,30 @@ public class MenuController {
         });
     }
 
-    // متد شروع تمیز بازی پس از بازیابی
     private void startRestoredGame() {
-        // شبیه‌سازی و ذخیره خودکار همیشه باید پس از بازیابی ادامه یابند
         gameController.getSimulation().start();
         gameController.resumeAutoSave();
         gameController.getTimeline().resume();
 
         PacketProducerController producer = gameController.getProducerController();
 
-        // بررسی می‌کنیم که آیا بازی در هنگام ذخیره شدن در حال اجرا بوده است یا خیر
         if (producer != null && producer.isRunning()) {
-            // ----- حالت ۱: بازی در حال اجرا بوده است -----
 
-            // قفل کردن درگ، چون بازی در فاز اجرایی است
             SystemBoxDragController.setDragEnabled(false);
 
-            // ادامه تولید پکت‌ها
             producer.startProduction();
 
-            // تنظیم دکمه‌های HUD برای حالت بازی در حال اجرا
             gameController.getHudCoord().setStartEnabled(false);
             gameController.getHudView().setToggleText("Pause");
 
         } else {
-            // ----- حالت ۲: بازی در مرحله سیم‌کشی (قبل از شروع) بوده است -----
 
-            // قابلیت درگ باید فعال باشد
             SystemBoxDragController.setDragEnabled(true);
 
-            // تولید پکت‌ها نباید شروع شود
-            // وضعیت دکمه "Start" را بر اساس اتصالات فعلی به‌روز می‌کنیم
+
             gameController.updateStartEnabled();
 
-            // دکمه Pause را به حالت اولیه برمی‌گردانیم (مثلاً Start)
-            // (منطق updateStartEnabled این کار را پوشش می‌دهد)
+
         }
     }
 }
