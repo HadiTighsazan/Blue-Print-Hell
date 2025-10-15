@@ -73,11 +73,9 @@ public class Level1 extends AbstractLevel {
 
     private static LevelDefinition.BoxSpec withId(String id, LevelDefinition.BoxSpec s) {
         return new LevelDefinition.BoxSpec(
-                id,
-                s.x(), s.y(), s.width(), s.height(),
+                id, s.x(), s.y(), s.width(), s.height(),
                 s.inShapes(), s.outShapes(),
-                s.isSource(), s.isSink(),
-                s.kind()
+                s.isSource(), s.isSink(), s.kind()
         );
     }
 }

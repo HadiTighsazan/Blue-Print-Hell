@@ -19,78 +19,95 @@ public class Level2 extends AbstractLevel {
     }
 
     @Override
+    public String getDescription() {
+        return "Beware of Spy systems! They can leak your packets to each other.";
+    }
+
+    @Override
     public LevelDefinition getDefinition() {
         List<LevelDefinition.BoxSpec> boxes = new ArrayList<>();
 
-        // 2-1: Source (از مرحله قبل + یک خروجی جدید)
+
         LevelDefinition.BoxSpec _b1 = createSource(100, 250, Arrays.asList(
                 PortShape.SQUARE,
-                PortShape.CIRCLE,
-                PortShape.TRIANGLE
+                PortShape.CIRCLE
         ));
-        boxes.add(withId("L1-B1-SOURCE", _b1)); // مطابق نسخه بدون خطا
+        boxes.add(withId("L1-B1-SOURCE", _b1));
 
-        // 2-2: Normal (از مرحله قبل + یک ورودی جدید)
         LevelDefinition.BoxSpec _b2 = createBox(
                 300, 150,
-                Arrays.asList(PortShape.SQUARE, PortShape.CIRCLE),
+                Collections.singletonList(PortShape.SQUARE),
                 Collections.singletonList(PortShape.TRIANGLE),
-                SystemKind.NORMAL
+                SystemKind.VPN
         );
-        boxes.add(withId("L1-B2-VPN", _b2));// مطابق نسخه بدون خطا
+        boxes.add(withId("L1-B2-VPN", _b2));
 
-        // 2-3: Distributor (بدون تغییر)
         LevelDefinition.BoxSpec _b3 = createBox(
                 300, 350,
                 Collections.singletonList(PortShape.CIRCLE),
                 Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
                 SystemKind.DISTRIBUTOR
         );
-        boxes.add(withId("L1-B3-DISTRIBUTOR", _b3)); // مطابق نسخه بدون خطا
+        boxes.add(withId("L1-B3-DISTRIBUTOR", _b3));
 
-        // 2-4: Malicious (جدید)
         LevelDefinition.BoxSpec _b4 = createBox(
-                500, 200,
-                Collections.singletonList(PortShape.TRIANGLE),
+                500, 300,
                 Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
                 SystemKind.MALICIOUS
         );
-        boxes.add(withId("L2-B4-MALICIOUS", _b4)); // این یکی از قبل هم L2 بود
+        boxes.add(withId("L1-B4-MALICIOUS", _b4));
 
-        // 2-5: Spy (جدید)
         LevelDefinition.BoxSpec _b5 = createBox(
-                500, 450,
-                Collections.singletonList(PortShape.SQUARE),
-                Collections.singletonList(PortShape.CIRCLE),
-                SystemKind.SPY
-        );
-        boxes.add(withId("L2-B5-SPY", _b5)); // این هم L2 بود
-
-        // 2-6: یکی از NORMALها را به SPY تبدیل کردیم (تا 2 جاسوس داشته باشیم)
-        LevelDefinition.BoxSpec _b6 = createBox(
-                700, 300,
-                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE, PortShape.CIRCLE),
-                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE, PortShape.TRIANGLE),
-                SystemKind.SPY // قبلاً NORMAL بود
-        );
-        boxes.add(withId("L1-B4-VPN", _b6));  // آیدی را دست نمی‌زنیم تا وایرها کرش نکنند
-
-        // 2-7: Merger
-        LevelDefinition.BoxSpec _b7 = createBox(
-                700, 500,
-                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE, PortShape.TRIANGLE),
-                Arrays.asList(PortShape.TRIANGLE, PortShape.CIRCLE),
+                700, 350,
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
+                Collections.singletonList(PortShape.TRIANGLE),
                 SystemKind.MERGER
         );
-        boxes.add(withId("L1-B5-MERGER", _b7)); // مطابق نسخه بدون خطا
+        boxes.add(withId("L1-B5-MERGER", _b5));
 
-        // 2-8: Sink
-        LevelDefinition.BoxSpec _b8 = createSink(900, 350, Arrays.asList(
+        LevelDefinition.BoxSpec _b6 = createSink(900, 250, Arrays.asList(
                 PortShape.TRIANGLE,
+                PortShape.TRIANGLE
+        ));
+        boxes.add(withId("L1-B6-SINK", _b6));
+
+
+        LevelDefinition.BoxSpec _b7 = createBox(
+                500, 100,
+                Arrays.asList(PortShape.CIRCLE, PortShape.TRIANGLE),
+                Arrays.asList(PortShape.SQUARE, PortShape.CIRCLE),
+                SystemKind.SPY
+        );
+        boxes.add(withId("L2-B7-SPY1", _b7));
+
+        LevelDefinition.BoxSpec _b8 = createBox(
+                500, 500,
+                Arrays.asList(PortShape.SQUARE, PortShape.TRIANGLE),
+                Arrays.asList(PortShape.CIRCLE, PortShape.SQUARE),
+                SystemKind.SPY
+        );
+        boxes.add(withId("L2-B8-SPY2", _b8));
+
+        LevelDefinition.BoxSpec _b9 = createBox(
+                700, 150,
+                Arrays.asList(PortShape.SQUARE, PortShape.CIRCLE),
+                Arrays.asList(PortShape.TRIANGLE, PortShape.SQUARE),
+                SystemKind.NORMAL
+        );
+        boxes.add(withId("L2-B9-NORMAL", _b9));
+
+        LevelDefinition.BoxSpec _b10 = createSource(100, 450, Arrays.asList(
+                PortShape.TRIANGLE,
+                PortShape.SQUARE
+        ));
+        boxes.add(withId("L2-B10-SOURCE2", _b10));
+
+        LevelDefinition.BoxSpec _b11 = createSink(900, 450, Arrays.asList(
                 PortShape.CIRCLE,
                 PortShape.SQUARE
         ));
-        boxes.add(withId("L1-B6-SINK", _b8)); // مطابق نسخه بدون خطا
+        boxes.add(withId("L2-B11-SINK2", _b11));
 
         return new LevelDefinition(boxes, wireBudget);
     }

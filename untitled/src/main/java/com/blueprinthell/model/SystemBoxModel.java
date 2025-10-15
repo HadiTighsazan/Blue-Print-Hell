@@ -130,10 +130,16 @@ public class SystemBoxModel extends GameObjectModel implements Serializable, Upd
 
     public boolean removeFromBuffer(PacketModel packet) {
         if (packet == null) return false;
-        if (packet instanceof LargePacket lp)  return largeBuffer.remove(lp);
-        else                                   return bitBuffer .remove(packet);
-    }
+        if (packet instanceof LargePacket lp) {
+            if (largeBuffer.remove(lp)) {
+                return true;
+            }
 
+            return bitBuffer.remove(lp);
+        } else {
+            return bitBuffer.remove(packet);
+        }
+    }
     public void clearBuffer() {
         bitBuffer  .clear();
         largeBuffer.clear();

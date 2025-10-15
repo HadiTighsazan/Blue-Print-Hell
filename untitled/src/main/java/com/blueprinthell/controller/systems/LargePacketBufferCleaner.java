@@ -28,8 +28,9 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             return;
         }
 
-        if (!box.getOutPorts().isEmpty()) {
-            return;  // اگر پورت خروجی دارد، هیچ کاری نکن*****
+        SystemKind kind = box.getPrimaryKind();
+        if (kind == SystemKind.MERGER || kind == SystemKind.DISTRIBUTOR) {
+            return;
         }
 
         clearBufferExceptLarge((LargePacket) packet);
@@ -51,7 +52,6 @@ public final class LargePacketBufferCleaner implements SystemBehavior {
             allPackets.add(p);
         }
 
-        // Re-enqueue only the new large packet; drop others.
         for (PacketModel packet : allPackets) {
             if (packet == newLarge) {
                 box.enqueue(packet);
